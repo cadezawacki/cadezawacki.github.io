@@ -1,5 +1,7 @@
 /* Code Runner palette scripts (script-pack): Run Code Block, Run All Code
- * Blocks, Clear Code Outputs, Stop Running Code, Identify Code Blocks. Each is
+ * Blocks, Run Code Blocks Above, Restart Code Runtime (linked blocks: the
+ * note's variables), Clear Code Outputs, Stop Running Code, Identify Code
+ * Blocks. Each is
  * a thin wrapper that loads the shared engine (coderun-kit.js +
  * coderun-engine.js) on first use and calls it; the engine writes into the
  * document itself, so ctx is left untouched.
@@ -52,10 +54,26 @@
 
   reg({
     name: 'Run All Code Blocks',
-    description: 'Run every runnable code block in order (Python blocks share variables)',
+    description: 'Run every runnable code block in order (linked blocks share variables)',
     icon: ALL,
     tags: 'run,all,execute,code,blocks,notebook,javascript,python,json'
   }, 'await E.runAll();');
+
+  var ABOVE = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='7 4 19 12 7 20 7 4'/><path d='M4 3v18'/></svg>";
+  var RESTART = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12a9 9 0 1 0 3-6.7'/><polyline points='3 3 3 9 9 9'/></svg>";
+  reg({
+    name: 'Run Code Blocks Above',
+    description: 'Run every runnable code block above the cursor, in order',
+    icon: ABOVE,
+    tags: 'run,above,before,execute,code,blocks,notebook,cells,javascript,python'
+  }, 'await E.runAbove();');
+
+  reg({
+    name: 'Restart Code Runtime',
+    description: "Clear this note's variables (linked JS & Python blocks) — blocks that ran are marked stale",
+    icon: RESTART,
+    tags: 'restart,reset,kernel,runtime,clear,variables,scope,notebook,javascript,python'
+  }, 'E.restart();');
 
   reg({
     name: 'Clear Code Outputs',

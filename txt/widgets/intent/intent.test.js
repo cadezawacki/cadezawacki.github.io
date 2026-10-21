@@ -117,6 +117,12 @@ var PHRASES = [
   ['trim whitespace', 'Trim / Clean', 'Strip Trailing Whitespace'],
   ['wrap each line in quotes', 'Quoter', 'Wrap Lines'],
   ['what time is it in other cities', 'World Clock', 'Insert Time In Zones…'],
+  // irregular past forms (IRREGULAR, derived from compromise's conjugations)
+  ['ran the code', 'Run Code Block'],
+  ['threw out the blank lines', 'Delete Blank Lines'],
+  ['hid this text', 'Redact Selection'],
+  ['found all the emails', 'Extract Emails'],
+  ['drew a box around it', 'Box It…'],
 ];
 
 test('catalogue is the real manifest (widgets + script-pack rows)', function () {
@@ -155,6 +161,12 @@ test('stemming folds plurals and verb forms', function () {
   assert.strictEqual(I.stem('shuffling'), I.stem('shuffle'));
   assert.strictEqual(I.stem('randomise'), I.stem('randomize'));
   assert.strictEqual(I.stem('class'), 'class', 'ss is not a plural');
+});
+test('irregular past forms map to their verb before phrases and stemming', function () {
+  assert.strictEqual(I.normalize('She wrote it'), 'she write it');
+  assert.strictEqual(I.normalize('threw away the rest'), 'remove the rest');      // → "throw away" → remove
+  assert.deepStrictEqual(I.conceptsOf(I.normalize('ran')), I.conceptsOf('run'));
+  Object.keys(I.IRREGULAR).forEach(function (k) { assert.ok(/^[a-z]+$/.test(k) && /^[a-z]+$/.test(I.IRREGULAR[k]) && k !== I.IRREGULAR[k], k); });
 });
 test('synonyms meet in one concept', function () {
   function cs(q) { return I.analyze(q).toks.map(function (t) { return t.c; }).join(' '); }

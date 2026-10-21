@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.22-2",
+  "version": "2026.10.22-9",
   "modules": [
     {
       "id": "crawler",
@@ -838,11 +838,12 @@
       "name": "Code Pack",
       "description": "Minify, obfuscate, unobfuscate and beautify code: JavaScript, Python, HTML, CSS, JSON and XML",
       "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='4 14 10 14 10 20'/><polyline points='20 10 14 10 14 4'/><line x1='14' y1='10' x2='21' y2='3'/><line x1='3' y1='21' x2='10' y2='14'/></svg>",
-      "tags": "minify,minifier,compress,uglify,terser,obfuscate,obfuscator,unobfuscate,deobfuscate,beautify,prettify,js,javascript,css,html,python,py,json,xml,code",
+      "tags": "minify,minifier,compress,uglify,terser,obfuscate,obfuscator,unobfuscate,deobfuscate,beautify,prettify,js,javascript,css,html,python,py,json,xml,code,ts,typescript,scss,less,vue,markdown,yaml,graphql,prettier",
       "entry": "scripts/pack-code/pack-code.js",
       "precache": [
         "scripts/pack-code/pack-code-lib.js",
-        "scripts/pack-code/pack-code-unobf.js"
+        "scripts/pack-code/pack-code-unobf.js",
+        "scripts/pack-code/pack-code-format.js"
       ],
       "scripts": [
         {
@@ -913,9 +914,21 @@
         },
         {
           "name": "Beautify Code",
-          "description": "Pretty-print code: JS, CSS, HTML, JSON and XML (auto-detect)",
+          "description": "Pretty-print the selection, the ``` block at the cursor or the note with Prettier: JS, TS, JSX, CSS, SCSS, Less, HTML, Vue, Markdown, YAML, GraphQL; plus JSON and XML",
           "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 3v4'/><path d='M3 5h4'/><path d='M6 17v4'/><path d='M4 19h4'/><path d='M13 3l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z'/></svg>",
-          "tags": "beautify,prettify,format,pretty,indent,code,js,javascript,css,html,json,xml,auto"
+          "tags": "beautify,prettify,prettier,format,pretty,indent,code,js,javascript,ts,typescript,jsx,tsx,css,scss,less,html,vue,markdown,md,yaml,yml,graphql,json,xml,auto"
+        },
+        {
+          "name": "Format Code Blocks",
+          "description": "Prettier-format every ``` code block in the note (or the selection) by its fence language; unlabelled and unsupported blocks are left alone",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 3v4'/><path d='M3 5h4'/><path d='M6 17v4'/><path d='M4 19h4'/><path d='M13 3l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z'/></svg>",
+          "tags": "format,beautify,prettier,prettify,code,blocks,fences,fenced,markdown,all,js,ts,css,html,json,yaml,graphql"
+        },
+        {
+          "name": "Beautify Options…",
+          "description": "Set print width, indent (spaces or tabs), semicolons, quotes and trailing commas for Beautify Code and Format Code Blocks",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 3v4'/><path d='M3 5h4'/><path d='M6 17v4'/><path d='M4 19h4'/><path d='M13 3l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z'/></svg>",
+          "tags": "beautify,prettier,format,options,settings,width,indent,tabs,spaces,semicolons,quotes,trailing,commas"
         }
       ]
     },
@@ -1354,11 +1367,98 @@
       "id": "typewriter",
       "type": "plugin",
       "name": "Typewriter sounds",
-      "description": "Plays a short key sound as you type in the editor — mechanical keyboard, typewriter (carriage return and bell) or soft laptop taps. Off unless you turn it on; once on, its style, volume and bell options appear in this section",
+      "description": "Plays a short key sound as you type in the editor — mechanical keyboard, typewriter (carriage return and bell) or soft laptop taps. Off unless you turn it on; its style, volume and bell are in View → Widget preferences",
       "entry": "widgets/typewriter/typewriter.js",
       "settingKey": "plugins.typewriter",
       "section": "Editor",
-      "default": false
+      "default": false,
+      "prefs": {
+        "title": "Typewriter sounds",
+        "fields": [
+          {
+            "key": "profile",
+            "type": "radio",
+            "label": "Style",
+            "default": "typewriter",
+            "hint": "Mechanical keyboard, a typewriter (carriage return and bell) or soft laptop taps",
+            "options": [
+              {
+                "value": "mechanical",
+                "label": "Mechanical"
+              },
+              {
+                "value": "typewriter",
+                "label": "Typewriter"
+              },
+              {
+                "value": "soft",
+                "label": "Soft"
+              }
+            ]
+          },
+          {
+            "key": "volume",
+            "type": "slider",
+            "label": "Volume",
+            "default": 50,
+            "min": 10,
+            "max": 100,
+            "step": 5,
+            "unit": "%"
+          },
+          {
+            "key": "bell",
+            "type": "toggle",
+            "label": "Bell at end of line",
+            "default": true,
+            "hint": "Typewriter style: a ding when you press Enter at the end of a line, and when a line passes 72 characters"
+          }
+        ]
+      }
+    },
+    {
+      "id": "boldread",
+      "type": "plugin",
+      "name": "Bold-start reading",
+      "description": "Bolds the first letters of each word so your eye can skim faster — purely visual, the text is unchanged. Skips code, links, headings and the line you are editing; strength in Widget preferences",
+      "entry": "widgets/boldread/boldread.js",
+      "css": "widgets/boldread/boldread.css",
+      "settingKey": "plugins.boldread",
+      "section": "Editor",
+      "default": false,
+      "prefs": {
+        "title": "Bold-start reading",
+        "fields": [
+          {
+            "key": "strength",
+            "type": "radio",
+            "label": "Fixation strength",
+            "default": "medium",
+            "hint": "How much of the start of each word is bold: light about a third, medium about half, strong about two thirds",
+            "options": [
+              {
+                "value": "light",
+                "label": "Light"
+              },
+              {
+                "value": "medium",
+                "label": "Medium"
+              },
+              {
+                "value": "strong",
+                "label": "Strong"
+              }
+            ]
+          },
+          {
+            "key": "skipCaret",
+            "type": "toggle",
+            "label": "Leave the line I’m editing plain",
+            "default": true,
+            "hint": "While you type, the caret’s line shows no bold, so the text you are changing stays still"
+          }
+        ]
+      }
     },
     {
       "id": "voice",
@@ -1441,14 +1541,221 @@
       "css": "widgets/ekg/ekg.css",
       "precache": [
         "widgets/ekg/ekg-core.js",
-        "widgets/ekg/ekg-view.js"
+        "widgets/ekg/ekg-view.js",
+        "widgets/ekg/nlp-client.js",
+        "widgets/ekg/nlp-worker.js"
       ]
+    },
+    {
+      "id": "echoes",
+      "type": "widget",
+      "name": "Word Echoes",
+      "description": "Highlights only the words you repeat — the closer the repeat, the stronger the tint; tap a word to see every echo",
+      "icon": "🔁",
+      "tags": "writing,prose,repetition,repeated words,echo,echoes,word choice,style,proofread,lint,highlight",
+      "entry": "widgets/echoes/echoes.js",
+      "css": "widgets/echoes/echoes.css",
+      "precache": [
+        "widgets/echoes/echoes-core.js",
+        "widgets/ekg/ekg-core.js",
+        "widgets/ekg/nlp-client.js",
+        "widgets/ekg/nlp-worker.js"
+      ],
+      "prefs": {
+        "title": "Word Echoes",
+        "fields": [
+          {
+            "key": "taper",
+            "type": "slider",
+            "label": "Fade out after",
+            "default": 5,
+            "min": 2,
+            "max": 10,
+            "step": 1,
+            "unit": "sentences",
+            "hint": "How far apart two uses of a word can be and still be marked. Nearer repeats are always stronger."
+          },
+          {
+            "key": "stem",
+            "type": "toggle",
+            "label": "Match word forms",
+            "default": true,
+            "hint": "run / runs / running and idea / ideas count as the same word — and, once the language data has loaded, irregular forms too (ran, wrote / written, children → child)"
+          },
+          {
+            "key": "minLen",
+            "type": "number",
+            "label": "Shortest word to check",
+            "default": 3,
+            "min": 2,
+            "max": 8,
+            "step": 1,
+            "unit": "letters"
+          },
+          {
+            "key": "ignore",
+            "type": "text",
+            "label": "Also ignore these words",
+            "default": "",
+            "placeholder": "e.g. said, Anna, river",
+            "hint": "Comma-separated. Common words (the, a, than, with…) are always ignored."
+          },
+          {
+            "key": "names",
+            "type": "toggle",
+            "label": "Skip names",
+            "default": false,
+            "hint": "People, places and other proper nouns are never marked"
+          },
+          {
+            "key": "style",
+            "type": "radio",
+            "label": "Highlight style",
+            "default": "tint",
+            "options": [
+              {
+                "value": "tint",
+                "label": "Tint"
+              },
+              {
+                "value": "underline",
+                "label": "Underline"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "speedread",
+      "type": "widget",
+      "name": "Speed Reader",
+      "description": "Read the note or selection one word (or a few) at a time in one spot, focus letter highlighted — tap to play, hold to read, scrub, back a sentence",
+      "icon": "⚡",
+      "tags": "speed reader,speed reading,rsvp,spritz,read,reading,fast,focus,words per minute,wpm,skim,study",
+      "entry": "widgets/speedread/speedread.js",
+      "css": "widgets/speedread/speedread.css",
+      "precache": [
+        "widgets/speedread/speedread-core.js"
+      ],
+      "prefs": {
+        "title": "Speed Reader",
+        "fields": [
+          {
+            "key": "chunk",
+            "type": "number",
+            "label": "Words shown at a time",
+            "default": 1,
+            "min": 1,
+            "max": 5,
+            "step": 1
+          },
+          {
+            "key": "wpm",
+            "type": "slider",
+            "label": "Speed",
+            "default": 350,
+            "min": 100,
+            "max": 1000,
+            "step": 25,
+            "unit": "wpm"
+          },
+          {
+            "key": "ctx",
+            "type": "toggle",
+            "label": "Show the text around it",
+            "default": true,
+            "hint": "The words before and after the current one, faded"
+          },
+          {
+            "key": "dim",
+            "type": "slider",
+            "label": "Opacity of the text around it",
+            "default": 25,
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "unit": "%",
+            "showIf": "ctx",
+            "hint": "0 hides it"
+          },
+          {
+            "key": "ctxPos",
+            "type": "radio",
+            "label": "Where it goes",
+            "default": "inline",
+            "showIf": "ctx",
+            "options": [
+              {
+                "value": "inline",
+                "label": "Same line"
+              },
+              {
+                "value": "lines",
+                "label": "A line above and below"
+              }
+            ]
+          },
+          {
+            "key": "orp",
+            "type": "toggle",
+            "label": "Highlight the focus letter",
+            "default": true,
+            "hint": "One letter of each word in the accent colour, always at the same spot"
+          },
+          {
+            "key": "pause",
+            "type": "slider",
+            "label": "Pause at sentence ends",
+            "default": 2,
+            "min": 1,
+            "max": 4,
+            "step": 0.25,
+            "unit": "×",
+            "hint": "Commas get half as much extra, paragraphs a little more; long words and numbers always get a bit longer"
+          },
+          {
+            "key": "size",
+            "type": "slider",
+            "label": "Text size",
+            "default": 44,
+            "min": 24,
+            "max": 96,
+            "step": 4,
+            "unit": "px"
+          },
+          {
+            "key": "start",
+            "type": "radio",
+            "label": "Start from",
+            "default": "caret",
+            "options": [
+              {
+                "value": "caret",
+                "label": "The caret"
+              },
+              {
+                "value": "top",
+                "label": "The start of the note"
+              }
+            ],
+            "hint": "A selection is always read from its start"
+          },
+          {
+            "key": "moveCaret",
+            "type": "toggle",
+            "label": "Move the caret to where I stopped",
+            "default": true,
+            "hint": "When you close the reader"
+          }
+        ]
+      }
     },
     {
       "id": "danger",
       "type": "widget",
       "name": "Dangerous Mode",
-      "description": "Keep writing or lose it — set a word or time goal; stop typing for a few seconds and this session’s text fades and is deleted. Reach the goal to keep it",
+      "description": "Keep writing or lose it — set a word or time goal; stop typing for a few seconds and this session’s words start being removed from the end until you type again. Reach the goal to keep them",
       "icon": "☠",
       "tags": "dangerous,danger,dangerous mode,writing,write,first draft,draft,sprint,word goal,word count,focus,flow,timer,deadline,hardcore,most dangerous writing app,productivity",
       "entry": "widgets/danger/danger.js",
@@ -1589,10 +1896,83 @@
       ]
     },
     {
+      "id": "notebook",
+      "type": "widget",
+      "name": "Notebook",
+      "description": "Linked, reactive code blocks: js & python blocks in a note share variables, dependents re-run, rich output, variables",
+      "icon": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"3\" width=\"15\" height=\"18\" rx=\"2\"/><path d=\"M8 3v18\"/><path d=\"M11.5 8.5l3 2.5-3 2.5\"/><path d=\"M11.5 16.5h4\"/></svg>",
+      "tags": "notebook,jupyter,observable,reactive,linked,cells,kernel,restart,run all,variables,inspector,display,chart,table,javascript,js,typescript,python,py,code",
+      "entry": "widgets/notebook/notebook.js",
+      "precache": [
+        "widgets/notebook/notebook-core.js",
+        "widgets/notebook/notebook-engine.js",
+        "widgets/notebook/notebook.css"
+      ],
+      "prefs": {
+        "title": "Notebook",
+        "fields": [
+          {
+            "key": "autoRun",
+            "type": "toggle",
+            "label": "Re-run dependent blocks automatically",
+            "default": true,
+            "hint": "After you run a block, the blocks that use its variables run again (in order). Off: they are only marked stale."
+          },
+          {
+            "key": "timings",
+            "type": "toggle",
+            "label": "Show run times",
+            "default": true
+          },
+          {
+            "key": "maxHeight",
+            "type": "slider",
+            "label": "Output height limit",
+            "default": 320,
+            "min": 120,
+            "max": 800,
+            "step": 20,
+            "unit": "px"
+          },
+          {
+            "key": "saveOutputs",
+            "type": "toggle",
+            "label": "Also save text output in the note",
+            "default": false,
+            "hint": "Writes an ```output block under each block, like Code Runner. Blocks that already have one are always kept up to date. Tables, charts and images stay view-only."
+          },
+          {
+            "type": "heading",
+            "label": "Time limits"
+          },
+          {
+            "key": "jsTimeout",
+            "type": "number",
+            "label": "JavaScript time limit",
+            "default": 5,
+            "min": 1,
+            "max": 120,
+            "step": 1,
+            "unit": "s"
+          },
+          {
+            "key": "pyTimeout",
+            "type": "number",
+            "label": "Python time limit",
+            "default": 30,
+            "min": 1,
+            "max": 600,
+            "step": 1,
+            "unit": "s"
+          }
+        ]
+      }
+    },
+    {
       "id": "coderun-scripts",
       "type": "script-pack",
       "name": "Code Runner scripts",
-      "description": "Run the code block at the cursor or every block, clear outputs, stop, tag untagged blocks with their language",
+      "description": "Run the code block at the cursor, every block or the blocks above it, restart the note's runtime, clear outputs, stop, tag untagged blocks with their language",
       "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='7 4 19 12 7 20 7 4'/></svg>",
       "tags": "run,code,execute,javascript,typescript,python,json,output",
       "entry": "widgets/coderun/coderun-scripts.js",
@@ -1605,9 +1985,21 @@
         },
         {
           "name": "Run All Code Blocks",
-          "description": "Run every runnable code block in order (Python blocks share variables)",
+          "description": "Run every runnable code block in order (linked blocks share variables)",
           "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='4 5 11 12 4 19 4 5'/><polygon points='13 5 20 12 13 19 13 5'/></svg>",
           "tags": "run,all,execute,code,blocks,notebook,javascript,python,json"
+        },
+        {
+          "name": "Run Code Blocks Above",
+          "description": "Run every runnable code block above the cursor, in order",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='7 4 19 12 7 20 7 4'/><path d='M4 3v18'/></svg>",
+          "tags": "run,above,before,execute,code,blocks,notebook,cells,javascript,python"
+        },
+        {
+          "name": "Restart Code Runtime",
+          "description": "Clear this note's variables (linked JS & Python blocks) — blocks that ran are marked stale",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12a9 9 0 1 0 3-6.7'/><polyline points='3 3 3 9 9 9'/></svg>",
+          "tags": "restart,reset,kernel,runtime,clear,variables,scope,notebook,javascript,python"
         },
         {
           "name": "Clear Code Outputs",
@@ -1647,7 +2039,7 @@
       "id": "coderun-buttons",
       "type": "plugin",
       "name": "Run buttons on code blocks",
-      "description": "A “Run” chip on ```js / ts / python / json blocks (“Preview” on html; untagged blocks get theirs detected when pressed), spinner + Stop while running, × on ```output blocks; Ctrl/⌘+Enter runs the block at the cursor",
+      "description": "A “Run” chip on ```js / ts / python / json blocks (“Preview” on html; untagged blocks get theirs detected when pressed), spinner + Stop while running, × on ```output blocks; Ctrl/⌘+Enter (or Shift+Enter in a tagged block) runs the block at the cursor; with linked blocks each block that ran shows ✓ / ● stale / ✕",
       "entry": "plugins/coderun-buttons/coderun-buttons.js",
       "css": "plugins/coderun-buttons/coderun-buttons.css",
       "settingKey": "plugins.coderun-buttons",
@@ -1658,14 +2050,16 @@
       "id": "convert",
       "type": "widget",
       "name": "File Converter",
-      "description": "Convert video, audio, photos (HEIC), PDF, Word & spreadsheets on this device — files never leave it",
+      "description": "Convert video, audio, photos (HEIC), PDF, Word, spreadsheets & documents (pandoc: ODT, EPUB, LaTeX, Jupyter…) on this device — files never leave it",
       "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 8h13l-3.5-3.5'/><path d='M20 16H7l3.5 3.5'/></svg>",
-      "tags": "convert,converter,file converter,transcode,compress,video,audio,image,photo,heic,heif,jpeg,jpg,png,webp,gif,ico,favicon,svg,mp4,mov,webm,mkv,avi,mp3,m4a,aac,wav,flac,ogg,opus,extract audio,pdf,pdf to text,pdf to png,images to pdf,docx,word,markdown,html,xlsx,excel,csv,tsv,json,ods,ffmpeg,offline,private",
+      "tags": "convert,converter,file converter,transcode,compress,video,audio,image,photo,heic,heif,jpeg,jpg,png,webp,gif,ico,favicon,svg,mp4,mov,webm,mkv,avi,mp3,m4a,aac,wav,flac,ogg,opus,extract audio,pdf,pdf to text,pdf to png,images to pdf,docx,word,markdown,html,xlsx,excel,csv,tsv,json,ods,ffmpeg,offline,private,pandoc,document converter,odt,opendocument,epub,ebook,rtf,latex,tex,rst,restructuredtext,org,org mode,mediawiki,wiki,textile,asciidoc,typst,ipynb,jupyter,notebook,pptx,powerpoint,docbook,export note,note to word,import document",
       "entry": "widgets/convert/convert.js",
       "css": "widgets/convert/convert.css",
       "precache": [
         "widgets/convert/convert-worker.js",
-        "widgets/convert/convert-docs.js"
+        "widgets/convert/convert-docs.js",
+        "widgets/convert/convert-pandoc.js",
+        "widgets/convert/convert-pandoc-worker.js"
       ]
     },
     {

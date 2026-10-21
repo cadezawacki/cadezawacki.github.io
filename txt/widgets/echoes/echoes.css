@@ -1,0 +1,127 @@
+/* Word Echoes — the editor marks (6 strength levels, tint or underline), the
+   focus mode (everything but the focused word's occurrences fades), the count
+   chip, and the panel. Warm amber-orange, deeper in light, brighter in dark. */
+.cm-editor.cm-echoes-on { --echo-rgb: 232, 104, 0; }
+[data-theme="dark"] .cm-editor.cm-echoes-on { --echo-rgb: 255, 158, 64; }
+.cm-echo-1 { --echo-a: 0.09; --echo-u: 0.30; --echo-t: 1px; }
+.cm-echo-2 { --echo-a: 0.14; --echo-u: 0.42; --echo-t: 1.5px; }
+.cm-echo-3 { --echo-a: 0.21; --echo-u: 0.55; --echo-t: 1.5px; }
+.cm-echo-4 { --echo-a: 0.29; --echo-u: 0.70; --echo-t: 2px; }
+.cm-echo-5 { --echo-a: 0.38; --echo-u: 0.85; --echo-t: 2.5px; }
+.cm-echo-6 { --echo-a: 0.48; --echo-u: 1; --echo-t: 3px; }
+[data-theme="dark"] .cm-echo-1 { --echo-a: 0.10; }
+[data-theme="dark"] .cm-echo-2 { --echo-a: 0.16; }
+[data-theme="dark"] .cm-echo-3 { --echo-a: 0.23; }
+[data-theme="dark"] .cm-echo-4 { --echo-a: 0.31; }
+[data-theme="dark"] .cm-echo-5 { --echo-a: 0.40; }
+[data-theme="dark"] .cm-echo-6 { --echo-a: 0.50; }
+
+.cm-echo { border-radius: 3px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.cm-echoes-tint .cm-echo { background: rgba(var(--echo-rgb), var(--echo-a)); }
+.cm-echoes-tint .cm-echo-same { box-shadow: inset 0 -2px 0 rgba(var(--echo-rgb), 0.95); }
+.cm-echoes-underline .cm-echo {
+  -webkit-text-decoration-line: underline; -webkit-text-decoration-color: rgba(var(--echo-rgb), var(--echo-u));
+  text-decoration: underline rgba(var(--echo-rgb), var(--echo-u)); text-decoration-thickness: var(--echo-t); text-underline-offset: 3px; text-decoration-skip-ink: none;
+}
+.cm-echoes-underline .cm-echo-same { -webkit-text-decoration-style: double; text-decoration-style: double; }
+
+/* focus: the word's occurrences stand out, the rest fades (text colour, so the hits keep theirs) */
+.cm-editor.cm-echoes-focus .cm-content,
+.cm-editor.cm-echoes-focus .cm-content * {
+  color: var(--text-faint, #999) !important;
+  color: color-mix(in srgb, var(--text, #222) 24%, transparent) !important;
+}
+.cm-editor.cm-echoes-focus .cm-content img,
+.cm-editor.cm-echoes-focus .cm-content svg { opacity: 0.25; }
+.cm-editor.cm-echoes-focus .cm-content .cm-echo-hit,
+.cm-editor.cm-echoes-focus .cm-content .cm-echo-hit * { color: var(--text, #111) !important; }
+.cm-echo-hit { background: rgba(var(--echo-rgb), 0.34); box-shadow: 0 0 0 1.5px rgba(var(--echo-rgb), 0.85); border-radius: 3px; }
+.cm-echo-cur { background: rgba(var(--echo-rgb), 0.58); box-shadow: 0 0 0 2px rgba(var(--echo-rgb), 1); }
+
+.cm-echoes-chip {
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 6;
+  display: flex; align-items: center; gap: 2px; padding: 2px 3px 2px 12px;
+  background: var(--surface, #fff); color: var(--text, #222);
+  border: 1px solid rgba(var(--echo-rgb), 0.7); border-radius: 999px; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.15));
+  font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-user-select: none; user-select: none; touch-action: manipulation;
+}
+.cm-echoes-chip-t { white-space: nowrap; margin-right: 4px; }
+.cm-echoes-chip-t small { margin-left: 6px; color: var(--text-muted, #666); font-size: 11px; font-variant-numeric: tabular-nums; }
+.cm-echoes-chip button {
+  width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--text-muted, #666);
+  font-size: 18px; line-height: 1; cursor: pointer; padding: 0; -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) { .cm-echoes-chip button:hover { background: var(--surface-2, #eee); color: var(--text, #222); } }
+
+/* ---- panel ---- */
+#echoes-panel { top: auto; bottom: 34px; right: 16px; width: 320px; max-width: calc(100vw - 24px); max-height: calc(100vh - var(--menubar-h, 36px) - 60px); }
+#echoes-panel .cade-panel-body { padding: 8px 10px 10px; overflow: auto; overscroll-behavior: contain; }
+.echo { display: flex; flex-direction: column; gap: 8px; --echo-rgb: 232, 104, 0; }
+[data-theme="dark"] .echo { --echo-rgb: 255, 158, 64; }
+.echo-row { display: flex; align-items: center; gap: 8px; }
+.echo-onbtn {
+  flex: 1 1 auto; display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 4px 6px; border: 0; background: transparent;
+  color: var(--text); font: inherit; text-align: left; cursor: pointer; border-radius: 8px;
+}
+@media (hover: hover) { .echo-onbtn:hover { background: var(--surface-2); } }
+.echo-tog { position: relative; flex: 0 0 auto; width: 34px; height: 20px; border-radius: 10px; background: var(--border); transition: background .15s; }
+.echo-tog::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: var(--shadow-sm); transition: transform .15s; }
+.echo-onbtn.on .echo-tog { background: var(--accent); }
+.echo-onbtn.on .echo-tog::after { transform: translateX(14px); }
+.echo-gear {
+  flex: 0 0 auto; width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2);
+  color: var(--text-muted); font-size: 17px; cursor: pointer; padding: 0;
+}
+@media (hover: hover) { .echo-gear:hover { color: var(--text); } }
+.echo-focus {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 4px 4px 10px; border-radius: 8px;
+  background: rgba(var(--echo-rgb), 0.14); border: 1px solid rgba(var(--echo-rgb), 0.5);
+}
+.echo-focus[hidden] { display: none; }
+.echo-focus button { min-height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.echo-legend { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 6px 12px; font-size: 12px; color: var(--text-muted); }
+.echo-scale { display: flex; flex-direction: column; gap: 2px; flex: 1 1 150px; }
+.echo-ks { display: flex; gap: 2px; }
+.echo-k { flex: 1 1 0; height: 12px; border-radius: 3px; background: rgba(var(--echo-rgb), var(--echo-a)); }
+.echo-ul .echo-k { background: transparent; height: 10px; border-bottom: var(--echo-t) solid rgba(var(--echo-rgb), var(--echo-u)); border-radius: 0; }
+.echo-k1 { --echo-a: 0.09; --echo-u: 0.30; --echo-t: 1px; }
+.echo-k2 { --echo-a: 0.14; --echo-u: 0.42; --echo-t: 1.5px; }
+.echo-k3 { --echo-a: 0.21; --echo-u: 0.55; --echo-t: 1.5px; }
+.echo-k4 { --echo-a: 0.29; --echo-u: 0.70; --echo-t: 2px; }
+.echo-k5 { --echo-a: 0.38; --echo-u: 0.85; --echo-t: 2.5px; }
+.echo-k6 { --echo-a: 0.48; --echo-u: 1; --echo-t: 3px; }
+.echo-kl { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-faint); }
+.echo-same-k { white-space: nowrap; }
+.echo-sw-same { padding: 0 2px; border-radius: 3px; background: rgba(var(--echo-rgb), 0.48); box-shadow: inset 0 -2px 0 rgba(var(--echo-rgb), 0.95); color: var(--text); }
+.echo-ul .echo-sw-same { background: transparent; box-shadow: none; text-decoration: underline double rgba(var(--echo-rgb), 1); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.echo-hint { font-size: 12px; color: var(--text-muted); line-height: 1.35; }
+.echo-top-h { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint); }
+.echo-top { display: flex; flex-wrap: wrap; gap: 6px; }
+.echo-w {
+  display: inline-flex; align-items: baseline; gap: 6px; min-height: 32px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) { .echo-w:hover { border-color: rgba(var(--echo-rgb), 0.7); } }
+.echo-w.cur { background: rgba(var(--echo-rgb), 0.3); border-color: rgba(var(--echo-rgb), 0.9); }
+.echo-w-n { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.echo-none { font-size: 12px; color: var(--text-faint); padding: 4px 0; }
+.echo-off .echo-legend, .echo-off .echo-hint { opacity: 0.45; }
+
+@media (max-width: 600px) {
+  #echoes-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: calc(var(--menubar-h, 36px) + 6px); bottom: auto; max-height: 42vh; }
+  #echoes-panel .cade-panel-body { padding: 6px 8px 8px; }
+  .echo { gap: 6px; }
+  .echo-onbtn, .echo-gear { min-height: 40px; }
+  .echo-gear { width: 40px; height: 40px; }
+  .echo-w { min-height: 40px; padding: 6px 12px; }
+  .echo-focus button { min-height: 40px; }
+  .echo-hint, .echo-focus { display: none; }       /* the chip in the note says it */
+  .echo-onbtn { padding: 0 4px; }
+  .echo-top-h { display: none; }
+  .echo-top { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin: 0 -8px; padding: 0 8px 2px; }
+  .echo-top::-webkit-scrollbar { display: none; }
+  .echo-w { flex: 0 0 auto; }
+  .cm-echoes-chip { bottom: 14px; padding-left: 14px; font-size: 14px; }
+  .cm-echoes-chip button { width: 40px; height: 40px; }
+}

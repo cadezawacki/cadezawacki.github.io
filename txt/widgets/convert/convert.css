@@ -31,6 +31,7 @@
 .cv-drop-main b { color: var(--accent); font-weight: 600; }
 .cv-drop-sub { font-size: var(--text-xs); color: var(--text-faint); line-height: 1.4; }
 .cv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cv-row-btns { display: inline-flex; gap: 6px; flex: 0 0 auto; }
 .cv-privacy { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); color: var(--text-muted); }
 .cv-privacy svg { width: 13px; height: 13px; fill: none; stroke: var(--success, #16a34a); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
 
@@ -56,7 +57,7 @@
 .cv-ico[data-cat="audio"] { color: var(--ws-pink-fg, #be185d); background: var(--ws-pink-bg, rgba(236, 72, 153, 0.1)); }
 .cv-ico[data-cat="image"] { color: var(--ws-teal-fg, #0d9488); background: var(--ws-teal-bg, rgba(20, 184, 166, 0.1)); }
 .cv-ico[data-cat="pdf"] { color: var(--ws-orange-fg, #c2410c); background: var(--ws-orange-bg, rgba(249, 115, 22, 0.12)); }
-.cv-ico[data-cat="docx"], .cv-ico[data-cat="md"], .cv-ico[data-cat="html"], .cv-ico[data-cat="text"] { color: var(--ws-blue-fg, #0284c7); background: var(--ws-blue-bg, rgba(14, 165, 233, 0.1)); }
+.cv-ico[data-cat="docx"], .cv-ico[data-cat="md"], .cv-ico[data-cat="html"], .cv-ico[data-cat="text"], .cv-ico[data-cat="pdoc"] { color: var(--ws-blue-fg, #0284c7); background: var(--ws-blue-bg, rgba(14, 165, 233, 0.1)); }
 .cv-ico[data-cat="sheet"] { color: var(--ws-green-fg, #16a34a); background: var(--ws-green-bg, rgba(34, 197, 94, 0.1)); }
 .cv-ico[data-cat="combine"] { color: var(--accent); background: var(--accent-bg, rgba(15, 149, 152, 0.08)); }
 .cv-info { flex: 1; min-width: 0; }
@@ -82,6 +83,7 @@
 }
 .cv-eng[data-eng="fast"] { color: var(--accent); border-color: var(--accent); }
 .cv-eng[data-eng="ffmpeg"] { color: var(--cv-warn); border-color: currentColor; }
+.cv-eng[data-eng="pandoc"] { color: var(--ws-blue-fg, #0284c7); border-color: currentColor; }
 .cv-more {
   margin-left: auto; font: inherit; font-size: var(--text-xs); padding: 3px 9px; border-radius: 6px; cursor: pointer;
   border: 1px solid transparent; background: transparent; color: var(--text-muted);

@@ -1,11 +1,13 @@
 /* Dangerous Mode — keep writing or lose it.
  *
  * A first-draft mode: pick a goal (words or minutes) and a grace (3 / 5 / 8 s).
- * Stop typing for longer than the grace and everything written this session
- * fades and is deleted; reach the goal and it's kept. Normal mode: the wipe is
- * an ordinary edit (Ctrl+Z / ⌘Z, or "Bring it back", restores it) and leaving
- * the app pauses the clock. Hardcore: the wipe skips the undo history and the
- * clock keeps running while you're away.
+ * Stop typing for longer than the grace and what you wrote this session fades,
+ * then its words are removed one at a time from the end, faster and faster
+ * (the next one is marked red first); typing again stops it and keeps the
+ * rest. Lose every word and it's over ("Gone"); reach the goal and it's kept.
+ * Normal mode: each removal is its own undo step (Ctrl+Z / ⌘Z, or "Bring it
+ * back", restores them) and leaving the app pauses the clock. Hardcore:
+ * removals skip the undo history and keep going while you're away.
  *
  * While armed it is impossible to miss: a red banner under the menu bar (in
  * the page flow, so it never covers the text — also with the phone keyboard
@@ -16,11 +18,12 @@
  * The editor side is one extension, added with Cade.registerPlugin('danger-
  * mode') for the session and removed after: a StateField holds the session
  * area, its word count and the pieces you typed in it (danger-core.js decides
- * how they follow each edit; only the pieces are ever wiped), a ViewPlugin
+ * how they follow each edit; only the pieces are ever removed), a ViewPlugin
  * feeds edits to the session clock, and decorations / editor attributes
  * paint the fade and frame. The fading itself is CSS
  * (keyframes restarted per edit by flipping an a/b class), not per-frame JS.
- * The clock is one timer rescheduled on each edit (danger-core nextAt()).
+ * The clock is one timer rescheduled on each edit and each removal
+ * (danger-core nextAt()).
  * Nothing runs until Start; every listener, observer and timer goes at the
  * end. A room switch, the note being replaced from elsewhere or read-only
  * mode ends the session and keeps the text. The logic is pure and tested:
@@ -34,7 +37,7 @@
 
   var META = {
     name: 'Dangerous Mode',
-    description: 'Keep writing or lose it — set a word or time goal; stop typing for a few seconds and this session’s text fades and is deleted. Reach the goal to keep it',
+    description: 'Keep writing or lose it — set a word or time goal; stop typing for a few seconds and this session’s words start being removed from the end until you type again. Reach the goal to keep them',
     icon: '☠',
     tags: 'dangerous,danger,dangerous mode,writing,write,first draft,draft,sprint,word goal,word count,focus,flow,timer,deadline,hardcore,most dangerous writing app,productivity'
   };
@@ -91,9 +94,22 @@
   }
   function makeExt(s0) {
     var CM = Cade.CM, Decoration = CM.Decoration, EditorView = CM.EditorView;
-    var mark = Decoration.mark({ class: 'dz-text' });
-    function deco(pieces) { return pieces.length ? Decoration.set(pieces.map(function (p) { return mark.range(p[0], p[1]); })) : Decoration.none; }
+    var mark = Decoration.mark({ class: 'dz-text' }), doomMark = Decoration.mark({ class: 'dz-doomed' });
+    // the fade over your pieces, and the word that goes next in red (kept out
+    // of the faded spans so it shows at full strength)
+    function deco(pieces, doom) {
+      var r = (doom ? D.cutPieces(pieces, doom) : pieces).map(function (p) { return mark.range(p[0], p[1]); });
+      if (doom) doom.forEach(function (p) { if (p[1] > p[0]) r.push(doomMark.range(p[0], p[1])); });
+      return r.length ? Decoration.set(r, true) : Decoration.none;
+    }
     function dead(v) { return !v || v.dead || s0.ended || s0.ending; }
+    function mapRanges(list, m) {
+      if (!list) return null;
+      var out = list.map(function (p) { return [m.mapPos(p[0], 1), m.mapPos(p[1], -1)]; }).filter(function (p) { return p[1] > p[0]; });
+      return out.length ? out : null;
+    }
+    // "this is the next word to go" (null clears it)
+    var setDoom = s0.setDoom = CM.StateEffect.define({ map: function (val, m) { return mapRanges(val, m); } });
 
     var field = CM.StateField.define({
       // Live only in the state it was added to; a room's state rebuilt or
@@ -101,10 +117,16 @@
       create: function (state) {
         if (s0.created || state.doc !== s0.doc0) return { dead: true };
         s0.created = true;
-        return { from: s0.anchor, to: s0.anchor, pieces: [], words: 0, seq: 0, conflict: false, deco: Decoration.none };
+        return { from: s0.anchor, to: s0.anchor, pieces: [], words: 0, seq: 0, conflict: false, doom: null, kind: null, deco: Decoration.none };
       },
       update: function (v, tr) {
-        if (dead(v) || !tr.docChanged) return v;
+        if (dead(v)) return v;
+        var doom = tr.docChanged ? mapRanges(v.doom, tr.changes) : v.doom, setD = false, i;
+        for (i = 0; i < tr.effects.length; i++) if (tr.effects[i].is(setDoom)) { doom = tr.effects[i].value; setD = true; }
+        if (!tr.docChanged) {
+          if (!setD) return v;
+          return { from: v.from, to: v.to, pieces: v.pieces, words: v.words, seq: v.seq, conflict: v.conflict, doom: doom, kind: null, deco: deco(v.pieces, doom) };
+        }
         var ue = tr.annotation(TrClass().userEvent);
         var kind = D.classify(ue, remoteNow(tr), Date.now() - s0.lastGesture < GESTURE_MS);
         var changes = [];
@@ -118,11 +140,13 @@
           newSlice: function (f, t) { return nd.sliceString(f, t); },
           count: function (f, t) { return countRange(nd, f, t); }
         });
+        var yours = kind === 'typing' || kind === 'history';
+        if (yours) doom = null;                          // you're back: nothing is marked to go
         return {
           from: r.from, to: r.to, pieces: pieces, words: words,
-          seq: kind === 'typing' || kind === 'history' ? v.seq + 1 : v.seq,   // an edit by you: resets the clock
-          conflict: v.conflict || r.conflict,
-          deco: deco(pieces)
+          seq: yours ? v.seq + 1 : v.seq,                // an edit by you: resets the clock (a removal doesn't)
+          conflict: v.conflict || r.conflict, doom: doom, kind: kind,
+          deco: deco(pieces, doom)
         };
       }
     });
@@ -149,14 +173,14 @@
       EditorView.editorAttributes.of(function (view) {
         var v = view.state.field(field, false);
         if (!v || v.dead || s0.ended) return null;
-        return { class: 'dz-on' + (D.running(s0.core) ? ' dz-run' : '') + (s0.parity ? ' dz-b' : ' dz-a') + (s0.settings.hardcore ? ' dz-hc' : '') };
+        return { class: 'dz-on' + (D.running(s0.core) ? ' dz-run' : '') + (s0.core.phase === 'removing' ? ' dz-removing' : '') + (s0.parity ? ' dz-b' : ' dz-a') + (s0.settings.hardcore ? ' dz-hc' : '') };
       })
     ];
   }
 
   function onUpdate(s0, u, field) {
     var a = u.startState.field(field, false), b = u.state.field(field, false);
-    if (!a || !b || b.dead || s0.ending) return;
+    if (!a || !b || b.dead || s0.ending || s0.removingNow) return;
     if (u.state.readOnly && !u.startState.readOnly) { later(function () { endSession(s0, 'ended', 'readonly'); }); return; }
     if (b.conflict && !a.conflict) { later(function () { endSession(s0, 'ended', 'replaced'); }); return; }
     if (b.seq !== a.seq) {
@@ -189,8 +213,56 @@
     }
     if (before.lastAt == null && s0.core.lastAt != null) announce(s0, 'Clock started. Keep typing.');
     if (before.phase !== 'fading' && ph === 'fading') announce(s0, 'Keep typing — it’s fading.');
+    if (before.phase !== 'removing' && ph === 'removing') announce(s0, 'It’s removing your words — type to stop it.');
+    if (before.phase === 'removing' && ph !== 'removing') {
+      // rescued (or paused): what's left stays; Bring it back only covers the last run
+      s0.run = { steps: 0, words: 0, chars: 0 };
+      if (ph === 'typing') announce(s0, 'Stopped — the rest is kept.');
+    }
     schedule(s0);
     render(s0);
+    if (ph === 'removing' && ev.type !== 'removed') { if (inUpdate) later(function () { pump(s0); }); else pump(s0); }
+  }
+  // Removing: take every word that is due (one, unless a timer came late),
+  // then make sure the next one is marked.
+  function pump(s0) {
+    var n = 0;
+    while (S === s0 && !s0.ending && s0.core.phase === 'removing' && s0.core.removeAt <= Date.now() && n++ < 100000) removeOne(s0);
+    if (S === s0 && !s0.ending && s0.core.phase === 'removing') markNext(s0);
+  }
+  function liveField(s0) {
+    try { var v = s0.bound ? Cade.editor.state.field(s0.field, false) : null; return v && !v.dead ? v : null; } catch (e) { return null; }
+  }
+  function slicer() { var st = Cade.editor.state; return function (f, t) { return st.sliceDoc(f, t); }; }
+  function sameRanges(a, b) { return JSON.stringify(a || null) === JSON.stringify(b || null); }
+  function markNext(s0) {
+    var v = liveField(s0);
+    if (!v) return;
+    var r = D.removeRange(v.pieces, slicer()), want = r ? r.ranges : null;
+    if (!sameRanges(want, v.doom)) { try { Cade.editor.dispatch({ effects: s0.setDoom.of(want) }); } catch (e) { console.error(e); } }
+  }
+  function removeOne(s0) {
+    var ed = Cade.editor, v = liveField(s0);
+    var r = v ? D.removeRange(v.pieces, slicer()) : null;
+    if (!r) { step(s0, { type: 'removed', now: Date.now(), words: s0.core.words, left: false }, false); return; }
+    var slice = slicer(), next = r.last ? null : D.removeRange(D.cutPieces(v.pieces, r.ranges), slice);
+    var sel = ed.state.selection.main, end = r.ranges[r.ranges.length - 1][1], words = 0, chars = 0;
+    r.ranges.forEach(function (p) { words += countRange(ed.state.doc, p[0], p[1]); chars += p[1] - p[0]; });
+    var spec = {
+      changes: r.ranges.map(function (p) { return { from: p[0], to: p[1], insert: '' }; }),
+      effects: s0.setDoom.of(next ? next.ranges : null),
+      userEvent: D.REMOVE_EVENT,
+      scrollIntoView: sel.empty && sel.head === end      // the caret rides the end down
+    };
+    if (s0.settings.hardcore) spec.annotations = TrClass().addToHistory.of(false);
+    s0.removingNow = true;
+    try { ed.dispatch(spec); } catch (e) { console.error(e); s0.removingNow = false; endSession(s0, 'ended', 'replaced'); return; }
+    s0.removingNow = false;
+    if (!s0.settings.hardcore) s0.run.steps++;
+    s0.run.words += words; s0.run.chars += chars;
+    s0.docAfter = ed.state.doc;
+    var v2 = liveField(s0);
+    step(s0, { type: 'removed', now: Date.now(), words: v2 ? v2.words : s0.core.words, left: !r.last }, false);
   }
   function schedule(s0) {
     clearTimeout(s0.timer); s0.timer = 0;
@@ -203,8 +275,8 @@
     if (document.hidden) {
       var was = D.running(s0.core);
       step(s0, { type: 'hide', now: Date.now() }, false);
-      // normal mode: paused — stop the editor's animations too
-      if (S === s0 && was && !D.running(s0.core)) { try { Cade.editor.dispatch({}); } catch (e) {} }
+      // normal mode: paused — stop the editor's animations and unmark the next word too
+      if (S === s0 && was && !D.running(s0.core)) { try { Cade.editor.dispatch({ effects: s0.setDoom.of(null) }); } catch (e) {} }
     } else step(s0, { type: 'show', now: Date.now() }, false);
   }
   function onGesture() { if (S) S.lastGesture = Date.now(); }
@@ -247,7 +319,8 @@
       id: ++seq, settings: settings, core: D.create(settings, Date.now()),
       anchor: ed.state.selection.main.head, doc0: ed.state.doc,
       timer: 0, parity: 0, flipAt: 0, lastGesture: Date.now(),
-      created: false, bound: false, ending: false, ended: false, ui: {}, field: null
+      created: false, bound: false, ending: false, ended: false, ui: {}, field: null,
+      run: { steps: 0, words: 0, chars: 0 }, docAfter: null, removingNow: false
     };
     S = s0;
     showIndicators(s0);                    // the banner shifts the layout before the editor measures
@@ -283,21 +356,6 @@
     if (!s0 || s0.ending || s0.ended) return;
     s0.ending = true;
     clearTimeout(s0.timer); s0.timer = 0;
-    var ed = Cade.editor, removed = 0, removedWords = 0, docAfter = null;
-    if (kind === 'wiped') {
-      var v = null;
-      try { v = s0.bound ? ed.state.field(s0.field, false) : null; } catch (e) { v = null; }
-      // only the pieces you typed — never anything else in the area
-      if (v && !v.dead && v.pieces.length && !ed.state.readOnly) {
-        var spec = {
-          changes: v.pieces.map(function (p) { return { from: p[0], to: p[1], insert: '' }; }),
-          selection: { anchor: v.pieces[0][0] }, userEvent: 'delete.danger', scrollIntoView: true
-        };
-        if (s0.settings.hardcore) spec.annotations = TrClass().addToHistory.of(false);
-        v.pieces.forEach(function (p) { removed += p[1] - p[0]; removedWords += countRange(ed.state.doc, p[0], p[1]); });
-        try { ed.dispatch(spec); docAfter = ed.state.doc; } catch (e) { console.error(e); removed = 0; }
-      }
-    }
     s0.ended = true;
     listen(s0, false);
     try { Cade.unregisterPlugin(PLUGIN_ID); } catch (e) {}
@@ -309,7 +367,7 @@
     var st = s0.core;
     if (kind === 'wiped') {
       try { Cade.haptic(60); } catch (e) {}
-      showGone(s0, removed, removedWords, docAfter);
+      showGone(s0);
     } else if (kind === 'kept') toast('Kept — ' + D.wordsText(st.words) + '. Nice work!', 'success', 3000);
     else if (kind === 'stopped') toast('Dangerous mode off — your text is kept', 'info', 2200);
     else if (reason !== 'failed') toast(endedText(reason) + ' — dangerous mode ended, your text is kept', 'info', 3200);
@@ -354,7 +412,7 @@
       var c = ui.chip = document.createElement('span');
       c.className = 'dz-chip';
       c.textContent = '☠ ARMED';
-      c.title = 'Dangerous mode is on — stop typing for ' + D.fmtSecs(s0.settings.grace) + ' and this session’s text is deleted';
+      c.title = 'Dangerous mode is on — stop typing for ' + D.fmtSecs(s0.settings.grace) + ' and this session’s words start being removed';
       foot.insertBefore(c, foot.querySelector('.footer-spacer'));
     }
 
@@ -377,7 +435,7 @@
     if (!b || kind === 'wiped' || reason === 'failed') { if (b) b.remove(); layoutOff(); return; }
     // The banner stays a moment to say how it ended, then goes too (body.dz-on
     // still sizes it meanwhile; the frame and fade left with the extension).
-    b.classList.remove('dz-run', 'dz-a', 'dz-b', 'dz-fading', 'dz-waiting');
+    b.classList.remove('dz-run', 'dz-a', 'dz-b', 'dz-fading', 'dz-waiting', 'dz-removing');
     b.classList.add(kind === 'kept' ? 'dz-kept' : 'dz-ended');
     var stop = b.querySelector('.dz-b-stop');
     if (stop) stop.remove();
@@ -414,21 +472,22 @@
     b.classList.toggle('dz-a', !s0.parity);
     b.classList.toggle('dz-b', !!s0.parity);
     b.classList.toggle('dz-fading', st.phase === 'fading');
+    b.classList.toggle('dz-removing', st.phase === 'removing');
     b.classList.toggle('dz-waiting', !run);
     if (P && el.runProg) el.runProg.textContent = prog;
   }
   function announce(s0, msg) { if (s0.ui.sr) s0.ui.sr.textContent = msg; }
 
   // ================= "Gone" =================
-  function showGone(s0, removed, words, docAfter) {
+  function showGone(s0) {
     closeGone();
-    var hc = s0.settings.hardcore, canUndo = !hc && removed > 0;
+    var hc = s0.settings.hardcore, run = s0.run, docAfter = s0.docAfter, canUndo = !hc && run.steps > 0;
     var o = document.createElement('div');
     o.className = 'dz-gone';
     o.innerHTML = '<div class="dz-gone-card" role="alertdialog" aria-labelledby="dz-gone-t" aria-describedby="dz-gone-s">' +
       '<div class="dz-gone-skull" aria-hidden="true">💀</div>' +
       '<div class="dz-gone-t" id="dz-gone-t">' + esc(D.goneText(s0.core)) + '</div>' +
-      '<div class="dz-gone-s" id="dz-gone-s">' + (removed ? (hc ? 'Hardcore — no undo. ' + esc(D.wordsText(words)) + ' gone for good.' : esc(D.wordsText(words)) + ' deleted. Ctrl+Z / ⌘Z brings it back.') : 'Nothing was written, so nothing was lost.') + '</div>' +
+      '<div class="dz-gone-s" id="dz-gone-s">' + (run.chars ? (hc ? 'Hardcore — no undo. ' + esc(D.wordsText(run.words)) + ' removed for good.' : esc(D.wordsText(run.words)) + ' removed. Bring it back, or Ctrl+Z / ⌘Z one word at a time.') : 'Nothing was written, so nothing was lost.') + '</div>' +
       '<div class="dz-gone-row">' +
         '<button type="button" class="dz-btn dz-btn-red" data-act="again">Try again</button>' +
         (canUndo ? '<button type="button" class="dz-btn" data-act="undo">↶ Bring it back</button>' : '') +
@@ -443,8 +502,11 @@
       if (a === 'again') openSetup(settings);
       else if (a === 'undo') {
         var ed = Cade.editor;
-        if (ed.state.doc === docAfter) { try { Cade.CM.undo(ed); ed.focus(); } catch (x) {} toast('Brought back', 'success', 1400); }
-        else toast('You’ve typed since — use Undo (Ctrl+Z / ⌘Z) to step back to it', 'info', 3000);
+        // each removal is its own undo step; only while nothing changed since
+        if (ed.state.doc === docAfter) {
+          try { for (var i = 0; i < run.steps; i++) Cade.CM.undo(ed); ed.focus(); } catch (x) {}
+          toast('Brought back', 'success', 1400);
+        } else toast('You’ve typed since — use Undo (Ctrl+Z / ⌘Z) to step back to it', 'info', 3000);
       }
     });
     document.body.appendChild(o);
@@ -638,7 +700,8 @@
         try { v = S.field ? Cade.editor.state.field(S.field, false) : null; } catch (e) {}
         return {
           phase: S.core.phase, words: S.core.words, running: D.running(S.core), paused: S.core.paused, hardcore: S.settings.hardcore,
-          from: v ? v.from : null, to: v ? v.to : null, pieces: v ? v.pieces.slice() : null
+          from: v ? v.from : null, to: v ? v.to : null, pieces: v ? v.pieces.slice() : null,
+          doom: v ? v.doom : null, removeAt: S.core.removeAt, removed: S.core.removed
         };
       }
     }

@@ -3,8 +3,9 @@
    on the first time any Code Pack script runs. Sets window.__CADE_CODEPACK__.
    Heavy third-party libs (terser, js-beautify, javascript-obfuscator) are
    themselves loaded from cdn.jsdelivr.net only when actually needed.
-   Unobfuscate lives in pack-code-unobf.js next to this file, loaded on its
-   first use only.
+   Unobfuscate lives in pack-code-unobf.js and Beautify / Format Code Blocks
+   (Prettier with js-beautify fallback) in pack-code-format.js, next to this
+   file, each loaded on its first use only.
    Kept as its own file (not inlined per-script) so the ~scripts share one copy
    and the big logic loads once. Pure helpers are exposed with a leading _ so
    they can be unit-checked in node. */
@@ -87,8 +88,9 @@
     var t = code.trim();
     if (!t) return { lang: 'js', sure: false };
 
-    // JSON
-    if (/^[\[{]/.test(t)) { try { JSON.parse(t); return { lang: 'json', sure: true }; } catch (e) {} }
+    // JSON (lenient: comments / trailing commas, as in tsconfig or VS Code settings)
+    var noLead = t.replace(/^(\s*(\/\/[^\n]*|\/\*[\s\S]*?\*\/))+\s*/, '');
+    if (/^[\[{]/.test(noLead)) { try { formatJSON(t, ''); return { lang: 'json', sure: true }; } catch (e) {} }
 
     // Explicit XML prolog
     if (/^<\?xml\b/i.test(t)) return { lang: 'xml', sure: true };
@@ -112,6 +114,7 @@
     var cssRule = /[^{}]*\{[^{}]*[\w-]+\s*:[^{}]+\}/;
     if ((cssAt.test(t) || cssRule.test(t)) &&
         !/\b(function|=>|console\.|document\.|window\.)\b/.test(t) &&
+        !/(^|\n)\s*(const|let|var|import|export|return|class)\s/.test(t) &&
         !/\bdef\s+\w+\s*\(/.test(t)) {
       var decls = (t.match(/[\w-]+\s*:\s*[^;{}]+[;}]/g) || []).length;
       if (cssAt.test(t) || decls >= 1) return { lang: 'css', sure: cssAt.test(t) || decls >= 2 };
@@ -486,13 +489,122 @@
       return window.__CADE_UNOBF__;
     });
   }
+  function ensureFormat() {
+    if (window.__CADE_CODEFMT__) return Promise.resolve(window.__CADE_CODEFMT__);
+    return loadScript(BASE + 'pack-code-format.js').then(function () {
+      if (!window.__CADE_CODEFMT__) throw new Error('Formatter failed to initialise');
+      return window.__CADE_CODEFMT__;
+    });
+  }
   var lastNote = '';
 
   // =====================================================================
   // JSON / XML trivial transforms + XML beautify
   // =====================================================================
-  function minifyJSON(s) { try { return JSON.stringify(JSON.parse(s)); } catch (e) { throw new Error('Invalid JSON: ' + e.message); } }
-  function beautifyJSON(s) { try { return JSON.stringify(JSON.parse(s), null, 2); } catch (e) { throw new Error('Invalid JSON: ' + e.message); } }
+  // Lossless JSON re-printer (own parser, no JSON.parse round trip): numbers,
+  // string escapes and duplicate keys are kept exactly as written, so big
+  // integers / 1e400 / "é" survive, unlike JSON.stringify(JSON.parse()).
+  // Lenient on input: // and /* */ comments (kept when pretty-printing,
+  // dropped when minifying) and trailing commas (dropped). ind: '' = minify,
+  // else the indent unit; the pretty layout is JSON.stringify(v, null, ind)'s.
+  var JSON_NUM = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
+  function formatJSON(src, ind) {
+    var i = 0, n = src.length, pretty = !!ind;
+    function fail(msg, at) {
+      at = at == null ? i : at;
+      var pre = src.slice(0, at), line = (pre.match(/\n/g) || []).length + 1;
+      var e = new Error('Invalid JSON (line ' + line + ', col ' + (at - pre.lastIndexOf('\n')) + '): ' + msg);
+      e.line = line; return e;
+    }
+    function what() { return i >= n ? 'unexpected end of input' : 'unexpected ' + JSON.stringify(src[i]); }
+    // skip whitespace + comments; returns [{t, nl}] (nl: a line break came before it)
+    function ws() {
+      var out = [], nl = false;
+      while (i < n) {
+        var c = src[i];
+        if (c === '\n') { nl = true; i++; }
+        else if (c === ' ' || c === '\t' || c === '\r' || c === '﻿') i++;
+        else if (c === '/' && src[i + 1] === '/') { var e = src.indexOf('\n', i); if (e < 0) e = n; out.push({ t: src.slice(i, e).replace(/\s+$/, ''), nl: nl }); i = e; }
+        else if (c === '/' && src[i + 1] === '*') { var e2 = src.indexOf('*/', i + 2); if (e2 < 0) throw fail('unterminated comment'); out.push({ t: src.slice(i, e2 + 2), nl: nl, block: true }); i = e2 + 2; nl = false; }
+        else break;
+      }
+      return out;
+    }
+    function str() {
+      var s = i++;
+      while (i < n) {
+        var c = src.charCodeAt(i);
+        if (c === 34) { i++; return src.slice(s, i); }
+        if (c === 92) {
+          var x = src[i + 1];
+          if (x === 'u') { if (!/^[0-9a-fA-F]{4}$/.test(src.substr(i + 2, 4))) throw fail('bad \\u escape'); i += 6; }
+          else if ('"\\/bfnrt'.indexOf(x) >= 0 && x) i += 2;
+          else throw fail('bad escape \\' + (x || ''));
+        } else if (c < 32) throw fail('unescaped control character in string');
+        else i++;
+      }
+      throw fail('unterminated string', s);
+    }
+    function value() {
+      var c = src[i];
+      if (c === '{' || c === '[') return container(c);
+      if (c === '"') return { t: str() };
+      JSON_NUM.lastIndex = i;
+      var m = JSON_NUM.exec(src);
+      if (m && m.index === i && m[0] && m[0] !== '-') { i += m[0].length; return { t: m[0] }; }
+      var w = /^(true|false|null)\b/.exec(src.slice(i, i + 6));
+      if (w) { i += w[1].length; return { t: w[1] }; }
+      throw fail(what());
+    }
+    function container(open) {
+      var obj = open === '{', close = obj ? '}' : ']', node = { obj: obj, items: [], end: [] };
+      i++;
+      var carry = ws();
+      while (true) {
+        if (src[i] === close) { i++; node.end = carry; return node; }
+        var item = { before: carry, after: [] };
+        if (obj) {
+          if (src[i] !== '"') throw fail(i >= n ? what() : 'expected a "key" or }');
+          item.key = str();
+          item.before = item.before.concat(ws());
+          if (src[i] !== ':') throw fail('expected : after key');
+          i++; ws().forEach(function (c) { item.before.push(c); });
+        }
+        item.v = value();
+        node.items.push(item);
+        var cs = ws();
+        if (src[i] === ',') { i++; cs = cs.concat(ws()); }
+        else if (src[i] !== close) throw fail(i >= n ? what() : 'expected , or ' + close);
+        // same-line comments stay with this item, the rest lead the next one
+        carry = [];
+        cs.forEach(function (c) { (c.nl || carry.length ? carry : item.after).push(c); });
+      }
+    }
+    var lead = ws();
+    if (i >= n) throw fail('empty input');
+    var root = value(), tail = ws();
+    if (i < n) throw fail(what());
+    if (!pretty) return mini(root);
+    function mini(v) {
+      if (v.t != null) return v.t;
+      return (v.obj ? '{' : '[') + v.items.map(function (it) { return (v.obj ? it.key + ':' : '') + mini(it.v); }).join(',') + (v.obj ? '}' : ']');
+    }
+    function cm(list, pad) { return list.map(function (c) { return pad + c.t + '\n'; }).join(''); }
+    function pr(v, pad) {
+      if (v.t != null) return v.t;
+      var o = v.obj ? '{' : '[', c = v.obj ? '}' : ']';
+      if (!v.items.length && !v.end.length) return o + c;
+      var p2 = pad + ind, s = o + '\n';
+      v.items.forEach(function (it, k) {
+        s += cm(it.before, p2) + p2 + (v.obj ? it.key + ': ' : '') + pr(it.v, p2) + (k < v.items.length - 1 ? ',' : '');
+        s += it.after.map(function (x) { return ' ' + x.t; }).join('') + '\n';
+      });
+      return s + cm(v.end, p2) + pad + c;
+    }
+    return cm(lead, '') + pr(root, '') + (tail.length ? '\n' + cm(tail, '').replace(/\n$/, '') : '');
+  }
+  function minifyJSON(s) { return formatJSON(s, ''); }
+  function beautifyJSON(s) { return formatJSON(s, '  '); }
   function minifyXML(s) { return s.replace(/>\s+</g, '><').replace(/^\s+|\s+$/g, ''); }
   function repeat(s, n) { var r = ''; while (n-- > 0) r += s; return r; }
   function beautifyXML(xml, pad) {
@@ -517,6 +629,16 @@
   }
 
   function beautyOpts() { return { indent_size: 2, space_in_empty_paren: true, preserve_newlines: true, max_preserve_newlines: 2, end_with_newline: false }; }
+  // what pack-code-format.js gets from the page
+  var lastLoadingToast = 0;
+  var FMT_ENV = {
+    loadScript: loadScript, ensureBeautify: ensureBeautify, formatJSON: formatJSON,
+    beautifyXML: beautifyXML, detectLang: detectLang,
+    onLoading: function () {   // once per burst (Format Code Blocks may load several plugins)
+      var now = Date.now();
+      if (now - lastLoadingToast > 8000) { lastLoadingToast = now; toast('Loading Prettier…', 'info', 1800); }
+    }
+  };
 
   // =====================================================================
   // transform dispatch
@@ -544,14 +666,7 @@
       lastNote = r.note;
       return r.code;
     }
-    if (op === 'beautify') {
-      if (lang === 'css') return (await ensureBeautify()).css(input, beautyOpts());
-      if (lang === 'html') return (await ensureBeautify()).html(input, beautyOpts());
-      if (lang === 'json') return beautifyJSON(input);
-      if (lang === 'xml') return beautifyXML(input, '  ');
-      if (lang === 'python') throw new Error('Beautify does not support Python (try Minify Python)');
-      return (await ensureBeautify()).js(input, beautyOpts());
-    }
+    if (op === 'beautify') return (await (await ensureFormat()).format(lang, input, null, FMT_ENV)).code;
     throw new Error('Unknown operation: ' + op);
   }
 
@@ -599,6 +714,7 @@
     var R = detectRange();
     var input = R.text;
     if (!input || !input.trim()) { toast('Nothing to ' + op, 'error'); return; }
+    if (op === 'beautify') return runFormat(R, langArg);
 
     var lang = langArg, uDet = null;
     if (op === 'unobfuscate' && lang === 'auto') {
@@ -640,8 +756,93 @@
     toast(capitalize(op) + ' ' + labelOf(lang) + ': ' + fmtSize(inB) + ' -> ' + fmtSize(outB) + ' (' + fmtDelta(inB, outB) + ')', 'success', 3200);
   }
 
+  // =====================================================================
+  // Beautify (selection -> fence at cursor -> note), Format Code Blocks,
+  // Beautify Options… - the formatting itself is in pack-code-format.js
+  // =====================================================================
+  function apply(from, to, insert) {
+    var live = window.Cade.editor, len2 = live.state.doc.length;
+    if (live.state.readOnly) { toast('Editor is read-only', 'error'); return false; }
+    live.dispatch({ changes: { from: Math.min(from, len2), to: Math.min(to, len2), insert: insert }, userEvent: 'input' });
+    return true;
+  }
+  async function loadFormatter() {
+    try { return await ensureFormat(); }
+    catch (e) { toast((e && e.message) || 'Formatter failed to load', 'error', 5000); return null; }
+  }
+  async function runFormat(R, langArg) {
+    var F = await loadFormatter();
+    if (!F) return;
+    var input = R.text, lang = langArg && langArg !== 'auto' ? langArg : null;
+    if (!lang && R.fenced && R.info) {
+      lang = F.fromInfo(R.info);
+      var no = !lang && F.unsupported(R.info);
+      if (no) { toast('No formatter for ' + no + ' code blocks', 'error', 4000); return; }
+    }
+    if (!lang) {
+      var d = F.detect(input, FMT_ENV);
+      lang = d.lang;
+      if (!d.sure) {
+        var ans = window.prompt('Detected ' + F.labelOf(lang) + '. Language to beautify? (js, ts, css, scss, less, html, vue, json, markdown, yaml, graphql, xml)', lang);
+        if (ans === null) return;
+        var picked = F.fromInfo(ans);
+        if (ans.trim() && !picked) { toast('No formatter for "' + ans.trim() + '"', 'error', 3500); return; }
+        lang = picked || lang;
+      }
+    }
+    if (R.ed.state.readOnly) { toast('Editor is read-only', 'error'); return; }
+    var r;
+    try { r = await F.format(lang, input, null, FMT_ENV); }
+    catch (e) { toast((e && e.message) || ('Could not beautify ' + lang), 'error', 7000); return; }
+    var how = r.label + ' (' + r.engine + ')';
+    if (r.code === input) { toast('Already formatted: ' + how + (r.note ? ' · ' + r.note : ''), 'info', r.note ? 6000 : 2600); return; }
+    if (!apply(R.from, R.to, r.code)) return;
+    var inB = enc(input), outB = enc(r.code);
+    toast('Beautified ' + how + ': ' + fmtSize(inB) + ' -> ' + fmtSize(outB) + (r.note ? ' · ' + r.note : ''), r.note ? 'info' : 'success', r.note ? 6500 : 3200);
+  }
+  async function formatBlocks() {
+    var F = await loadFormatter();
+    if (!F) return;
+    var ed = window.Cade.editor, doc = ed.state.doc, sel = ed.state.selection.main;
+    if (ed.state.readOnly) { toast('Editor is read-only', 'error'); return; }
+    var res = await F.formatBlocks(doc.toString(), sel.from, sel.to, null, FMT_ENV);
+    if (!res.total) { toast(sel.from !== sel.to ? 'No ``` code blocks in the selection' : 'No ``` code blocks in this note', 'error', 3000); return; }
+    var live = window.Cade.editor;
+    if (!live.state.doc.eq(doc)) { toast('The note changed while formatting; run it again', 'error', 4000); return; }
+    if (res.changes.length) {
+      if (live.state.readOnly) { toast('Editor is read-only', 'error'); return; }
+      live.dispatch({ changes: res.changes, userEvent: 'input' });
+    }
+    var parts = [res.formatted + ' formatted'];
+    if (res.unchanged) parts.push(res.unchanged + ' already tidy');
+    if (res.skipped.length) parts.push(res.skipped.length + ' skipped (' + res.skipped.join(', ') + ')');
+    var msg = 'Code blocks: ' + parts.join(', ');
+    if (res.failed.length) {
+      var f0 = res.failed[0];
+      msg += '. ' + res.failed.length + ' failed - block at line ' + f0.line + ': ' + f0.message;
+    }
+    toast(msg, res.failed.length ? 'error' : (res.formatted ? 'success' : 'info'), res.failed.length ? 8000 : 4000);
+  }
+  async function formatOptions() {
+    var F = await loadFormatter();
+    if (!F) return;
+    var cur = F.optionsString(F.getOptions());
+    var ans = window.prompt('Beautify options (Prettier; indent also applies to JSON / XML):\n' +
+      'width=20-320  indent=1-8 or tab  semi=yes|no  quotes=double|single  trailing=all|es5|none\n' +
+      'Clear it to restore the defaults.', cur);
+    if (ans === null) return;
+    var r = F.parseOptions(ans, F.getOptions());
+    if (r.errors.length) { toast('Not understood: ' + r.errors.join(', ') + '. Nothing changed', 'error', 5000); return; }
+    toast('Beautify options: ' + F.optionsString(F.setOptions(r.opts)), 'success', 4000);
+  }
+
   window.__CADE_CODEPACK__ = {
     run: run,
+    formatBlocks: formatBlocks,
+    formatOptions: formatOptions,
+    _formatJSON: formatJSON,
+    _ensureFormat: ensureFormat,
+    _env: FMT_ENV,
     _detectLang: detectLang,
     _resolveLangFromInfo: resolveLangFromInfo,
     _minifyCSS: minifyCSS,

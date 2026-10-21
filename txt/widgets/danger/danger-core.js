@@ -8,11 +8,15 @@
  *     ▲                     ▲  └────────────── next edit ◀──────┘
  *     └── page hidden ──────┘   (normal mode only: the clock pauses and
  *                                waits for the next edit; hardcore keeps it)
- *   typing / fading ──idle ≥ grace──▶ wiped
+ *   typing / fading ──idle ≥ grace──▶ removing ──next edit──▶ typing (rescued)
+ *   removing: one word goes from the end at each removeAt (the UI deletes it
+ *     and reports 'removed'); the gaps shrink (REMOVE_FIRST ×REMOVE_RATE per
+ *     word, never under REMOVE_MIN) so it chases you; nothing left ──▶ wiped
  *   any live phase ──goal reached──▶ kept     ──Stop / room switch…──▶ stopped
  * Time is passed in (ev.now, ms), so every transition is testable. nextAt()
- * is the one moment the UI must wake up for (fade start, wipe, time goal, or
- * the next countdown second), so it needs a single timer, no polling.
+ * is the one moment the UI must wake up for (fade start, grace end, the next
+ * word to remove, time goal, or the next countdown second), so it needs a
+ * single timer, no polling.
  *
  * ---- Words ----
  * Same rule as the app's footer: runs of anything but space, \n, \t, \r, \f.
@@ -24,8 +28,8 @@
  * [from, to]: it starts at the caret, grows with your typing (and undo/redo)
  * at its edges, and is what the word count and "is this typing part of the
  * session" go by — typing elsewhere doesn't count. The PIECES are the parts of
- * it your own typing inserted; only they fade and only they are deleted, so a
- * wipe can never take text that wasn't typed in this session (text an undo
+ * it your own typing inserted; only they fade and only they are removed, so
+ * the session can never take text that wasn't typed in it (text an undo
  * brings back, or sync writes, is never a piece). A change from elsewhere that
  * edits the inside of the area is a conflict: the UI ends the session and
  * keeps everything. */
@@ -39,6 +43,9 @@
   // banner's drain bar pulses through the last quarter. The CSS uses the same
   // fractions (danger.js hands them over as custom properties).
   var FADE_START = 0.4, MIN_OPACITY = 0.15, PULSE_AT = 0.75;
+  // Once the grace runs out: the first word goes after REMOVE_FIRST ms (it's
+  // marked meanwhile), each next one REMOVE_RATE times sooner, floor REMOVE_MIN.
+  var REMOVE_FIRST = 700, REMOVE_RATE = 0.85, REMOVE_MIN = 120;
   var WINDOW = 256;   // recount(): how far to look for the whitespace around a change
 
   function num(v) { var n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v; return typeof n === 'number' && isFinite(n) ? n : NaN; }
@@ -73,13 +80,13 @@
   function goalText(s) { return s.kind === 'time' ? plural(s.minutes, 'minute', 'minutes') : plural(s.words, 'word', 'words'); }
   // The plain-language promise shown above Start.
   function summary(s) {
-    return 'Stop typing for ' + fmtSecs(s.grace) + ' and everything you write this session is deleted. ' +
-      (s.kind === 'time' ? 'Keep going for ' + goalText(s) + ' to keep it.' : 'Reach ' + goalText(s) + ' to keep it.');
+    return 'Stop typing for ' + fmtSecs(s.grace) + ' and the words you wrote this session start being removed from the end, faster and faster, until you type again. ' +
+      (s.kind === 'time' ? 'Keep going for ' + goalText(s) + ' to keep them.' : 'Reach ' + goalText(s) + ' to keep them.');
   }
   function modeNote(s) {
     return s.hardcore
-      ? 'Hardcore: no undo after a wipe, and the clock keeps running if you leave the app.'
-      : 'If it happens, Ctrl+Z / ⌘Z brings it back. Leaving the app pauses the clock.';
+      ? 'Hardcore: removed words can’t be undone, and the clock keeps running if you leave the app.'
+      : 'Removed words come back with Ctrl+Z / ⌘Z. Leaving the app pauses the clock.';
   }
 
   // ================= words =================
@@ -136,10 +143,14 @@
   //               change with no label: list Enter, renumbering, toolbar)
   //   'history' — your edits that put existing text back or move it: undo,
   //               redo, drag-and-drop (move.*)
+  //   'remove'  — the session itself taking a word away (REMOVE_EVENT)
   //   'foreign' — sync / another device, anything else
+  var REMOVE_EVENT = 'danger.remove';   // not delete.*: never your typing, and
+                                        // CodeMirror keeps each one its own undo step
   function classify(userEvent, remote, recentGesture) {
     if (remote) return 'foreign';
     var u = typeof userEvent === 'string' ? userEvent : '';
+    if (u === REMOVE_EVENT) return 'remove';
     if (/^(input|delete)(\.|$)/.test(u)) return 'typing';
     if (u === 'undo' || u === 'redo' || /^move(\.|$)/.test(u)) return 'history';
     return recentGesture ? 'typing' : 'foreign';
@@ -183,12 +194,12 @@
     return out;
   }
 
-  // The pieces you typed in the area — the only text a wipe may delete.
+  // The pieces you typed in the area — the only text the session may remove.
   // pieces: [[from, to], …] sorted, apart; area: the area after the change
   // (mapRegion's result). Pieces never grow over existing text: they map
   // inwards at their edges, an undo / redo / sync insertion inside one is cut
   // out, and only text your own typing inserted within the area is added.
-  // (Text an undo brings back still counts in the area; it just isn't wiped.)
+  // (Text an undo brings back still counts in the area; it just isn't removed.)
   function addPiece(list, a, b) {
     var out = [], i = 0;
     while (i < list.length && list[i][1] < a) out.push(list[i++]);
@@ -222,8 +233,35 @@
     return out;
   }
 
+  function cutPieces(list, ranges) {
+    for (var i = 0; i < ranges.length; i++) list = cutPiece(list, ranges[i][0], ranges[i][1]);
+    return list;
+  }
+  // The next word to remove: the last word in the pieces, with whatever
+  // follows it in its piece (and any whitespace-only pieces after it). When
+  // it is the only word left, everything that remains goes with it.
+  // slice(from, to) reads the document. → { ranges: [[from, to], …], last } or
+  // null when nothing is left.
+  function hasWordBefore(s, k) { for (var i = k - 1; i >= 0; i--) if (!isWs(s.charCodeAt(i))) return true; return false; }
+  function removeRange(pieces, slice) {
+    var tail = [], i, j;
+    for (i = pieces.length - 1; i >= 0; i--) {
+      var p = pieces[i], s = slice(p[0], p[1]), e = s.length;
+      while (e > 0 && isWs(s.charCodeAt(e - 1))) e--;
+      if (e === 0) { tail.unshift([p[0], p[1]]); continue; }
+      var k = e;
+      while (k > 0 && !isWs(s.charCodeAt(k - 1))) k--;
+      var more = hasWordBefore(s, k);
+      for (j = i - 1; j >= 0 && !more; j--) more = hasWordBefore(slice(pieces[j][0], pieces[j][1]), pieces[j][1] - pieces[j][0]);
+      if (!more) return { ranges: pieces.map(function (q) { return [q[0], q[1]]; }), last: true };
+      return { ranges: [[p[0] + k, p[1]]].concat(tail), last: false };
+    }
+    return tail.length ? { ranges: tail, last: true } : null;
+  }
+  function removeGap(n) { return Math.max(REMOVE_MIN, Math.round(REMOVE_FIRST * Math.pow(REMOVE_RATE, n))); }
+
   // ================= the session =================
-  var LIVE = { armed: 1, typing: 1, fading: 1 };
+  var LIVE = { armed: 1, typing: 1, fading: 1, removing: 1 };
   function create(settings, now) {
     var s = validate(settings);
     return {
@@ -234,6 +272,9 @@
       runFrom: null,      // start of the current counting stretch (time goals)
       activeMs: 0,        // counted time before that stretch
       paused: false,      // waiting after the page was hidden (normal mode)
+      removeAt: null,     // removing: when the next word goes
+      bout: 0,            // words removed since the grace last ran out
+      removed: 0,         // words removed this session
       endedAt: null, reason: null
     };
   }
@@ -246,21 +287,31 @@
     var end = isLive(st) ? now : st.endedAt;
     return st.activeMs + (st.runFrom != null && end != null ? Math.max(0, end - st.runFrom) : 0);
   }
-  function wipeAt(st) { return running(st) ? st.lastAt + graceMs(st) : null; }
+  function graceAt(st) { return running(st) ? st.lastAt + graceMs(st) : null; }
   function fadeAt(st) { return running(st) ? st.lastAt + graceMs(st) * FADE_START : null; }
   function goalAt(st) { return st.goal.kind === 'time' && running(st) && st.runFrom != null ? st.runFrom + (st.goal.target - st.activeMs) : null; }
 
   function end(t, phase, at, reason) {
     if (t.runFrom != null) { t.activeMs += Math.max(0, at - t.runFrom); t.runFrom = null; }
-    t.phase = phase; t.endedAt = at; t.reason = reason; t.lastAt = null;
+    t.phase = phase; t.endedAt = at; t.reason = reason; t.lastAt = null; t.removeAt = null;
     return t;
   }
   // Apply whatever deadline has passed by `now` (earliest first; a tie keeps).
   function settle(t, now) {
     if (!running(t)) return t;
-    var w = wipeAt(t), g = goalAt(t);
+    var g = goalAt(t);
+    if (t.phase === 'removing') {
+      // the time goal reached meanwhile keeps what's left
+      if (g != null && g <= now) { end(t, 'kept', g, 'goal'); t.activeMs = t.goal.target; }
+      return t;
+    }
+    var w = graceAt(t);
     if (g != null && g <= now && g <= w) { end(t, 'kept', g, 'goal'); t.activeMs = t.goal.target; return t; }
-    if (w <= now) return end(t, 'wiped', w, 'idle');
+    if (w <= now) {
+      t.phase = 'removing'; t.bout = 0; t.removeAt = w + removeGap(0);
+      if (g != null && g <= now) { end(t, 'kept', g, 'goal'); t.activeMs = t.goal.target; }
+      return t;
+    }
     t.phase = now >= fadeAt(t) ? 'fading' : 'typing';
     return t;
   }
@@ -269,16 +320,18 @@
     if (t.goal.kind === 'words' ? t.words >= t.goal.target : (t.firstAt != null && elapsedMs(t, now) >= t.goal.target)) end(t, 'kept', now, 'goal');
     return t;
   }
-  // ev: { type: 'input' | 'words' | 'tick' | 'hide' | 'show' | 'stop', now, words?, reason? }
+  // ev: { type: 'input' | 'words' | 'tick' | 'hide' | 'show' | 'stop' | 'removed', now, words?, reason?, left? }
+  //   removed: the UI took the word due at removeAt; left: is any word left
+  //   input: your edit — while removing, it rescues what's left
   function reduce(st, ev) {
     if (!isLive(st)) return st;
     var t = copy(st), now = ev.now;
     switch (ev.type) {
       case 'input':
-        settle(t, now);                 // an edit after the deadline is too late
+        settle(t, now);
         if (!isLive(t)) return t;
         if (t.lastAt == null) { if (t.firstAt == null) t.firstAt = now; t.runFrom = now; t.paused = false; }
-        t.lastAt = now; t.phase = 'typing';
+        t.lastAt = now; t.phase = 'typing'; t.removeAt = null; t.bout = 0;
         if (ev.words != null) t.words = ev.words;
         return checkGoal(t, now);
       case 'words':
@@ -287,11 +340,18 @@
       case 'tick':
       case 'show':
         return settle(t, now);
+      case 'removed':
+        if (t.phase !== 'removing') return t;
+        t.removed++; t.bout++;
+        if (ev.words != null) t.words = ev.words;
+        if (!ev.left) return end(t, 'wiped', now, 'removed');
+        t.removeAt += removeGap(t.bout);   // on schedule: a late timer (hardcore, page away) catches up
+        return settle(t, now);
       case 'hide':
         settle(t, now);
         if (!isLive(t) || t.settings.hardcore || t.lastAt == null) return t;
         t.activeMs += Math.max(0, now - t.runFrom); t.runFrom = null; t.lastAt = null;
-        t.paused = true; t.phase = 'armed';
+        t.paused = true; t.phase = 'armed'; t.removeAt = null; t.bout = 0;
         return t;
       case 'stop':
         settle(t, now);
@@ -303,7 +363,7 @@
   // display: also wake for each new second of a time goal's countdown.
   function nextAt(st, now, display) {
     if (!running(st)) return null;
-    var c = [wipeAt(st)], g = goalAt(st);
+    var c = [st.phase === 'removing' ? st.removeAt : graceAt(st)], g = goalAt(st);
     if (st.phase === 'typing') c.push(fadeAt(st));
     if (g != null) {
       c.push(g);
@@ -339,21 +399,23 @@
   function hintText(st) {
     if (st.phase === 'armed') return st.paused ? 'Paused while you were away — the clock restarts when you type' : 'Start typing — the clock starts with your first word';
     if (st.phase === 'fading') return 'keep typing — it’s fading!';
-    return 'stop for ' + fmtSecs(st.settings.grace) + ' and it’s gone';
+    if (st.phase === 'removing') return 'it’s removing your words — type to stop it!';
+    return 'stop for ' + fmtSecs(st.settings.grace) + ' and your words start going';
   }
   function keptText(st) {
     return '✓ Kept — ' + (st.goal.kind === 'time' ? goalText(st.settings) + ' · ' : '') + wordsText(st.words);
   }
-  function goneText(st) { return 'Gone — you paused for ' + fmtSecs(st.settings.grace); }
+  function goneText(st) { return 'Gone — every word removed. You paused for ' + fmtSecs(st.settings.grace); }
 
   var api = {
     WORD_CHOICES: WORD_CHOICES, TIME_CHOICES: TIME_CHOICES, GRACE_CHOICES: GRACE_CHOICES,
     DEFAULTS: DEFAULTS, LIMITS: LIMITS, FADE_START: FADE_START, MIN_OPACITY: MIN_OPACITY, PULSE_AT: PULSE_AT,
+    REMOVE_FIRST: REMOVE_FIRST, REMOVE_RATE: REMOVE_RATE, REMOVE_MIN: REMOVE_MIN, REMOVE_EVENT: REMOVE_EVENT,
     validate: validate, checkCustom: checkCustom, goalOf: goalOf, summary: summary, modeNote: modeNote, fmtSecs: fmtSecs,
     isWs: isWs, countWords: countWords, recount: recount,
-    classify: classify, mapRegion: mapRegion, mapPieces: mapPieces,
+    classify: classify, mapRegion: mapRegion, mapPieces: mapPieces, cutPieces: cutPieces, removeRange: removeRange, removeGap: removeGap,
     create: create, reduce: reduce, nextAt: nextAt, isLive: isLive, running: running,
-    idleMs: idleMs, elapsedMs: elapsedMs, wipeAt: wipeAt, fadeAt: fadeAt, goalAt: goalAt,
+    idleMs: idleMs, elapsedMs: elapsedMs, graceAt: graceAt, fadeAt: fadeAt, goalAt: goalAt,
     fadeLevel: fadeLevel, danger: danger,
     fmtClock: fmtClock, wordsText: wordsText, progressText: progressText, hintText: hintText, keptText: keptText, goneText: goneText
   };

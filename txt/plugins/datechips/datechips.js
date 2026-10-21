@@ -18,6 +18,13 @@
  *
  * The parser is our own (≈ 250 lines, no library) and never uses regex
  * lookbehind (iOS < 16.4): the character before a match is checked by hand.
+ * (compromise-dates 3.9 was measured against it and not adopted: it reads
+ * more phrasings — "a week from Friday", "the first Monday of next month",
+ * "on Christmas" — but dated two of them wrongly ("Tuesday the 14th" → a
+ * Saturday, "by Monday" → today), chipped 7 of 29 ordinary sentences ("Wait
+ * a minute", "The fall was steep", "Spring water", "Every day") where this
+ * parser chips none, and would add ~475 KB and ~350 ms of start-up to a
+ * plugin that is on by default. datechips.test.js keeps those sentences.)
  * Skipped: ``` fences, `inline code`, URLs, markdown link targets, @remind
  * tokens, lines over 2000 chars. Viewport-only decorations, rebuilt on doc /
  * viewport changes (and when the day rolls over), with a per-line cache.
@@ -218,7 +225,8 @@
       if (w === 'yesterday') return relChip(s, e, addDays(base, -1));
       return relChip(s, e, addDays(base, 1));
     });
-    each(R_WDAY, function (m, s, e) { return weekdayChip(base, s, e, m[1], m[2]); });
+    // (the optional "." is for "Fri." — a sentence's full stop after "Monday" isn't part of the date)
+    each(R_WDAY, function (m, s, e) { return weekdayChip(base, s, m[2].length >= 6 && m[0].slice(-1) === '.' ? e - 1 : e, m[1], m[2]); });
     each(R_IN, function (m, s, e) { return spanChip(base, now, s, e, m[1], m[2], 1); });
     each(R_AGO, function (m, s, e) { return spanChip(base, now, s, e, m[1], m[2], /ago/i.test(m[3]) ? -1 : 1); });
     each(R_PERIOD, function (m, s, e) {

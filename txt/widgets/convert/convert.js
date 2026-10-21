@@ -34,6 +34,8 @@
   // re-precaches them together with this file, so they can't drift apart.
   var WORKER_URL = Cade.asset('convert-worker.js');
   var DOCS_URL = Cade.asset('convert-docs.js');
+  var PANDOC_URL = Cade.asset('convert-pandoc.js');
+  var PANDOC_WORKER_URL = Cade.asset('convert-pandoc-worker.js');
   var esc = Cade.escapeHtml;
 
   var PANEL_ID = 'convert-panel';
@@ -65,7 +67,12 @@
     pdfjs: { url: PDFJS + 'legacy/build/pdf.min.mjs', size: 481423, wire: 140346, label: 'PDF reader' },
     pdfjsw: { url: PDFJS + 'legacy/build/pdf.worker.min.mjs', size: 1128591, wire: 315147, label: 'PDF reader' },
     xlsx: { url: 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js', size: 951904, wire: 294275, label: 'spreadsheet engine', global: 'XLSX' },
+    // pandoc 3.10 (official wasm build, npm `pandoc-wasm`, GPL-2.0-or-later).
+    // unpkg, not jsDelivr: jsDelivr refuses files over 50 MB.
+    pandoc: { url: 'https://unpkg.com/pandoc-wasm@1.1.0/src/pandoc.wasm', size: 58580800, wire: 15982161, label: 'document engine (pandoc)' },
+    wasishim: { url: JSD + '@bjorn3/browser_wasi_shim@0.4.2/+esm', size: 28952, wire: 8734, label: 'document engine' },
   };
+  var PANDOC_ASSETS = ['pandoc', 'wasishim'];
   var WORKER_ASSETS = ['mediabunny', 'mp3enc', 'aacenc', 'flacenc', 'ffjs', 'ffwasm', 'libheif'];
 
   // ============================================================================
@@ -129,9 +136,13 @@
     xlsx: ['sheet', 'Excel workbook'], xls: ['sheet', 'Excel 97\u20132003 workbook'], ods: ['sheet', 'OpenDocument spreadsheet'],
     csv: ['sheet', 'CSV table'], tsv: ['sheet', 'TSV table'], json: ['sheet', 'JSON data'],
     md: ['md', 'Markdown'], html: ['html', 'HTML page'], txt: ['text', 'Plain text'], xml: ['text', 'XML'],
-    pptx: ['none', 'PowerPoint deck'], odt: ['none', 'OpenDocument text'], odp: ['none', 'OpenDocument slides'],
-    doc: ['none', 'Word 97\u20132003 (.doc)'], ppt: ['none', 'PowerPoint 97\u20132003'], epub: ['none', 'EPUB book'],
-    zip: ['none', 'ZIP archive'], rtf: ['none', 'Rich Text (RTF)'], midi: ['none', 'MIDI'], gz: ['none', 'gzip archive'],
+    pptx: ['pdoc', 'PowerPoint deck'], odt: ['pdoc', 'OpenDocument text'], odp: ['none', 'OpenDocument slides'],
+    doc: ['none', 'Word 97\u20132003 (.doc)'], ppt: ['none', 'PowerPoint 97\u20132003'], epub: ['pdoc', 'EPUB book'],
+    zip: ['none', 'ZIP archive'], rtf: ['pdoc', 'Rich Text (RTF)'], midi: ['none', 'MIDI'], gz: ['none', 'gzip archive'],
+    // Documents only pandoc reads (convert-pandoc.js); 'pdoc' = pandoc-only.
+    rst: ['pdoc', 'reStructuredText'], org: ['pdoc', 'Org mode'], mediawiki: ['pdoc', 'MediaWiki text'], textile: ['pdoc', 'Textile'],
+    asciidoc: ['pdoc', 'AsciiDoc'], latex: ['pdoc', 'LaTeX'], ipynb: ['pdoc', 'Jupyter notebook'], typst: ['pdoc', 'Typst'],
+    docbook: ['pdoc', 'DocBook'], fb2: ['pdoc', 'FictionBook'], opml: ['pdoc', 'OPML outline'],
     '7z': ['none', '7-Zip archive'], rar: ['none', 'RAR archive'], ole: ['none', 'Office 97\u20132003 file'], bin: ['none', 'Unknown file'],
   };
   // extension -> fmt (for hints and "named .jpg" mismatch notes)
@@ -146,6 +157,8 @@
     pdf: 'pdf', docx: 'docx', xlsx: 'xlsx', xlsm: 'xlsx', xls: 'xls', ods: 'ods', csv: 'csv', tsv: 'tsv', tab: 'tsv', json: 'json',
     md: 'md', markdown: 'md', mdown: 'md', mkd: 'md', html: 'html', htm: 'html', xhtml: 'html', txt: 'txt', text: 'txt', log: 'txt',
     xml: 'xml', pptx: 'pptx', odt: 'odt', odp: 'odp', doc: 'doc', ppt: 'ppt', epub: 'epub', zip: 'zip', rtf: 'rtf', mid: 'midi', midi: 'midi',
+    rst: 'rst', rest: 'rst', org: 'org', wiki: 'mediawiki', mediawiki: 'mediawiki', textile: 'textile', adoc: 'asciidoc', asciidoc: 'asciidoc',
+    tex: 'latex', latex: 'latex', ltx: 'latex', ipynb: 'ipynb', typ: 'typst', dbk: 'docbook', docbook: 'docbook', fb2: 'fb2', opml: 'opml',
   };
   function ascii(b, o, n) {
     var s = '';
@@ -208,6 +221,7 @@
     if (/^<svg[\s>]/i.test(t) || (/^<\?xml/i.test(t) && /<svg[\s>]/i.test(s))) return 'svg';
     if (/^(<!doctype html|<html[\s>]|<head[\s>]|<body[\s>])/i.test(t)) return 'html';
     var hint = EXT_FMT[ext];
+    if (hint && FMT[hint] && FMT[hint][0] === 'pdoc' && hint !== 'rtf') return hint;
     if (hint === 'html' || hint === 'md' || hint === 'csv' || hint === 'tsv' || hint === 'json' || hint === 'xml' || hint === 'svg') return hint;
     if (/^<\?xml/i.test(t)) return 'xml';
     if (/^[\[{]/.test(t) && !hint) return 'json';
@@ -414,11 +428,24 @@
     image: [['orig', 'Original size'], ['2048', 'Max 2048 px'], ['1280', 'Max 1280 px'], ['640', 'Max 640 px']],
     pages: [['1x', '72 dpi'], ['2x', '144 dpi'], ['3x', '216 dpi']],
   };
+  // Pandoc writers become targets 'pd:<writer>' once convert-pandoc.js is
+  // loaded (it registers their T entries); `sn.reader` is the pandoc reader.
+  function addPandocTargets(P) {
+    P.WRITERS.forEach(function (w) {
+      T['pd:' + w.key] = { label: w.label, ext: w.ext, mime: w.mime, kind: 'pandoc', text: !w.bin, writer: w.key };
+    });
+  }
+  function isPandocTarget(t) { return /^pd:/.test(t || ''); }
+  function pandocTargets(sn) {
+    var P = window.__cadeConvertPandoc;
+    if (!P || !sn.reader) return [];
+    return P.writersFor(sn.reader).map(function (k) { return 'pd:' + k; }).filter(function (t) { return T[t]; });
+  }
   function targetsFor(sn) {
     var list = (TARGETS_BY_CAT[sn.cat] || []).slice();
     if (sn.fmt === 'gif') list = list.concat(['mp4', 'webm']);
     if (sn.cat === 'sheet') list = list.filter(function (t) { return t !== sn.fmt; });
-    return list;
+    return list.concat(pandocTargets(sn));
   }
   function presetKind(target) {
     var k = T[target] ? T[target].kind : '';
@@ -434,6 +461,7 @@
       d = { heic: 'jpeg', avif: 'jpeg', png: 'jpeg', jpeg: caps && caps.webpEncode ? 'webp' : 'png', webp: 'jpeg', gif: 'mp4' }[f] || 'png';
     } else if (sn.cat === 'video') d = 'mp4';
     else if (sn.cat === 'audio') d = { wav: 'm4a', aiff: 'm4a', flac: 'm4a', caf: 'm4a', au: 'm4a', mp3: 'm4a' }[f] || 'mp3';
+    else if (sn.cat === 'pdoc') d = 'pd:md';
     else d = { pdf: 'txt', docx: 'md', xlsx: 'csv', xls: 'csv', ods: 'csv', csv: 'xlsx', tsv: 'xlsx', json: 'csv', md: 'docx', html: 'md', txt: 'docx', xml: 'docx' }[f];
     return list.indexOf(d) !== -1 ? d : list[0] || '';
   }
@@ -452,6 +480,7 @@
   // -> {engine, label, assets}
   function planFor(it, caps) {
     var sn = it.sn, t = it.target, o = it.opts || {};
+    if (isPandocTarget(t)) return { engine: 'pandoc', label: 'pandoc', assets: PANDOC_ASSETS };
     var media = sn.cat === 'video' || sn.cat === 'audio';
     if (sn.cat === 'image') {
       if (t === 'mp4' || t === 'webm') return { engine: 'ffmpeg', label: 'Compatible \u00b7 ffmpeg', assets: ['ffjs', 'ffwasm'] };
@@ -584,15 +613,26 @@
   function outName(base, target, suffix) {
     return base + (suffix ? ' (' + suffix + ')' : '') + '.' + T[target].ext;
   }
+  // A note title -> an unused room name ("report" -> "report 2"). Room names
+  // are lower case (the core lower-cases them), at most 100 characters.
+  function roomNameFor(base, taken) {
+    // Firebase keys can't hold . # $ [ ] /
+    var b = String(base || '').toLowerCase().replace(/[.#$\[\]\/\\\u0000-\u001f\u007f]+/g, '-').replace(/\s+/g, ' ')
+      .replace(/-{2,}/g, '-').replace(/^[\s\-_]+|[\s\-]+$/g, '').slice(0, 80).replace(/[\s\-]+$/, '') || 'imported';
+    var n = b, i = 2;
+    while ((taken || []).indexOf(n) !== -1 && i < 1000) n = b + ' ' + (i++);
+    return n;
+  }
 
   // ============================================================================
   // Environment
   // ============================================================================
   var S = {
     items: [], seq: 0, jobSeq: 0, running: null, session: '', caps: null, prefs: null,
-    workers: {}, pending: {}, cached: {}, free: null, idleTimer: 0, libs: {}, libP: {}, docsP: null,
-    urls: [],
+    workers: {}, pending: {}, cached: {}, free: null, idleTimer: 0, pdIdleTimer: 0, libs: {}, libP: {}, docsP: null,
+    pandocP: null, pdCrashed: 0, urls: [],
   };
+  var PD_FLAG = 'cade-convert-pandoc-run'; // set while pandoc runs: survives an iOS tab kill
   function detectCaps() {
     var ua = navigator.userAgent || '';
     var ios = /iP(hone|ad|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
@@ -765,6 +805,25 @@
     S.libP.pdfjs.catch(function () { delete S.libP.pdfjs; });
     return S.libP.pdfjs;
   }
+  // The pandoc format table (small, precached): needed to offer pandoc targets
+  // as soon as a file is added; pandoc itself loads only when a job runs.
+  function loadPandocMap() {
+    if (window.__cadeConvertPandoc) return Promise.resolve(window.__cadeConvertPandoc);
+    if (S.pandocP) return S.pandocP;
+    S.pandocP = new Promise(function (resolve) {
+      var s = document.createElement('script');
+      s.src = PANDOC_URL;
+      s.onload = function () {
+        var P = window.__cadeConvertPandoc || null;
+        if (P) addPandocTargets(P);
+        resolve(P);
+      };
+      // Offline before it was ever cached: just no pandoc formats this time.
+      s.onerror = function () { S.pandocP = null; resolve(null); };
+      document.head.appendChild(s);
+    });
+    return S.pandocP;
+  }
   function loadDocs() {
     if (window.__cadeConvertDocs) return Promise.resolve(window.__cadeConvertDocs);
     if (S.docsP) return S.docsP;
@@ -839,7 +898,7 @@
   function getWorker(role) {
     var w = S.workers[role];
     if (w) return w;
-    w = new Worker(WORKER_URL, { type: 'module' });
+    w = new Worker(role === 'pd' ? PANDOC_WORKER_URL : WORKER_URL, { type: 'module' });
     w.onmessage = function (e) { onWorkerMsg(e.data || {}); };
     w.onerror = function (e) {
       try { e.preventDefault(); } catch (x) {}
@@ -865,12 +924,12 @@
     WORKER_ASSETS.forEach(function (k) { o[k] = { url: ASSETS[k].url, size: ASSETS[k].size, label: ASSETS[k].label }; });
     return o;
   }
-  function workerJob(role, msg, it, transfer) {
+  function workerJob(role, msg, it, transfer, onPhase) {
     return new Promise(function (resolve, reject) {
       var id = ++S.jobSeq;
-      S.pending[id] = { role: role, it: it, resolve: resolve, reject: reject };
+      S.pending[id] = { role: role, it: it, resolve: resolve, reject: reject, onPhase: onPhase };
       msg.id = id;
-      msg.assets = assetTable();
+      if (!msg.assets) msg.assets = assetTable();
       if (it) it.job = { role: role, id: id };
       try { getWorker(role).postMessage(msg, transfer || []); } catch (e) { delete S.pending[id]; reject(e); }
     });
@@ -882,6 +941,7 @@
     if (m.type === 'dl') { if (it) setDl(it, m.loaded, m.total, m.label); }
     else if (m.type === 'stage') { if (it) setStage(it, m.text); }
     else if (m.type === 'progress') { if (it) setProgress(it, m.p, m.t); }
+    else if (m.type === 'phase') { if (p.onPhase) p.onPhase(m.phase); }
     else if (m.type === 'done') { delete S.pending[m.id]; p.resolve(m); }
     else if (m.type === 'error') { delete S.pending[m.id]; p.reject(codedError(m.message, m.code)); }
   }
@@ -892,6 +952,13 @@
       if (S.running || Object.keys(S.pending).length) return;
       killRole('main'); killRole('ff');
     }, 20000);
+    // pandoc takes a few seconds to start (58 MB module), so it stays a bit
+    // longer for the next document; on iPhone its memory matters more.
+    clearTimeout(S.pdIdleTimer);
+    S.pdIdleTimer = setTimeout(function () {
+      if (S.running || Object.keys(S.pending).length) return;
+      killRole('pd');
+    }, S.caps && S.caps.ios ? 30000 : 120000);
   }
 
   // ============================================================================
@@ -930,7 +997,8 @@
           return sn;
         }, function () { return sn; });
       }
-      return more.then(function (sn2) {
+      return Promise.all([more, loadPandocMap()]).then(function (r) {
+        var sn2 = refinePandoc(r[0], r[1], f, head);
         var dimsP = Promise.resolve(null);
         if (sn2.cat === 'image') {
           dimsP = (sn2.fmt === 'jpeg' || sn2.fmt === 'heic' || sn2.fmt === 'avif'
@@ -945,6 +1013,24 @@
     }).catch(function (e) {
       applySniff(it, { fmt: 'bin', cat: 'none', label: 'Unreadable file (' + ((e && e.message) || 'error') + ')', ext: extOf(f.name), mismatch: false });
     });
+  }
+  // Which pandoc reader (if any) reads this file; text files that only pandoc
+  // understands (a LaTeX source named .txt...) move to the 'pdoc' category.
+  function refinePandoc(sn, P, f, head) {
+    // (offline before convert-pandoc.js was ever cached: no pandoc formats)
+    if (!P) { if (sn.cat === 'pdoc') sn.cat = 'none'; return sn; }
+    if (sn.cat === 'image' || sn.cat === 'video' || sn.cat === 'audio' || sn.cat === 'pdf') return sn;
+    var text = '';
+    if (sn.cat === 'text' || sn.cat === 'md' || sn.cat === 'pdoc' || sn.fmt === 'json' || sn.fmt === 'xml') {
+      try { text = new TextDecoder('utf-8').decode(head.subarray(0, 2048)); } catch (e) { text = ''; }
+    }
+    var reader = P.detect(sn.fmt, f.name, f.type, text);
+    if (!reader) { if (sn.cat === 'pdoc') sn.cat = 'none'; return sn; }
+    sn.reader = reader;
+    if (P.READERS[reader] && FMT[reader] && FMT[reader][0] === 'pdoc' && sn.fmt !== reader) {
+      sn.fmt = reader; sn.cat = 'pdoc'; sn.label = FMT[reader][1]; sn.mismatch = false;
+    }
+    return sn;
   }
   function applySniff(it, sn) {
     if (!itemById(it.id)) return;
@@ -1093,7 +1179,7 @@
     if (it.state !== 'running') return;
     it.cancelled = true;
     if (it.job) {
-      if (it.job.role === 'ff') failRole('ff', 'Cancelled', 'canceled');
+      if (it.job.role === 'ff' || it.job.role === 'pd') failRole(it.job.role, 'Cancelled', 'canceled');
       else if (S.workers[it.job.role]) S.workers[it.job.role].postMessage({ type: 'cancel', id: it.job.id });
     }
     if (it.abort) { try { it.abort(); } catch (e) {} }
@@ -1151,6 +1237,7 @@
     if (pl.engine === 'pdf') return runPdf(it);
     if (pl.engine === 'sheet') return runSheet(it);
     if (pl.engine === 'doc') return runDoc(it);
+    if (pl.engine === 'pandoc') return runPandoc(it);
     return Promise.reject(codedError('This file type isn\u2019t supported'));
   }
   function mediaOpts(it) {
@@ -1565,6 +1652,194 @@
     });
   }
 
+  // ---- documents via pandoc (convert-pandoc-worker.js) --------------------------
+  var IMPORT_IMG = /^image\/(png|jpeg|gif|webp|bmp|avif)$/;
+  // GHC heap cap: past it pandoc exits with "out of memory" (catchable) rather
+  // than growing until iOS kills the whole tab. -H is the starting heap.
+  function pandocRts() { return S.caps.ios ? ['-H32m', '-M200m'] : ['-H64m', '-M1500m']; }
+  function pandocAssets() {
+    var o = {};
+    PANDOC_ASSETS.forEach(function (k) { o[k] = { url: ASSETS[k].url, size: ASSETS[k].size, wire: ASSETS[k].wire, label: ASSETS[k].label }; });
+    return o;
+  }
+  function b64Bytes(b64) {
+    var bin = atob(b64), u8 = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return u8;
+  }
+  // The note's own images (IndexedDB, keyed by content hash) as pandoc input files.
+  function noteImageFiles(images) {
+    var files = {}, missing = 0;
+    return Promise.all(images.map(function (im) {
+      var p = im.b64 ? Promise.resolve(im.code + ':' + im.b64)
+        : Cade.idbStore && im.hash ? Promise.resolve(Cade.idbStore.get('img:' + im.hash)).catch(function () { return null; }) : Promise.resolve(null);
+      return p.then(function (payload) {
+        var b64 = typeof payload === 'string' ? payload.slice(payload.indexOf(':') + 1) : '';
+        try { if (b64) { files[im.path] = b64Bytes(b64); return; } } catch (e) {}
+        missing++;
+      });
+    })).then(function () { return { files: files, missing: missing }; });
+  }
+  function setPdFlag(on) {
+    try { if (on) Cade.store.set(PD_FLAG, String(Date.now())); else Cade.store.remove(PD_FLAG); } catch (e) {}
+  }
+  function runPandoc(it) {
+    var P = window.__cadeConvertPandoc;
+    if (!P || !it.sn.reader) return Promise.reject(codedError('The document converter didn’t load' + (navigator.onLine === false ? ' (offline)' : '')));
+    var writer = T[it.target].writer, base = it.base || baseOf(it.name), Wr = P.W[writer];
+    var plan;
+    try { plan = P.plan({ reader: it.sn.reader, writer: writer, title: base }); } catch (e) { return Promise.reject(codedError(e.message)); }
+    var notes = [];
+    var inputP;
+    if (it.noteText != null) {
+      var ni = P.noteInput(it.noteText, !!Wr.embeds);
+      inputP = noteImageFiles(ni.images).then(function (r) {
+        if (r.missing) notes.push(r.missing + ' image' + (r.missing === 1 ? ' isn’t' : 's aren’t') + ' on this device yet — left out');
+        return { input: ni.text, files: r.files };
+      });
+    } else if (plan.input) {
+      inputP = it.file.arrayBuffer().then(function (ab) { return { input: new Uint8Array(ab), files: {} }; });
+    } else {
+      inputP = it.file.text().then(function (s) { return { input: s.replace(/^﻿/, ''), files: {} }; });
+    }
+    setStage(it, missingWire(PANDOC_ASSETS) ? 'Downloading pandoc…' : 'Starting pandoc…');
+    // Watchdog: a hung or thrashing pandoc is stopped with an explanation.
+    var arm = function (ms, msg) {
+      clearTimeout(S.pdWatch);
+      S.pdWatch = setTimeout(function () { failRole('pd', msg, 'timeout'); }, ms);
+    };
+    var onPhase = function (ph) {
+      if (ph === 'init') arm(S.caps.ios ? 120000 : 90000, 'pandoc took too long to start — this device may be short of memory. Close other tabs and try again.');
+      else if (ph === 'convert') {
+        setProgress(it, -1);
+        arm(Math.min(900000, 120000 + Math.round(it.size / 1024) * 250), 'pandoc took too long on this document' + (S.caps.ios ? ' — try a smaller file or a desktop browser' : ''));
+      }
+    };
+    var fin = function () { clearTimeout(S.pdWatch); setPdFlag(false); };
+    return inputP.then(function (inp) {
+      if (it.cancelled) throw codedError('Cancelled', 'canceled');
+      var transfer = [];
+      if (inp.input instanceof Uint8Array) transfer.push(inp.input.buffer);
+      Object.keys(inp.files).forEach(function (k) { transfer.push(inp.files[k].buffer); });
+      setPdFlag(true);
+      return workerJob('pd', { type: 'pandoc', assets: pandocAssets(), rts: pandocRts(), plan: plan, input: inp.input, files: inp.files }, it, transfer, onPhase);
+    }).then(function (m) {
+      fin();
+      S.pdCrashed = 0; // it works here after all
+      // A big heap stays allocated in the worker; on iPhone hand it back now.
+      if (m.mem > (S.caps.ios ? 128 : 800) * 1048576) setTimeout(function () { if (!S.running || S.running.engine !== 'pandoc') killRole('pd'); }, 0);
+      var name = outName(base, it.target, sameSuffix(it)), mime = Wr.mime, outs;
+      if (m.bytes) outs = [fileOut(new Blob([m.bytes], { type: mime }), name, mime)];
+      else if (writer === 'md') {
+        var imgs = (m.images || []).map(function (im) {
+          var ok = !!(im.bytes && IMPORT_IMG.test(im.mime));
+          return { n: im.n, alt: im.alt, keep: ok, file: ok ? new File([im.bytes], im.name, { type: im.mime }) : null };
+        });
+        var plain = P.placeImages(m.text, imgs, 'alt').text;
+        var o = fileOut(plain, name, mime + ';charset=utf-8', plain);
+        var keep = imgs.filter(function (x) { return x.keep; });
+        if (keep.length && typeof window.insertImageFile === 'function') {
+          var lines = P.placeImages(m.text, imgs, 'lines');
+          o.importText = lines.text;
+          o.images = keep.filter(function (x) { return lines.kept.indexOf(x.n) !== -1; });
+          notes.push(o.images.length + ' image' + (o.images.length === 1 ? '' : 's') + ': Insert / New note bring them along (the .md file shows [image] markers)');
+        } else if (imgs.length) notes.push(imgs.length + ' image' + (imgs.length === 1 ? '' : 's') + ' shown as [image] markers');
+        outs = [o];
+      } else outs = [fileOut(m.text, name, mime + ';charset=utf-8', m.text)];
+      if (m.warnings && m.warnings.length) notes.push('pandoc: ' + m.warnings[0] + (m.warnings.length > 1 ? ' (+' + (m.warnings.length - 1) + ' more)' : ''));
+      it.note = notes.join(' · ');
+      return outs;
+    }, function (e) {
+      fin();
+      if (e && (e.code === 'memory' || e.code === 'crash' || e.code === 'timeout')) killRole('pd');
+      if (e && e.code === 'memory') {
+        e.message += S.caps.ios ? ' — iPhone gives a tab limited memory. Try a smaller document, or a desktop browser.' : ' — try a smaller document.';
+      }
+      throw e;
+    });
+  }
+  // Insert Markdown that carries images: the text goes in first (images as
+  // ⟦img N tag⟧ lines), then each image goes through the app's own image
+  // pipeline (compressed, stored by content hash, synced) at its placeholder.
+  function importMarkdown(ed, text, images, atEnd) {
+    var tag = Math.random().toString(36).slice(2, 7);
+    text = text.replace(/⟦img (\d+)⟧/g, '⟦img $1 ' + tag + '⟧');
+    if (atEnd) {
+      var len = ed.state.doc.length, pre = len && ed.state.doc.sliceString(len - 1, len) !== '\n' ? '\n' : '';
+      ed.dispatch({ changes: { from: len, insert: pre + text }, selection: { anchor: len + pre.length + text.length }, scrollIntoView: true, userEvent: 'input' });
+    } else {
+      ed.dispatch(ed.state.replaceSelection(text), { userEvent: 'input', scrollIntoView: true });
+    }
+    // Images only change text before the import's end, so its distance from
+    // the document end stays put.
+    var fromEnd = ed.state.doc.length - ed.state.selection.main.head;
+    var chain = Promise.resolve();
+    (images || []).forEach(function (im) {
+      chain = chain.then(function () {
+        var needle = '⟦img ' + im.n + ' ' + tag + '⟧';
+        var doc = ed.state.doc.toString(), at = doc.indexOf(needle);
+        if (at < 0 || typeof window.insertImageFile !== 'function') return;
+        var to = at + needle.length;
+        if (doc.charAt(to) === '\n') to++; // insertImageFile adds its own newline
+        ed.dispatch({ selection: { anchor: at, head: to } });
+        return Promise.resolve(window.insertImageFile(im.file)).catch(noop);
+      });
+    });
+    return chain.then(function () {
+      // Anything still a placeholder (image refused) becomes a marker.
+      var doc = ed.state.doc.toString(), changes = [], re = new RegExp('⟦img (\\d+) ' + tag + '⟧', 'g'), mm;
+      while ((mm = re.exec(doc))) changes.push({ from: mm.index, to: mm.index + mm[0].length, insert: '*[image]*' });
+      if (changes.length) ed.dispatch({ changes: changes });
+      // Leave the cursor after the import, not after the last image.
+      ed.dispatch({ selection: { anchor: Math.max(0, ed.state.doc.length - fromEnd) } });
+      return (images || []).length - changes.length;
+    });
+  }
+  function newNoteFrom(o) {
+    var ra = Cade.roomsApi;
+    if (!ra || typeof ra.ensureRoom !== 'function' || typeof ra.switchRoom !== 'function') { toast('Notes can’t be created from here', 'error', 2200); return; }
+    var name = roomNameFor(baseOf(o.name), ra.list());
+    ra.ensureRoom(name);
+    if (ra.list().indexOf(name) < 0) { toast('Couldn’t create “' + name + '”', 'error', 2600); return; }
+    toast('Opening “' + name + '”…', 'info', 1400);
+    // switchRoom may wait on sync; write only once the editor holds the new note.
+    Promise.resolve(ra.switchRoom(name)).then(function () {
+      if (ra.activeRoom() !== name) throw new Error('“' + name + '” didn’t open — the note exists now, use Insert there');
+      var ed = Cade.editor;
+      if (!ed || ed.state.readOnly) throw new Error('the new note is read-only');
+      return importMarkdown(ed, o.importText || o.text, o.importText ? o.images : [], true).then(function () {
+        toast('Imported into “' + name + '”', 'success', 2200);
+      });
+    }).catch(function (e) { toast('New note failed: ' + ((e && e.message) || e), 'error', 3200); });
+  }
+  // "Convert this note": the current note as a Markdown item. The quick
+  // (marked) converters get it with image / file tokens turned into markers;
+  // pandoc gets the raw text and the note's images (see noteInput).
+  function addCurrentNote() {
+    var ed = Cade.editor;
+    if (!ed) return;
+    var text = ed.state.doc.toString();
+    if (!text.trim()) { toast('This note is empty', 'info', 1600); return; }
+    loadPandocMap().then(function (P) {
+      if (!panel()) return;
+      var ra = Cade.roomsApi, room = ra && typeof ra.activeRoom === 'function' ? ra.activeRoom() : '';
+      var base = baseOf(room || 'note');
+      var quick = P ? P.noteInput(text, false).text : text;
+      var it = newItem(new File([quick], base + '.md', { type: 'text/markdown' }));
+      it.noteText = text;
+      it.base = base;
+      it.sn = { fmt: 'md', cat: 'md', label: 'This note (Markdown)', ext: 'md', mismatch: false, reader: P ? 'note' : '' };
+      it.state = 'ready';
+      var list = targetsFor(it.sn), rem = S.prefs.targets.note;
+      it.target = rem && list.indexOf(rem) !== -1 ? rem : list.indexOf('pd:docx') !== -1 ? 'pd:docx' : defaultTarget(it.sn, S.caps, null);
+      it.preset = defaultPreset(it.sn, it.target);
+      S.items.push(it);
+      renderList();
+      var el = cardEl(it);
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
   // ============================================================================
   // Rendering
   // ============================================================================
@@ -1583,7 +1858,7 @@
   function iconFor(it) {
     if (it.combine) return ICONS.combine;
     var c = it.sn ? it.sn.cat : 'none';
-    if (c === 'docx' || c === 'md' || c === 'html' || c === 'text') return ICONS.doc;
+    if (c === 'docx' || c === 'md' || c === 'html' || c === 'text' || c === 'pdoc') return ICONS.doc;
     return ICONS[c] || ICONS.none;
   }
   function metaLine(it) {
@@ -1606,6 +1881,10 @@
     }
     var miss = missingWire(pl.assets);
     if (miss) w.push('First use downloads ' + fmtBytes(miss) + ' (kept for offline use).');
+    if (pl.engine === 'pandoc') {
+      if (S.pdCrashed) w.push('Last time pandoc closed this tab (most likely out of memory). Close other tabs first, or try a smaller document.');
+      else if (S.caps.ios && it.size > 3 * 1024 * 1024) w.push('Big document for pandoc on iPhone — it may run out of memory.');
+    }
     if (it.sn.fmt === 'heic' && pl.engine === 'image' && !S.caps.heicNative) w.push('HEIC is decoded with a wasm decoder here.');
     return w;
   }
@@ -1649,12 +1928,15 @@
       var isImg = /^image\/(png|jpeg|webp|gif)/.test(o.mime);
       var canInsert = (o.text != null && o.text.length <= 1024 * 1024) || (isImg && typeof window.insertImageFile === 'function');
       var share = S.caps.share && canShareFiles([o.file]);
+      var ra = Cade.roomsApi;
+      var canNote = o.text != null && /^text\/markdown/.test(o.mime) && !!(ra && typeof ra.ensureRoom === 'function' && typeof ra.switchRoom === 'function');
       return '<div class="cv-out">' +
         '<div class="cv-out-name"><span title="' + esc(o.name) + '">' + esc(o.name) + '</span><small>' + fmtBytes(o.size) + (o.saved ? ' \u00b7 saved to disk' : '') + '</small></div>' +
         '<div class="cv-out-acts">' +
           (share ? '<button class="cv-btn' + (S.caps.coarse ? ' primary' : '') + '" data-act="share" data-i="' + i + '">Share</button>' : '') +
           (o.saved ? '' : '<button class="cv-btn' + (S.caps.coarse && share ? '' : ' primary') + '" data-act="download" data-i="' + i + '">Download</button>') +
           (canInsert ? '<button class="cv-btn" data-act="insert" data-i="' + i + '" title="Insert into the document at the cursor">Insert</button>' : '') +
+          (canNote ? '<button class="cv-btn" data-act="newnote" data-i="' + i + '" title="Import as a new note">New note</button>' : '') +
           (o.text != null ? '<button class="cv-btn" data-act="copy" data-i="' + i + '">Copy</button>' : '') +
         '</div></div>';
     }).join('');
@@ -1664,6 +1946,14 @@
   }
   function canShareFiles(files) {
     try { return !!navigator.canShare && navigator.canShare({ files: files }); } catch (e) { return false; }
+  }
+  // Pandoc's targets sit in their own group under the built-in ones.
+  function targetOptions(it, targets) {
+    var opt = function (t) { return '<option value="' + t + '"' + (t === it.target ? ' selected' : '') + '>' + esc(T[t].label) + '</option>'; };
+    var quick = targets.filter(function (t) { return !isPandocTarget(t); }), pd = targets.filter(isPandocTarget);
+    if (!pd.length) return quick.map(opt).join('');
+    if (!quick.length) return pd.map(opt).join('');
+    return quick.map(opt).join('') + '<optgroup label="More formats · pandoc">' + pd.map(opt).join('') + '</optgroup>';
   }
   function cardHtml(it) {
     var pl = it.sn ? planFor(it, S.caps) : { engine: '', label: '', assets: [] };
@@ -1682,7 +1972,7 @@
     if (!it.combine) {
       var targets = targetsFor(it.sn);
       h += '<div class="cv-cfg"><label class="cv-to"><span>to</span><select data-f="target"' + (busy ? ' disabled' : '') + ' aria-label="Convert to">' +
-        targets.map(function (t) { return '<option value="' + t + '"' + (t === it.target ? ' selected' : '') + '>' + esc(T[t].label) + '</option>'; }).join('') +
+        targetOptions(it, targets) +
         '</select></label>' +
         (pl.label ? '<span class="cv-eng" data-eng="' + pl.engine + '" title="Converter">' + esc(pl.label) + '</span>' : '') +
         (optionsHtml(it, pl) ? '<button class="cv-more' + (it.opts.open ? ' on' : '') + '" data-act="opts" aria-expanded="' + (it.opts.open ? 'true' : 'false') + '">Options</button>' : '') +
@@ -1858,6 +2148,10 @@
     var ed = Cade.editor;
     if (!ed) return;
     if (ed.state.readOnly) { toast('Read-only mode \u2014 editing is locked', 'error', 2000); return; }
+    if (o.importText) {
+      importMarkdown(ed, o.importText, o.images, false).then(function () { toast('Inserted ' + o.name, 'success', 1400); });
+      return;
+    }
     if (o.text != null) {
       ed.dispatch(ed.state.replaceSelection(o.text), { userEvent: 'input', scrollIntoView: true });
       toast('Inserted ' + o.name, 'success', 1400);
@@ -1932,7 +2226,7 @@
     var n = cachedBytes();
     if (!window.confirm('Remove the downloaded converters (' + fmtBytes(n) + ') from this device? They download again on next use.')) return;
     if (S.running) { toast('Wait for the current conversion to finish', 'info', 2000); return; }
-    killRole('main'); killRole('ff');
+    killRole('main'); killRole('ff'); killRole('pd');
     window.caches['delete'](CACHE).then(function () {
       S.cached = {};
       renderFoot();
@@ -1997,6 +2291,8 @@
         if (it) shareFiles(it.outputs.map(function (x) { return new File([x.file], x.name, { type: x.mime.split(';')[0] }); }), baseOf(it.name));
         break;
       case 'insert': if (o) insertOut(o); break;
+      case 'newnote': if (o) newNoteFrom(o); break;
+      case 'note': addCurrentNote(); break;
       case 'copy': if (o && o.text != null) copyText(o.text); break;
       default: break;
     }
@@ -2012,7 +2308,7 @@
       it.preset = defaultPreset(it.sn, it.target);
       it.opts.ffArgs = ''; // custom options were written for the old target
       it.touched = true;
-      S.prefs.targets[it.sn.fmt] = it.target;
+      S.prefs.targets[it.noteText != null ? 'note' : it.sn.fmt] = it.target;
       savePrefs();
       if (it.state === 'done' || it.state === 'error' || it.state === 'canceled') { releaseOutputs(it, true); it.state = 'ready'; it.error = ''; it.note = ''; }
       renderCard(it);
@@ -2083,9 +2379,12 @@
     cleanup();
   }
   function cleanup() {
-    killRole('main'); killRole('ff');
+    killRole('main'); killRole('ff'); killRole('pd');
+    clearTimeout(S.pdIdleTimer);
     Object.keys(S.pending).forEach(function (id) { var x = S.pending[id]; delete S.pending[id]; try { x.reject(codedError('Closed', 'canceled')); } catch (e) {} });
     clearTimeout(S.idleTimer);
+    clearTimeout(S.pdWatch);
+    setPdFlag(false); // a pandoc job stopped by closing is no crash
     if (progRaf) { (window.cancelAnimationFrame || clearTimeout)(progRaf); progRaf = 0; }
     S.items.forEach(function (it) { it.cancelled = true; if (it.abort) { try { it.abort(); } catch (e) {} } });
     // Downloads / shares may still be reading the files: release after a grace period.
@@ -2107,17 +2406,26 @@
     }
     loadPrefs();
     S.caps = detectCaps();
+    // A pandoc run that never finished: the tab was killed (iPhone memory).
+    try {
+      var flag = +Cade.store.get(PD_FLAG) || 0;
+      S.pdCrashed = flag && Date.now() - flag < 7 * 86400000 ? flag : 0;
+      if (flag) Cade.store.remove(PD_FLAG);
+    } catch (e) { S.pdCrashed = 0; }
     S.session = 's' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
     var p = Cade.mkPanel(PANEL_ID, '\u21c4 File Converter',
       '<div class="cv-top">' +
         '<div class="cv-drop" role="button" tabindex="0" aria-label="Choose files to convert">' +
           '<span class="cv-drop-ico">' + UPLOAD_SVG + '</span>' +
           '<span class="cv-drop-main"><b>Choose files</b><span class="cv-drop-or"> or drop them here</span></span>' +
-          '<span class="cv-drop-sub">Video \u00b7 audio \u00b7 photos (HEIC too) \u00b7 PDF \u00b7 Word \u00b7 spreadsheets \u00b7 Markdown</span>' +
+          '<span class="cv-drop-sub">Video \u00b7 audio \u00b7 photos (HEIC too) \u00b7 PDF \u00b7 Word \u00b7 spreadsheets \u00b7 Markdown \u00b7 ODT, EPUB, LaTeX, Jupyter &amp; more</span>' +
         '</div>' +
         '<div class="cv-row">' +
           '<span class="cv-privacy">' + LOCK_SVG + 'Files never leave this device</span>' +
-          '<button class="cv-btn cv-paste" data-act="paste" title="Paste files, images or text from the clipboard">Paste</button>' +
+          '<span class="cv-row-btns">' +
+            '<button class="cv-btn cv-note" data-act="note" title="Convert the current note (Markdown) to Word, EPUB, LaTeX\u2026">This note</button>' +
+            '<button class="cv-btn cv-paste" data-act="paste" title="Paste files, images or text from the clipboard">Paste</button>' +
+          '</span>' +
         '</div>' +
         '<input class="cv-file" type="file" multiple hidden>' +
       '</div>' +
@@ -2145,14 +2453,15 @@
     renderList();
     refreshCached();
     refreshSpace();
+    loadPandocMap();
     setTimeout(sweepTmp, 1500); // off the open path
   }
 
   Cade.registerWidget({
     name: 'File Converter',
-    description: 'Convert video, audio, photos (HEIC), PDF, Word & spreadsheets on this device \u2014 files never leave it',
+    description: 'Convert video, audio, photos (HEIC), PDF, Word, spreadsheets & documents (pandoc: ODT, EPUB, LaTeX, Jupyter\u2026) on this device \u2014 files never leave it',
     icon: '<svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><path d=\'M4 8h13l-3.5-3.5\'/><path d=\'M20 16H7l3.5 3.5\'/></svg>',
-    tags: 'convert,converter,file converter,transcode,compress,video,audio,image,photo,heic,heif,jpeg,jpg,png,webp,gif,ico,favicon,svg,mp4,mov,webm,mkv,avi,mp3,m4a,aac,wav,flac,ogg,opus,extract audio,pdf,pdf to text,pdf to png,images to pdf,docx,word,markdown,html,xlsx,excel,csv,tsv,json,ods,ffmpeg,offline,private',
+    tags: 'convert,converter,file converter,transcode,compress,video,audio,image,photo,heic,heif,jpeg,jpg,png,webp,gif,ico,favicon,svg,mp4,mov,webm,mkv,avi,mp3,m4a,aac,wav,flac,ogg,opus,extract audio,pdf,pdf to text,pdf to png,images to pdf,docx,word,markdown,html,xlsx,excel,csv,tsv,json,ods,ffmpeg,offline,private,pandoc,document converter,odt,opendocument,epub,ebook,rtf,latex,tex,rst,restructuredtext,org,org mode,mediawiki,wiki,textile,asciidoc,typst,ipynb,jupyter,notebook,pptx,powerpoint,docbook,export note,note to word,import document',
     open: open,
     // Pure helpers for node checks (unused at runtime).
     _test: {
@@ -2160,6 +2469,7 @@
       fmtBytes: fmtBytes, fmtClock: fmtClock, etaText: etaText, buildFfArgs: buildFfArgs, ffOptions: ffOptions, splitArgs: splitArgs,
       joinArgs: joinArgs, buildIco: buildIco, targetsFor: targetsFor, defaultTarget: defaultTarget, defaultPreset: defaultPreset,
       planFor: planFor, fitSize: fitSize, baseOf: baseOf, outName: outName, ASSETS: ASSETS, T: T,
+      refinePandoc: refinePandoc, addPandocTargets: addPandocTargets, roomNameFor: roomNameFor, targetOptions: targetOptions,
     },
   });
 })();

@@ -1,7 +1,11 @@
 /* Run buttons — a small "Run" chip at the end of the opening line of every
  * runnable ``` block (js / ts / python / json; html gets "Preview"), a spinner
  * + Stop while it runs, and a faint "x" on ```output blocks to remove them.
- * Ctrl/Cmd+Enter inside a runnable block runs it. A block with no language
+ * Ctrl/Cmd+Enter inside a runnable block runs it; so does Shift+Enter
+ * (notebook style) in a block tagged js / ts / python / json. With linked blocks (the notebook, widgets/notebook) a block that
+ * has run also shows its state before the chip: ✓ time (up to date),
+ * ● stale (edited, or something it uses changed), ✕ error. Turning this
+ * plugin off tears the notebook down (its runtimes and outputs). A block with no language
  * gets a dimmer chip too: the runner works out its language only when it is
  * pressed (nothing is scanned ahead of time) — unless the file name written
  * above it (file import) is plainly not runnable, e.g. notes.txt.
@@ -128,11 +132,13 @@
   var ICON_STOP = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="currentColor"/></svg>';
   var ICON_X = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 
-  function Chip(lang, st) {
+  function Chip(lang, st, bd) {
     this.lang = lang;
     this.st = st;
-    this.key = lang + '|' + (st ? st.state + '|' + st.text : '');
+    this.bd = bd;
+    this.key = lang + '|' + (st ? st.state + '|' + st.text : '') + '|' + (bd ? bd.s + '|' + bd.t + '|' + (bd.why || '') : '');
   }
+  var BADGE = { fresh: '✓', stale: '●', error: '✕' };
   Chip.prototype = Object.create(WidgetType.prototype);
   Chip.prototype.constructor = Chip;
   Chip.prototype.eq = function (o) { return o.key === this.key; };
@@ -152,13 +158,23 @@
       wrap.appendChild(b);
       return b;
     }
+    var bd = this.bd;
+    if (bd && !st && BADGE[bd.s]) {
+      var g = document.createElement('span');
+      g.className = 'cm-crun-badge cm-crun-b-' + bd.s;
+      g.title = bd.why || '';
+      g.setAttribute('role', 'status');
+      g.setAttribute('aria-label', (bd.s === 'fresh' ? 'Up to date' : bd.s === 'stale' ? 'Stale' : 'Error') + (bd.why ? ': ' + bd.why : ''));
+      g.textContent = BADGE[bd.s] + (bd.t ? ' ' + bd.t : '');
+      wrap.appendChild(g);
+    }
     if (lang === 'output') {
       button('cm-crun-x', 'clear', ICON_X, 'Remove this output');
     } else if (!st) {
       button('cm-crun-run' + (lang === 'guess' ? ' cm-crun-guess' : ''), 'run', ICON_PLAY + '<span>' + (lang === 'html' ? 'Preview' : 'Run') + '</span>',
         lang === 'html' ? 'Open this block in Live Preview'
           : lang === 'guess' ? 'Run this block — it has no language, so it is detected when you press Run (Ctrl/⌘+Enter)'
-          : 'Run this block (Ctrl/⌘+Enter)');
+          : 'Run this block (Shift+Enter or Ctrl/⌘+Enter)');
     } else {
       var pill = document.createElement('span');
       pill.className = 'cm-crun-state' + (st.state === 'queued' ? ' queued' : '');
@@ -200,7 +216,8 @@
         if (!isOpening(doc, line)) continue;
         if (!lang) { if (!untaggedRunnable(doc, line)) continue; lang = 'guess'; }
         var st = lang !== 'output' && lang !== 'html' && E && E.statusAt ? E.statusAt(line.from) : null;
-        out.push(Decoration.widget({ widget: new Chip(lang, st), side: 1 }).range(line.to));
+        var NB = window.__cadeNotebook, bd = lang !== 'output' && lang !== 'html' && NB && NB.badgeAt ? NB.badgeAt(line.from) : null;
+        out.push(Decoration.widget({ widget: new Chip(lang, st, bd), side: 1 }).range(line.to));
       }
     }
     return out.length ? Decoration.set(out, true) : Decoration.none;
@@ -215,11 +232,19 @@
       this.decorations = build(u.view);
     }
   };
+  // The view is rebuilt on every room switch (a new instance follows at once);
+  // no instance afterwards means the plugin was turned off: the notebook goes too.
+  RunButtons.prototype.destroy = function () {
+    setTimeout(function () {
+      var ed = Cade.editor, NB = window.__cadeNotebook;
+      try { if (NB && NB.teardown && ed && !ed.plugin(plugin)) NB.teardown(); } catch (e) {}
+    }, 0);
+  };
   var plugin = ViewPlugin.fromClass(RunButtons, { decorations: function (p) { return p.decorations; } });
 
   // Ctrl/Cmd+Enter in a runnable block runs it; anywhere else the key keeps
   // its default meaning.
-  function runKey(view) {
+  function runKey(view, tagged) {
     if (view.state.readOnly) return false;
     var sel = view.state.selection.main, doc = view.state.doc;
     try { if (Cade.inCodeFence && !Cade.inCodeFence(sel.head)) return false; } catch (e) {}
@@ -228,11 +253,12 @@
     var info = open.text.slice(3).trim(), lang = langOf(info);
     if (!info && untaggedRunnable(doc, open)) lang = 'guess';      // detected by the runner
     if (lang !== 'js' && lang !== 'ts' && lang !== 'py' && lang !== 'json' && lang !== 'html' && lang !== 'guess') return false;
+    if (tagged && (lang === 'guess' || lang === 'html')) return false; // Shift+Enter: only blocks that say what they are
     var from = open.from;
     withEngine(function (E) { E.runBlockAt(from); });
     return true;
   }
-  var keys = CM.keymap ? CM.keymap.of([{ key: 'Mod-Enter', run: runKey }]) : [];
+  var keys = CM.keymap ? CM.keymap.of([{ key: 'Mod-Enter', run: function (v) { return runKey(v, false); } }, { key: 'Shift-Enter', run: function (v) { return runKey(v, true); } }]) : [];
   if (CM.Prec && CM.keymap) keys = CM.Prec.high(keys); // ahead of the default Mod-Enter (insert blank line)
 
   Cade.registerPlugin({ id: 'coderun-buttons', ext: [plugin, keys] });

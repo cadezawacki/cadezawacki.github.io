@@ -54,6 +54,12 @@ body.dz-on #side-nav { top: calc(var(--menubar-h, 44px) + var(--dz-bh)); }
 @keyframes dz-flash-a { 0%, 24%, 50%, 74% { opacity: 0; } 12%, 37% { opacity: 0.16; } 62%, 87% { opacity: 0.26; } 100% { opacity: 0.3; } }
 @keyframes dz-flash-b { 0%, 24%, 50%, 74% { opacity: 0; } 12%, 37% { opacity: 0.16; } 62%, 87% { opacity: 0.26; } 100% { opacity: 0.3; } }
 
+/* removing words: full alarm — the bar is spent, the banner throbs */
+.dz-banner.dz-removing .dz-drain > i { animation: none; transform: scaleX(0); }
+.dz-banner.dz-removing .dz-b-hint { font-weight: 800; }
+.dz-banner.dz-removing::after { animation: dz-alarm 0.42s ease-in-out infinite alternate; }
+@keyframes dz-alarm { from { opacity: 0; } to { opacity: 0.32; } }
+
 /* how it ended (shown for a moment) */
 .dz-banner.dz-kept, .dz-banner.dz-ended { justify-content: center; }
 .dz-banner.dz-kept .dz-b-l1, .dz-banner.dz-kept .dz-b-dot2, .dz-banner.dz-kept .dz-b-hint, .dz-banner.dz-kept .dz-drain,
@@ -89,6 +95,18 @@ body.dz-on #side-nav { top: calc(var(--menubar-h, 44px) + var(--dz-bh)); }
 .cm-editor.dz-on.dz-run.dz-b .dz-text { animation: dz-fade-b var(--dz-fd, 3s) linear var(--dz-fs, 2s) both; }
 @keyframes dz-fade-a { from { opacity: 1; } to { opacity: 0.15; } }
 @keyframes dz-fade-b { from { opacity: 1; } to { opacity: 0.15; } }
+
+/* removing: what's left holds still (its spans are re-drawn as words go, which
+   would restart a fade), the frame throbs, the next word to go is struck red */
+.cm-editor.dz-on.dz-run.dz-removing .dz-text { animation: none; opacity: 0.4; }
+.cm-editor.dz-on.dz-removing::after { opacity: 1; animation: dz-alarm-glow 0.42s ease-in-out infinite alternate; }
+@keyframes dz-alarm-glow { from { opacity: 0.7; } to { opacity: 1; } }
+.dz-doomed {
+  color: var(--error, #dc2626); background: color-mix(in srgb, var(--error, #dc2626) 22%, transparent);
+  text-decoration: line-through 2px var(--error, #dc2626); border-radius: 2px;
+  animation: dz-doom 0.3s steps(2, end) infinite;
+}
+@keyframes dz-doom { 50% { background: color-mix(in srgb, var(--error, #dc2626) 42%, transparent); } }
 
 /* ---------- "Gone" ---------- */
 .dz-gone {
@@ -207,4 +225,6 @@ body.dz-on #side-nav { top: calc(var(--menubar-h, 44px) + var(--dz-bh)); }
   .dz-banner.dz-run.dz-a .dz-drain > i { animation: dz-drain-a var(--dz-g, 5s) linear both; }
   .dz-banner.dz-run.dz-b .dz-drain > i { animation: dz-drain-b var(--dz-g, 5s) linear both; }
   .dz-gone-card { animation: none; }
+  .dz-banner.dz-removing::after { animation: none; opacity: 0.15; }
+  .cm-editor.dz-on.dz-removing::after, .dz-doomed { animation: none; }
 }

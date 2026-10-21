@@ -8,19 +8,14 @@ var assert = require('assert');
 var fs = require('fs'), path = require('path');
 var T = require('./typewriter.js');
 var passed = 0;
-function test(name, fn) { try { fn(); passed++; } catch (e) { console.error('FAIL ' + name + '\n' + (e.stack || e)); process.exitCode = 1; } }
+var pending = [];
+function test(name, fn) {
+  var fail = function (e) { console.error('FAIL ' + name + '\n' + (e.stack || e)); process.exitCode = 1; };
+  try { var r = fn(); if (r && r.then) pending.push(r.then(function () { passed++; }, fail)); else passed++; } catch (e) { fail(e); }
+}
 
-// The manifest entry this module needs (proposed; the manifest doesn't list it yet).
-var MANIFEST = {
-  id: 'typewriter',
-  type: 'plugin',
-  name: 'Typewriter sounds',
-  description: 'Plays a short key sound as you type in the editor — mechanical keyboard, typewriter (carriage return and bell) or soft laptop taps. Off unless you turn it on; once on, its style, volume and bell options appear in this section',
-  entry: 'widgets/typewriter/typewriter.js',
-  settingKey: 'plugins.typewriter',
-  section: 'Editor',
-  default: false,
-};
+// The manifest entry (txt/manifest.json).
+var MANIFEST = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'manifest.json'), 'utf8')).modules.filter(function (m) { return m.id === 'typewriter'; })[0];
 
 var SR = 48000;
 function peak(x) { var m = 0; for (var i = 0; i < x.length; i++) { var a = Math.abs(x[i]); if (a > m) m = a; } return m; }
@@ -260,15 +255,7 @@ test('credits: a keydown sound covers exactly one transaction, briefly', functio
   assert.ok(c.take(1020) && c.take(1030) && !c.take(1040));
 });
 
-test('manifest entry + plugin registration (no audio until typing)', function () {
-  var man = MANIFEST;
-  assert.strictEqual(man.type, 'plugin');
-  assert.strictEqual(man.settingKey, 'plugins.typewriter');
-  assert.strictEqual(man.section, 'Editor');
-  assert.strictEqual(man.default, false);
-  assert.strictEqual(man.name, 'Typewriter sounds');
-  assert.ok(/Off unless you turn it on/.test(man.description));
-  assert.ok(fs.existsSync(path.join(__dirname, '..', '..', man.entry)), 'entry exists');
+function loadInto(extra) {
   var plug = null, settings = [], touched = [];
   var trap = function (what) { return function () { touched.push(what); }; };
   var fake = {
@@ -276,27 +263,89 @@ test('manifest entry + plugin registration (no audio until typing)', function ()
       baseURL: function () { return './txt/widgets/typewriter/'; },
       loadCSS: trap('loadCSS'),
       registerPlugin: function (o) { plug = o; },
-      registerSetting: function (d) { settings.push(d); if (d.apply) d.apply(d.default); },
+      registerSetting: function (d) { settings.push(d); },
       CM: { ViewPlugin: { define: function (f) { return { __vp: f }; } }, EditorView: {} },
     },
     AudioContext: trap('AudioContext'), webkitAudioContext: trap('webkitAudioContext'),
-    addEventListener: trap('addEventListener'), setTimeout: trap('setTimeout'),
+    addEventListener: trap('addEventListener'),
   };
-  var doc = { addEventListener: trap('document.addEventListener'), createElement: trap('createElement'), head: { appendChild: trap('appendChild') } };
+  for (var k in (extra || {})) fake.Cade[k] = extra[k];
+  var doc = { addEventListener: trap('document.addEventListener'), removeEventListener: function () {}, createElement: trap('createElement'), head: { appendChild: trap('appendChild') } };
   new Function('window', 'module', 'document', fs.readFileSync(path.join(__dirname, 'typewriter.js'), 'utf8'))(fake, undefined, doc);
-  assert.ok(plug, 'registered');
-  assert.strictEqual(plug.id, man.id);
-  assert.ok(plug.ext && plug.ext.__vp, 'lifetime tied to an editor ViewPlugin');
-  assert.deepStrictEqual(touched, [], 'no AudioContext, listeners or DOM until the plugin starts and the user types');
-  assert.deepStrictEqual(settings.map(function (d) { return d.key; }), ['typewriter.profile', 'typewriter.volume', 'typewriter.bell']);
-  settings.forEach(function (d) {
-    assert.strictEqual(d.section, 'Editor');
-    assert.ok(/^Typewriter sounds: /.test(d.label), d.label);
-    assert.ok(['select', 'toggle'].indexOf(d.type) >= 0);
-  });
-  assert.deepStrictEqual(settings[0].options.map(function (o) { return o.value; }), ['mechanical', 'typewriter', 'soft']);
-  assert.deepStrictEqual(settings[1].options.map(function (o) { return o.value; }), ['10', '20', '30', '40', '50', '60', '70', '80', '90', '100']);
-  assert.ok(fake.__cadeTypewriter && typeof fake.__cadeTypewriter.state === 'function', 'debug hook');
-  assert.strictEqual(fake.__cadeTypewriter.state().ctx, false);
+  return { fake: fake, plug: function () { return plug; }, settings: settings, touched: touched };
+}
+// A minimal Cade.prefs over a schema (coercion is the core's job; this just stores).
+function fakePrefs(store) {
+  var subs = [], vals = {};
+  T.SCHEMA.fields.forEach(function (f) { if (f.key) vals[f.key] = f.default; });
+  var h = {
+    get: function (k) { return vals[k]; },
+    all: function () { return JSON.parse(JSON.stringify(vals)); },
+    set: function (k, v) { vals[k] = v; subs.slice().forEach(function (fn) { fn(k, v, h.all()); }); return true; },
+    on: function (fn) { subs.push(fn); return function () { subs = subs.filter(function (x) { return x !== fn; }); }; },
+    subs: function () { return subs.length; },
+  };
+  var fn = function (id) { assert.strictEqual(id, 'typewriter'); return h; };
+  fn.h = h;
+  return fn;
+}
+var fakeView = { dom: { addEventListener: function () {}, removeEventListener: function () {} }, contentDOM: { contains: function () { return false; } }, state: {} };
+
+test('manifest entry + plugin registration (no audio until typing, no Preferences rows)', function () {
+  var man = MANIFEST;
+  assert.ok(man, 'typewriter is in the manifest');
+  assert.strictEqual(man.type, 'plugin');
+  assert.strictEqual(man.settingKey, 'plugins.typewriter');
+  assert.strictEqual(man.section, 'Editor');
+  assert.strictEqual(man.default, false);
+  assert.strictEqual(man.name, 'Typewriter sounds');
+  assert.ok(/Off unless you turn it on/.test(man.description));
+  assert.ok(/Widget preferences/.test(man.description), 'points at Widget preferences');
+  assert.ok(fs.existsSync(path.join(__dirname, '..', '..', man.entry)), 'entry exists');
+  var L = loadInto();
+  assert.ok(L.plug(), 'registered');
+  assert.strictEqual(L.plug().id, man.id);
+  assert.ok(L.plug().ext && L.plug().ext.__vp, 'lifetime tied to an editor ViewPlugin');
+  assert.deepStrictEqual(L.touched, [], 'no AudioContext, listeners or DOM until the plugin starts and the user types');
+  assert.deepStrictEqual(L.settings, [], 'no extra Preferences rows (they moved to Widget preferences)');
+  assert.ok(L.fake.__cadeTypewriter && typeof L.fake.__cadeTypewriter.state === 'function', 'debug hook');
+  var st = L.fake.__cadeTypewriter.state();
+  assert.strictEqual(st.ctx, false);
+  assert.deepStrictEqual([st.profile, st.volume, st.bell], ['typewriter', 50, true], 'schema defaults without Cade.prefs (fallback)');
 });
-console.log((process.exitCode ? 'FAILED, ' : '') + 'typewriter: ' + passed + ' passed');
+
+test('manifest "prefs" equals the module schema', function () {
+  assert.deepStrictEqual(MANIFEST.prefs, JSON.parse(JSON.stringify(T.SCHEMA)));
+  var keys = T.SCHEMA.fields.map(function (f) { return f.key + ':' + f.type; });
+  assert.deepStrictEqual(keys, ['profile:radio', 'volume:slider', 'bell:toggle']);
+  assert.deepStrictEqual(T.SCHEMA.fields[0].options.map(function (o) { return o.value; }), T.PROFILES);
+  var v = T.SCHEMA.fields[1];
+  assert.deepStrictEqual([v.min, v.max, v.default, v.unit], [10, 100, 50, '%']);
+});
+
+test('reads Cade.prefs, follows live changes only while on, migrates old rows', function () {
+  var mem = { 'cade-pref:typewriter.profile': 'soft', 'cade-pref:typewriter.volume': '30', 'cade-pref:typewriter.bell': 'false' };
+  var store = { get: function (k) { return k in mem ? mem[k] : null; }, set: function (k, v) { mem[k] = String(v); }, remove: function (k) { delete mem[k]; } };
+  var prefs = fakePrefs();
+  var L = loadInto({ prefs: prefs, store: store });
+  var tw = L.fake.__cadeTypewriter;
+  assert.deepStrictEqual([tw.state().profile, tw.state().volume, tw.state().bell], ['soft', 30, false], 'old Preferences values moved over');
+  assert.deepStrictEqual(Object.keys(mem), [], 'old keys removed');
+  assert.strictEqual(prefs.h.subs(), 0, 'no listener while the plugin is off');
+  var inst = L.plug().ext.__vp(fakeView);
+  assert.strictEqual(prefs.h.subs(), 1, 'listening while on');
+  prefs.h.set('profile', 'mechanical'); prefs.h.set('volume', 80); prefs.h.set('bell', true);
+  assert.deepStrictEqual([tw.state().profile, tw.state().volume, tw.state().bell], ['mechanical', 80, true], 'live changes apply');
+  prefs.h.set('profile', 'bogus');
+  assert.strictEqual(tw.state().profile, 'typewriter', 'unknown profile falls back');
+  inst.destroy();
+  return new Promise(function (res) { setTimeout(res, 5); }).then(function () {
+    assert.strictEqual(prefs.h.subs(), 0, 'listener removed when turned off');
+    prefs.h.set('volume', 20);
+    var again = L.plug().ext.__vp(fakeView);
+    assert.strictEqual(tw.state().volume, 20, 're-enabled: picks up what changed while off');
+    again.destroy();
+  });
+});
+
+Promise.all(pending).then(function () { console.log((process.exitCode ? 'FAILED, ' : '') + 'typewriter: ' + passed + ' passed'); });
