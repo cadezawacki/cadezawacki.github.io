@@ -15,7 +15,7 @@
 //     Code Runner's Python 'cade-py-<version>'): bypass, so nothing is stored twice
 // ============================================
 
-const CACHE_VERSION = 201;
+const CACHE_VERSION = 202;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.

@@ -16090,10 +16090,15 @@ function _roomDropdownLabel(name) {
 // screens. Pure alternative view — the tab bar keeps working. Renders from
 // the same data on every renderRoomTabs pass; hidden below 900px via CSS.
 let _sidebarOn = store.get('cade-sidebar') === '1';
-// Per-workspace fold state (round-4 item 2), device-local.
+// Workspace sections start collapsed whenever the app or the sidebar opens;
+// `_snExpanded` holds the ones opened since, for this session only. The
+// events section keeps its own device-local fold state in `_snCollapsed`.
+let _snExpanded = new Set();
 let _snCollapsed = new Set();
-try { _snCollapsed = new Set(JSON.parse(store.get('cade-sidebar-collapsed')) || []); } catch {}
+try { _snCollapsed = new Set((JSON.parse(store.get('cade-sidebar-collapsed')) || []).filter(id => id === '__events')); } catch {}
 function _snSaveCollapsed() { store.set('cade-sidebar-collapsed', JSON.stringify([..._snCollapsed])); }
+function _snSectionIds() { return [...workspaces.map(w => w.id), WS_UNLABELED]; }
+function _snAnyExpanded() { return _snSectionIds().some(id => _snExpanded.has(id)); }
 // Adjustable width (round-4 item 10), device-local.
 (function () {
   const w = parseInt(store.get('cade-sidebar-w'), 10);
@@ -16113,6 +16118,7 @@ window.toggleSidebar = function() {
   closeAllMenus();
   _sidebarOn = !_sidebarOn;
   store.set('cade-sidebar', _sidebarOn ? '1' : '0');
+  if (_sidebarOn) _snExpanded.clear();
   renderSidebar();
   const lbl = document.getElementById('sidebar-label');
   if (lbl) lbl.textContent = _sidebarOn ? 'Sidebar: On' : 'Sidebar: Off';
@@ -16143,10 +16149,20 @@ window.sidebarPickRoom = function(wsId, name) {
 };
 window.sidebarToggleWs = function(evt, wsId) {
   if (evt) { evt.preventDefault(); evt.stopPropagation(); }
-  if (_snCollapsed.has(wsId)) _snCollapsed.delete(wsId);
-  else _snCollapsed.add(wsId);
-  _snSaveCollapsed();
+  if (wsId === '__events') {
+    if (_snCollapsed.has(wsId)) _snCollapsed.delete(wsId);
+    else _snCollapsed.add(wsId);
+    _snSaveCollapsed();
+  } else if (_snExpanded.has(wsId)) _snExpanded.delete(wsId);
+  else _snExpanded.add(wsId);
   renderSidebar();
+};
+// The "All Rooms" header switches to All Rooms and folds every workspace
+// section together: collapse all if any is open, otherwise expand all.
+window.sidebarToggleAll = function() {
+  if (_snAnyExpanded()) _snExpanded.clear();
+  else _snSectionIds().forEach(id => _snExpanded.add(id));
+  sidebarPickWs(WS_ALL); // re-renders the sidebar via renderRoomTabs
 };
 function renderSidebar() {
   document.body.classList.toggle('sidebar-on', _sidebarOn);
@@ -16164,7 +16180,7 @@ function renderSidebar() {
   // so the tree walk can skip a folded workspace's descendants.
   const wsSection = (label, colorClass, wsId, roomList, depth, title) => {
     const escId = escapeHtml(String(wsId).replace(/'/g, "\\'"));
-    const folded = _snCollapsed.has(wsId);
+    const folded = !_snExpanded.has(wsId);
     const nested = depth != null;
     wsRows.push(
       `<div class="sn-ws ${colorClass}${nested && depth ? ' sn-nested' : ''}${activeWorkspace === wsId ? ' active' : ''}"` +
@@ -16211,7 +16227,8 @@ function renderSidebar() {
   const unlabeled = orderRooms(live.filter(r => roomIsUnlabeled(r)));
   if (unlabeled.length) wsSection('Unlabeled', 'ws-color-neutral', WS_UNLABELED, unlabeled);
   el.innerHTML = `<div class="sn-resize" title="Drag to resize"></div><div class="sn-peek">›</div><div class="sn-scroll">` +
-    `<div class="sn-head" onclick="sidebarPickWs('${WS_ALL}')">All Rooms<span class="sn-count">${live.length}</span>` +
+    `<div class="sn-head" onclick="sidebarToggleAll()" title="${_snAnyExpanded() ? 'Collapse all workspaces' : 'Expand all workspaces'}">` +
+    `<span class="sn-fold">${_snAnyExpanded() ? '▾' : '▸'}</span>All Rooms<span class="sn-count">${live.length}</span>` +
     `<button class="sn-pin" title="Pin the sidebar open" onclick="event.stopPropagation(); sidebarPinOpen()">📌</button></div>` + wsRows.join('') +
     `<button class="sn-add" onclick="addRoomPrompt()">＋ New room</button>` + _snEventsHtml() + `</div>`;
   _snAttachResize(el);
