@@ -11792,13 +11792,11 @@ function _clipFlush() {
   const inbox = _clipInboxRoom();
   const state = _clipInboxState();
   if (state === 'away') {
-    // Never drag someone out of the room they're in. Say it once per new count.
+    // Never drag someone out of the room they're in, and don't announce it
+    // either: the clips just wait and are filed when the inbox is opened.
     _clipWaitSince = 0;
     _clipsWaiting = held;
-    if (held !== _clipToldWaiting) {
-      _clipToldWaiting = held;
-      showToast(held + ' clip' + (held === 1 ? '' : 's') + ' waiting — open "' + inbox + '" to file ' + (held === 1 ? 'it' : 'them'), 'info', 4000);
-    }
+    _clipToldWaiting = held;
     return;
   }
   if (state === 'commit') {
