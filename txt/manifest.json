@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.23-1",
+  "version": "2026.10.22-10",
   "modules": [
     {
       "id": "crawler",
@@ -1578,6 +1578,122 @@
       ]
     },
     {
+      "id": "mirror",
+      "type": "widget",
+      "name": "Folder Mirror",
+      "description": "Keep rooms in two-way sync with a folder of .md files on your computer — for Obsidian, VS Code, Hazel and scripts (desktop Chrome / Edge; phones get the changes through Sync)",
+      "icon": "🗂",
+      "tags": "folder,mirror,sync,files,markdown,md,txt,obsidian,vs code,hazel,scripts,export,backup,local files,file system,hub,two-way,desktop",
+      "entry": "widgets/mirror/mirror.js",
+      "css": "widgets/mirror/mirror.css",
+      "precache": [
+        "widgets/mirror/mirror-core.js",
+        "widgets/mirror/mirror-engine.js",
+        "widgets/merge/merge-core.js",
+        "widgets/merge/merge-ui.js"
+      ],
+      "prefs": {
+        "title": "Folder Mirror",
+        "fields": [
+          {
+            "key": "ext",
+            "type": "radio",
+            "label": "File type for new files",
+            "default": ".md",
+            "options": [
+              {
+                "value": ".md",
+                "label": ".md (Markdown)"
+              },
+              {
+                "value": ".txt",
+                "label": ".txt (plain text)"
+              }
+            ],
+            "hint": "Files already in the folder keep their extension"
+          },
+          {
+            "key": "sub",
+            "type": "toggle",
+            "label": "A subfolder per workspace",
+            "default": false,
+            "hint": "A room in a workspace goes into a folder named after it (nested workspaces nest); the rest stay at the top. Turning this on or off moves the files"
+          },
+          {
+            "key": "poll",
+            "type": "slider",
+            "label": "Look for changed files every",
+            "default": 3,
+            "min": 1,
+            "max": 30,
+            "step": 1,
+            "unit": "s",
+            "hint": "Only while the page is visible, and less often when nothing changes. Chrome 129+ is told about changes right away and only checks now and then"
+          },
+          {
+            "key": "newFiles",
+            "type": "radio",
+            "label": "New files in the folder",
+            "default": "ask",
+            "options": [
+              {
+                "value": "ask",
+                "label": "Ask me — one tap in the panel"
+              },
+              {
+                "value": "auto",
+                "label": "Import them as rooms automatically"
+              },
+              {
+                "value": "ignore",
+                "label": "Ignore them"
+              }
+            ]
+          },
+          {
+            "key": "onDelete",
+            "type": "radio",
+            "label": "When a mirrored room is deleted",
+            "default": "trash",
+            "options": [
+              {
+                "value": "trash",
+                "label": "Move its file to .trash in the folder"
+              },
+              {
+                "value": "leave",
+                "label": "Leave the file where it is"
+              }
+            ],
+            "hint": "A deleted file never deletes a room"
+          },
+          {
+            "key": "archived",
+            "type": "toggle",
+            "label": "Include archived rooms",
+            "default": false
+          },
+          {
+            "key": "front",
+            "type": "radio",
+            "label": "Front matter in files",
+            "default": "none",
+            "options": [
+              {
+                "value": "none",
+                "label": "None — files stay plain"
+              },
+              {
+                "value": "title",
+                "label": "Title and updated date"
+              }
+            ],
+            "hint": "A small --- block at the top of each file for Obsidian and static-site tools. It never ends up in the room"
+          }
+        ]
+      }
+    },
+    {
       "id": "beam-recv",
       "type": "plugin",
       "name": "Receive files from my other devices",
@@ -1591,6 +1707,22 @@
       "settingKey": "plugins.beam-recv",
       "section": "Devices",
       "default": true
+    },
+    {
+      "id": "mirror-run",
+      "type": "plugin",
+      "name": "Keep Folder Mirror running",
+      "description": "Turned on by Folder Mirror’s setup (and off by Stop mirroring): keeps the chosen rooms and the folder on this computer in step while the widget is closed — desktop Chrome / Edge only, only while the page is visible. Does nothing on phones",
+      "entry": "widgets/mirror/mirror-run.js",
+      "precache": [
+        "widgets/mirror/mirror-core.js",
+        "widgets/mirror/mirror-engine.js",
+        "widgets/mirror/mirror.css",
+        "widgets/merge/merge-core.js"
+      ],
+      "settingKey": "plugins.mirror-run",
+      "section": "Devices",
+      "default": false
     },
     {
       "id": "ekg",

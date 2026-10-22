@@ -1,0 +1,161 @@
+/* Folder Mirror — widget panel, setup wizard, status page, and the plugin's
+   "Reconnect Folder Mirror" card. Theme variables only. */
+#mirror-panel {
+  top: 56px; right: 12px; width: 440px; max-width: calc(100vw - 24px);
+  max-height: min(760px, calc(100vh - 80px)); max-height: min(760px, calc(100dvh - 80px)); min-width: 280px;
+  overflow: hidden;
+}
+#mirror-panel .cade-panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+#mirror-panel .mir-gear {
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0.6; padding: 2px 5px;
+  border-radius: 4px; line-height: 1; color: var(--text-muted);
+}
+#mirror-panel .mir-gear:hover, #mirror-panel .mir-gear:focus-visible { opacity: 1; background: var(--surface-hover, rgba(127,127,127,0.15)); }
+
+.mir {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  display: flex; flex-direction: column; font-size: var(--text-sm, 0.875rem); line-height: 1.45; color: var(--text);
+}
+.mir p { margin: 0 0 10px; }
+.mir code { font-family: var(--font-mono, monospace); font-size: 0.92em; background: var(--surface-2, rgba(127,127,127,0.1)); padding: 0 4px; border-radius: 4px; overflow-wrap: anywhere; }
+.mir-muted { color: var(--text-muted); }
+.mir-hint { font-size: var(--text-xs, 0.75rem); color: var(--text-muted); margin: 6px 0 10px; }
+.mir-small { font-size: var(--text-xs, 0.75rem); overflow-wrap: anywhere; }
+.mir-load { padding: 24px 14px; color: var(--text-muted); text-align: center; }
+.mir-err { margin: 10px 14px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--error, #dc2626); color: var(--error, #dc2626); background: color-mix(in srgb, var(--error, #dc2626) 8%, transparent); }
+.mir-empty { padding: 6px 8px; font-size: var(--text-xs, 0.75rem); }
+
+/* ---- buttons ---- */
+.mir-btn {
+  min-height: 34px; padding: 6px 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 8px; font: inherit; font-size: var(--text-sm, 0.875rem); cursor: pointer; line-height: 1.2;
+}
+.mir-btn:hover:not(:disabled) { border-color: var(--accent); }
+.mir-btn:focus-visible, .mir-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mir-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface, #fff); font-weight: 600; }
+.mir-btn.primary:hover:not(:disabled) { filter: brightness(1.06); }
+.mir-btn.danger { border-color: var(--error, #dc2626); color: var(--error, #dc2626); }
+.mir-btn:disabled { opacity: 0.5; cursor: default; }
+.mir-link { border: 0; background: none; color: var(--accent); font: inherit; font-size: var(--text-xs, 0.75rem); cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+.mir-link:hover { text-decoration: underline; }
+.mir-link.danger { color: var(--error, #dc2626); }
+.mir-sp { flex: 1; }
+
+/* ---- unsupported (phones, Safari, Firefox) ---- */
+.mir-unsup { padding: 16px 16px 18px; }
+.mir-unsup h3 { margin: 4px 0 10px; font-size: 1.05rem; }
+.mir-big { font-size: 34px; line-height: 1; }
+.mir-steps { margin: 6px 0 0; padding-left: 20px; }
+.mir-steps li { margin: 0 0 8px; color: var(--text); }
+
+/* ---- wizard ---- */
+.mir-wiz { padding: 12px 14px 4px; flex: 1; }
+.mir-stepbar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.mir-dot { width: 22px; height: 4px; border-radius: 999px; background: var(--border); }
+.mir-dot.done { background: color-mix(in srgb, var(--accent) 55%, transparent); }
+.mir-dot.cur { background: var(--accent); }
+.mir-stepn { margin-left: auto; font-size: var(--text-xs, 0.75rem); color: var(--text-muted); }
+.mir-h { margin: 6px 0 10px; font-size: 1rem; }
+.mir-lead { color: var(--text); }
+.mir-pick { margin: 2px 0 10px; }
+.mir-folder { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2, transparent); margin: 0 0 10px; overflow-wrap: anywhere; }
+.mir-nav {
+  position: sticky; bottom: 0; display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  border-top: 1px solid var(--border); background: var(--surface); margin-top: auto;
+}
+.mir-radio, .mir-check { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.mir-radio:hover, .mir-check:hover { background: var(--surface-hover, rgba(127,127,127,0.08)); }
+.mir-radio input, .mir-check input { margin: 3px 0 0; flex: none; accent-color: var(--accent); width: 16px; height: 16px; }
+.mir-radio.inline { display: inline-flex; margin-right: 6px; }
+.mir-indent { margin-left: 26px; }
+.mir-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 2px; margin: 2px 0 6px; }
+.mir-list .mir-check { padding-top: 4px; padding-bottom: 4px; }
+.mir-qrow { display: flex; align-items: center; gap: 4px; margin: 2px 0 6px; }
+.mir-q {
+  flex: 1; min-width: 0; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text);
+  font: inherit; font-size: var(--text-sm, 0.875rem);
+}
+.mir-q:focus { outline: none; border-color: var(--accent); }
+.mir-tag { font-size: 10px; color: var(--text-faint); border: 1px solid var(--border); border-radius: 999px; padding: 0 5px; margin-left: 4px; }
+.mir-arch { margin-top: 6px; }
+.mir-count { font-size: var(--text-xs, 0.75rem); color: var(--text-muted); padding: 4px 8px 8px; }
+.mir-field { margin-bottom: 8px; }
+.mir-label { font-size: var(--text-xs, 0.75rem); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); margin: 8px 0 4px; }
+.mir-ex { border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; margin-bottom: 8px; }
+.mir-exrow { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; min-width: 0; flex-wrap: wrap; }
+.mir-exr { overflow-wrap: anywhere; }
+.mir-arrow { color: var(--text-faint); }
+.mir-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.mir-chip { font-size: var(--text-xs, 0.75rem); padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-muted); }
+.mir-chip.ok { color: var(--success, #16a34a); border-color: currentColor; }
+.mir-chip.warn { color: var(--warning, #d97706); border-color: currentColor; }
+.mir-sec { font-size: var(--text-xs, 0.75rem); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); margin: 12px 0 4px; }
+.mir-rows { display: flex; flex-direction: column; gap: 2px; }
+.mir-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-top: 1px solid var(--border); }
+.mir-row:first-child { border-top: 0; }
+.mir-rowt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mir-sel { flex: none; max-width: 52%; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: var(--text-xs, 0.75rem); }
+.mir-det { margin: 10px 0 4px; }
+.mir-det summary { cursor: pointer; color: var(--text-muted); font-size: var(--text-xs, 0.75rem); padding: 4px 0; }
+.mir-det .mir-rows { max-height: 180px; overflow-y: auto; padding-left: 12px; }
+
+/* ---- status ---- */
+.mir-status { padding: 12px 14px 12px; display: flex; flex-direction: column; }
+.mir-top { display: flex; align-items: center; gap: 8px; }
+.mir-fold { flex: 1; min-width: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.mir-pill {
+  flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs, 0.75rem); padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--text-muted); white-space: nowrap;
+}
+.mir-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.8; }
+.mir-pill.ok { color: var(--success, #16a34a); border-color: currentColor; }
+.mir-pill.warn { color: var(--warning, #d97706); border-color: currentColor; }
+.mir-pill.bad { color: var(--error, #dc2626); border-color: currentColor; }
+.mir-sub { color: var(--text-muted); font-size: var(--text-xs, 0.75rem); margin: 4px 0 8px; }
+.mir-note { font-size: var(--text-xs, 0.75rem); color: var(--text); background: var(--surface-2, rgba(127,127,127,0.08)); border-radius: 8px; padding: 6px 9px; margin-bottom: 8px; }
+.mir-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.mir-att { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.mir-card { border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; background: var(--surface-2, transparent); }
+.mir-card.warn { border-color: color-mix(in srgb, var(--warning, #d97706) 55%, var(--border)); }
+.mir-cardt { font-weight: 600; margin-bottom: 3px; overflow-wrap: anywhere; }
+.mir-cardb { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mir-log { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+.mir-log li { display: flex; gap: 8px; align-items: baseline; padding: 4px 8px; border-top: 1px solid var(--border); font-size: var(--text-xs, 0.75rem); }
+.mir-log li:first-child { border-top: 0; }
+.mir-lt { flex: none; color: var(--text-faint); font-variant-numeric: tabular-nums; min-width: 52px; }
+.mir-li { flex: none; width: 14px; text-align: center; color: var(--text-muted); }
+.mir-lm { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mir-log .k-wrote .mir-li, .mir-log .k-read .mir-li, .mir-log .k-import .mir-li { color: var(--accent); }
+.mir-log .k-merged .mir-li { color: var(--success, #16a34a); }
+.mir-log .k-conflict .mir-li, .mir-log .k-missing .mir-li, .mir-log .k-wait .mir-li { color: var(--warning, #d97706); }
+.mir-log .k-error .mir-li, .mir-log .k-error .mir-lm { color: var(--error, #dc2626); }
+.mir-foot { margin-top: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.mir-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid var(--error, #dc2626); border-radius: 8px; width: 100%; box-sizing: border-box; }
+.mir-confirm span { flex: 1 1 100%; }
+
+/* ---- the plugin's reconnect card ---- */
+.mirror-chip {
+  position: fixed; left: 12px; bottom: calc(14px + var(--footer-h, 28px)); z-index: 5200; max-width: min(440px, calc(100vw - 24px));
+  display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 10px;
+  background: var(--surface); color: var(--text); border: 1px solid color-mix(in srgb, var(--warning, #d97706) 60%, var(--border));
+  box-shadow: var(--shadow-lg); font-size: var(--text-sm, 0.875rem);
+}
+.mirror-chip-ic { flex: none; }
+.mirror-chip-t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mirror-chip-go { flex: none; min-height: 32px; padding: 5px 12px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--surface, #fff); font: inherit; font-weight: 600; cursor: pointer; }
+.mirror-chip-x { flex: none; width: 32px; height: 32px; border: 0; background: none; color: var(--text-muted); font-size: 18px; border-radius: 8px; cursor: pointer; }
+.mirror-chip-x:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); color: var(--text); }
+
+/* ---- phones ---- */
+@media (max-width: 600px) {
+  #mirror-panel { left: 6px !important; right: 6px; width: auto; max-width: none; min-width: 0; top: 48px; }
+  .mir-sel { max-width: 100%; }
+  .mir-row { flex-wrap: wrap; }
+}
+@media (pointer: coarse) {
+  #mirror-panel .mir-gear { min-width: 40px; min-height: 40px; }
+  .mir-btn { min-height: 40px; padding: 8px 14px; }
+  .mir-link { padding: 10px 8px; }
+  .mir-q, .mir-sel { font-size: 16px; }
+  .mir-radio, .mir-check { padding: 9px 8px; }
+}
