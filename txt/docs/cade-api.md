@@ -370,3 +370,12 @@ opening them.
 `fetch(url, { cache: 'no-store' })` bypasses the service worker entirely (nothing is
 stored in the versioned `cade-vN` cache). Use it for live data and for assets a module
 keeps in its own Cache Storage bucket (e.g. `cade-convert-v1`, `cade-tts-hd-v1`).
+
+## Cade.ai — your own model, from any device (opt-in)
+
+Registered by the AI widget (`txt/widgets/ai/`) once it has loaded. Nothing answers until the user has set AI up: either "This computer" (a local Ollama / LM Studio / OpenAI-compatible server) or "Another of my devices" (a device sharing its model through Sync, end-to-end encrypted with the sync key).
+
+- `Cade.ai.status()` → Promise `{ available, via: 'local' | 'host' | null, host, model, reason, message, setup }`
+- `Cade.ai.chat(messages, { model, temperature, maxTokens, signal, onToken(delta, full) })` → Promise of the full answer. `messages` may be a string; the AI preferences' system prompt is added when none is given. Rejects with an Error carrying `.code`, `.info { title, steps }` and `.partial` (text received so far).
+- `Cade.ai.models()` → Promise of the model names of whatever would answer.
+- `Cade.ai.open()` opens the AI panel.
