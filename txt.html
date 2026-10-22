@@ -22245,7 +22245,10 @@ window.takeSnapshot = function(silent) {
   // Re-sweep now that the fresh snapshot is newest: pruneSnapsByAge always keeps
   // index 0, so before the unshift the formerly-newest (possibly already past the
   // cutoff) was force-kept. With the new entry at index 0 it can now expire.
-  { const pruned = pruneSnapsByAge(snaps); snaps.length = 0; snaps.push(...pruned); }
+  // (pruneSnapsByAge hands back the SAME array when nothing expires — with no
+  // age limit, always — so only copy over when it made a new one; emptying
+  // `snaps` first would empty `pruned` too and silently save no snapshots.)
+  { const pruned = pruneSnapsByAge(snaps); if (pruned !== snaps) { snaps.length = 0; snaps.push(...pruned); } }
   // Byte-cap: drop oldest until under the total budget (always keep newest).
   let total = snaps.reduce((n, s) => n + (s.c ? s.c.length : 0), 0);
   while (snaps.length > 1 && total > SNAP_MAX_TOTAL) {
@@ -22274,11 +22277,17 @@ function snapRelTime(ts) {
 function renderSnapshotsList() {
   const list = document.getElementById('snapshots-list');
   const snaps = loadSnaps();
+  // A sync-only room keeps no copy on this device, its snapshots included:
+  // they live in memory until the page reloads. Say so rather than surprise.
+  const room = syncState.roomName || activeRoom || '';
+  const memNote = room && roomIsSyncOnly(room)
+    ? '<div style="color:var(--text-faint);font-size:var(--text-xs);padding:4px 0 8px;">☁ This room is sync-only, so its snapshots are kept only until you reload (nothing is stored on this device). Turn on “Keep a local copy” in the room’s menu to keep them.</div>'
+    : '';
   if (!snaps.length) {
-    list.innerHTML = '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">No snapshots yet for this document. They appear automatically as you work, or use “Snapshot Now”.</div>';
+    list.innerHTML = memNote + '<div style="color:var(--text-faint);font-size:var(--text-sm);padding:8px 0;">No snapshots yet for this document. They appear automatically as you work, or use “Snapshot Now”.</div>';
     return;
   }
-  list.innerHTML = snaps.map((s, i) => {
+  list.innerHTML = memNote + snaps.map((s, i) => {
     const firstLine = (s.c.split('\n').find(l => l.trim()) || '').slice(0, 60);
     return `<div class="snap-row">
       <span class="snap-time" title="${new Date(s.t).toLocaleString()}">${snapRelTime(s.t)}</span>
