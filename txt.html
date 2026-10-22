@@ -9882,12 +9882,28 @@ menuPairs.forEach(([btnId, menuId]) => {
     const wasOpen = menu.classList.contains('open');
     closeAllMenus();
     if (!wasOpen) {
-      menu.scrollTop = 0; // always reopen scrolled to the top
       menu.classList.add('open');
+      openAtTop(menu); // always reopen scrolled to the top
       btn.setAttribute('aria-expanded', 'true');
     }
   });
 });
+
+// A dropdown is display:none while closed, and setting scrollTop on an element
+// that isn't rendered does nothing — browsers bring back the old offset when it
+// shows again, which is why menus reopened scrolled part-way down. Reset it
+// (and any scrolling list inside) once it's visible, and again next frame in
+// case iOS momentum scrolling was still settling.
+function openAtTop(el) {
+  if (!el) return;
+  const reset = () => {
+    el.scrollTop = 0;
+    el.querySelectorAll('*').forEach(n => { if (n.scrollTop) n.scrollTop = 0; });
+  };
+  reset();
+  requestAnimationFrame(reset);
+}
+window.openAtTop = openAtTop;
 
 function closeAllMenus() {
   menuPairs.forEach(([btnId, menuId]) => {
@@ -16463,7 +16479,7 @@ window.breadcrumbWsClick = function(evt) {
   if (evt) evt.stopPropagation();
   // Open the workspace dropdown so the user can switch context.
   const dd = document.getElementById('ws-dropdown');
-  if (dd) { renderWorkspaceDropdown(); dd.classList.add('open'); }
+  if (dd) { renderWorkspaceDropdown(); dd.classList.add('open'); openAtTop(dd); }
 };
 window.breadcrumbRoomClick = function(evt) {
   if (evt) evt.stopPropagation();
@@ -20073,6 +20089,7 @@ window.toggleWorkspaceDropdown = function(evt) {
   if (!isOpen) {
     renderWorkspaceDropdown();
     dd.classList.add('open');
+    openAtTop(dd);
   }
   if (evt) evt.stopPropagation();
 };
@@ -20392,6 +20409,7 @@ window.showRoomActionMenu = function(evt, roomName) {
   `;
   menu.classList.add('open');
   positionActionMenu(menu, evt);
+  openAtTop(menu);
 };
 
 window.showRoomTabContextMenu = function(evt, roomName) {
@@ -20419,6 +20437,7 @@ window.showRoomTabContextMenu = function(evt, roomName) {
   `;
   menu.classList.add('open');
   positionActionMenu(menu, evt);
+  openAtTop(menu);
 };
 
 function positionActionMenu(menu, evt) {
