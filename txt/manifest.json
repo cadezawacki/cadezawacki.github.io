@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.23-1",
+  "version": "2026.10.22-11",
   "modules": [
     {
       "id": "crawler",
@@ -1578,6 +1578,272 @@
       ]
     },
     {
+      "id": "mirror",
+      "type": "widget",
+      "name": "Folder Mirror",
+      "description": "Keep rooms in two-way sync with a folder of .md files on your computer — for Obsidian, VS Code, Hazel and scripts (desktop Chrome / Edge; phones get the changes through Sync)",
+      "icon": "🗂",
+      "tags": "folder,mirror,sync,files,markdown,md,txt,obsidian,vs code,hazel,scripts,export,backup,local files,file system,hub,two-way,desktop",
+      "entry": "widgets/mirror/mirror.js",
+      "css": "widgets/mirror/mirror.css",
+      "precache": [
+        "widgets/mirror/mirror-core.js",
+        "widgets/mirror/mirror-engine.js",
+        "widgets/merge/merge-core.js",
+        "widgets/merge/merge-ui.js"
+      ],
+      "prefs": {
+        "title": "Folder Mirror",
+        "fields": [
+          {
+            "key": "ext",
+            "type": "radio",
+            "label": "File type for new files",
+            "default": ".md",
+            "options": [
+              {
+                "value": ".md",
+                "label": ".md (Markdown)"
+              },
+              {
+                "value": ".txt",
+                "label": ".txt (plain text)"
+              }
+            ],
+            "hint": "Files already in the folder keep their extension"
+          },
+          {
+            "key": "sub",
+            "type": "toggle",
+            "label": "A subfolder per workspace",
+            "default": false,
+            "hint": "A room in a workspace goes into a folder named after it (nested workspaces nest); the rest stay at the top. Turning this on or off moves the files"
+          },
+          {
+            "key": "poll",
+            "type": "slider",
+            "label": "Look for changed files every",
+            "default": 3,
+            "min": 1,
+            "max": 30,
+            "step": 1,
+            "unit": "s",
+            "hint": "Only while the page is visible, and less often when nothing changes. Chrome 129+ is told about changes right away and only checks now and then"
+          },
+          {
+            "key": "newFiles",
+            "type": "radio",
+            "label": "New files in the folder",
+            "default": "ask",
+            "options": [
+              {
+                "value": "ask",
+                "label": "Ask me — one tap in the panel"
+              },
+              {
+                "value": "auto",
+                "label": "Import them as rooms automatically"
+              },
+              {
+                "value": "ignore",
+                "label": "Ignore them"
+              }
+            ]
+          },
+          {
+            "key": "onDelete",
+            "type": "radio",
+            "label": "When a mirrored room is deleted",
+            "default": "trash",
+            "options": [
+              {
+                "value": "trash",
+                "label": "Move its file to .trash in the folder"
+              },
+              {
+                "value": "leave",
+                "label": "Leave the file where it is"
+              }
+            ],
+            "hint": "A deleted file never deletes a room"
+          },
+          {
+            "key": "archived",
+            "type": "toggle",
+            "label": "Include archived rooms",
+            "default": false
+          },
+          {
+            "key": "front",
+            "type": "radio",
+            "label": "Front matter in files",
+            "default": "none",
+            "options": [
+              {
+                "value": "none",
+                "label": "None — files stay plain"
+              },
+              {
+                "value": "title",
+                "label": "Title and updated date"
+              }
+            ],
+            "hint": "A small --- block at the top of each file for Obsidian and static-site tools. It never ends up in the room"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ai",
+      "type": "widget",
+      "name": "AI",
+      "description": "Your own AI model — Ollama, LM Studio or any OpenAI-compatible server on your computer — with your note as context: summarise, rewrite, continue, explain code, checklists, translate. Use it from your phone too, end-to-end encrypted through Sync; no cloud AI service",
+      "icon": "✨",
+      "tags": "ai,assistant,chat,llm,local llm,local ai,private ai,ollama,lm studio,llama,llama.cpp,mistral,gemma,qwen,deepseek,phi,openai compatible,gpt,chatgpt,summarise,summarize,rewrite,continue writing,explain code,checklist,translate,ask,prompt,model",
+      "entry": "widgets/ai/ai.js",
+      "css": "widgets/ai/ai.css",
+      "precache": [
+        "widgets/ai/ai-core.js",
+        "widgets/ai/ai-service.js"
+      ],
+      "prefs": {
+        "title": "AI",
+        "fields": [
+          {
+            "type": "heading",
+            "label": "Model server"
+          },
+          {
+            "key": "provider",
+            "type": "select",
+            "label": "Server type",
+            "default": "ollama",
+            "hint": "Used on a device you set up with “This computer”. Your other devices reach it through Sync",
+            "options": [
+              {
+                "value": "ollama",
+                "label": "Ollama"
+              },
+              {
+                "value": "lmstudio",
+                "label": "LM Studio"
+              },
+              {
+                "value": "openai",
+                "label": "Other (OpenAI-compatible)"
+              }
+            ]
+          },
+          {
+            "key": "endpoint",
+            "type": "text",
+            "label": "Server address",
+            "default": "",
+            "maxLength": 300,
+            "placeholder": "Automatic",
+            "hint": "Empty = the usual address (Ollama http://127.0.0.1:11434, LM Studio http://127.0.0.1:1234/v1)"
+          },
+          {
+            "key": "model",
+            "type": "text",
+            "label": "Default model",
+            "default": "",
+            "maxLength": 200,
+            "placeholder": "First available",
+            "hint": "A model name such as llama3.2 or qwen2.5:7b — the AI panel lists what is installed"
+          },
+          {
+            "type": "heading",
+            "label": "Answers"
+          },
+          {
+            "key": "temperature",
+            "type": "slider",
+            "label": "Creativity (temperature)",
+            "default": 0.7,
+            "min": 0,
+            "max": 2,
+            "step": 0.1,
+            "hint": "Lower is focused and repeatable, higher is more varied"
+          },
+          {
+            "key": "maxTokens",
+            "type": "number",
+            "label": "Longest answer",
+            "default": 1024,
+            "min": 32,
+            "max": 16384,
+            "step": 32,
+            "unit": "tokens"
+          },
+          {
+            "key": "contextWindow",
+            "type": "number",
+            "label": "Context window",
+            "default": 0,
+            "min": 0,
+            "max": 262144,
+            "step": 1024,
+            "unit": "tokens",
+            "hint": "How much text the model reads at once. 0 = the server’s own setting (counted as 4096 when fitting a note in). Bigger needs more memory"
+          },
+          {
+            "key": "system",
+            "type": "textarea",
+            "label": "System prompt",
+            "maxLength": 4000,
+            "default": "You are a helpful writing assistant inside a notes app. Be concise and clear. Use Markdown when it helps."
+          },
+          {
+            "key": "history",
+            "type": "toggle",
+            "label": "Keep the conversation for each note",
+            "default": true,
+            "hint": "Saved on this device only; Clear in the panel removes it"
+          },
+          {
+            "key": "timeout",
+            "type": "number",
+            "label": "Give up after",
+            "default": 120,
+            "min": 15,
+            "max": 900,
+            "step": 5,
+            "unit": "s",
+            "hint": "With no answer coming in. The first answer can take a while as the model loads"
+          },
+          {
+            "type": "heading",
+            "label": "Sharing"
+          },
+          {
+            "key": "share",
+            "type": "toggle",
+            "label": "Share with my other devices",
+            "default": false,
+            "hint": "This device answers the AI on your other devices, end-to-end encrypted with your Sync key. Same switch as Preferences → Devices → “Share my AI model with my other devices”"
+          },
+          {
+            "key": "policy",
+            "type": "radio",
+            "label": "When another device asks",
+            "default": "auto",
+            "showIf": "share",
+            "options": [
+              {
+                "value": "auto",
+                "label": "Answer automatically"
+              },
+              {
+                "value": "ask",
+                "label": "Ask me each time"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "id": "beam-recv",
       "type": "plugin",
       "name": "Receive files from my other devices",
@@ -1591,6 +1857,37 @@
       "settingKey": "plugins.beam-recv",
       "section": "Devices",
       "default": true
+    },
+    {
+      "id": "mirror-run",
+      "type": "plugin",
+      "name": "Keep Folder Mirror running",
+      "description": "Turned on by Folder Mirror’s setup (and off by Stop mirroring): keeps the chosen rooms and the folder on this computer in step while the widget is closed — desktop Chrome / Edge only, only while the page is visible. Does nothing on phones",
+      "entry": "widgets/mirror/mirror-run.js",
+      "precache": [
+        "widgets/mirror/mirror-core.js",
+        "widgets/mirror/mirror-engine.js",
+        "widgets/mirror/mirror.css",
+        "widgets/merge/merge-core.js"
+      ],
+      "settingKey": "plugins.mirror-run",
+      "section": "Devices",
+      "default": false
+    },
+    {
+      "id": "ai-host",
+      "type": "plugin",
+      "name": "Share my AI model with my other devices",
+      "description": "This computer answers the AI widget on your other devices (same Sync) with its own model (Ollama, LM Studio…) — end-to-end encrypted, deleted once delivered. Works while a txt tab stays open here (Chrome, Edge or Firefox). Set it up in the AI widget",
+      "entry": "widgets/ai/ai-host.js",
+      "precache": [
+        "widgets/ai/ai-core.js",
+        "widgets/ai/ai-service.js",
+        "widgets/ai/ai.css"
+      ],
+      "settingKey": "plugins.ai-host",
+      "section": "Devices",
+      "default": false
     },
     {
       "id": "ekg",

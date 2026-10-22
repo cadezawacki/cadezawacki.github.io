@@ -213,9 +213,11 @@ offline; catches up when creds + network appear.
 
 ## Room system — `Cade.roomsApi`
 
-Read-mostly, late-bound surface over the live room/workspace state (never hold
-stale copies; call again when you need fresh values). Used by e.g. the
-`calendar` widget (daily-note rooms + per-day room activity).
+Late-bound surface over the live room/workspace state (never hold stale
+copies; call again when you need fresh values). Used by e.g. the `calendar`
+widget (daily-note rooms + per-day room activity). Room TEXT goes through
+`read` / `write` / `onChange` / `watch` — the only safe way for a module to
+change a room other than the open one.
 
 | Call | Does |
 | --- | --- |
@@ -232,7 +234,45 @@ stale copies; call again when you need fresh values). Used by e.g. the
 | `roomsApi.setActiveWorkspace(id)` | switch workspace context (persists) |
 | `roomsApi.switchRoom(name)` | switch to a room (async, may prompt for lock) |
 | `roomsApi.ensureRoom(name)` | add a room to the tab list without switching (no-op if it exists / invalid; joins the active workspace) |
+| `roomsApi.read(name)` | Promise of the room's text: the editor for the open room, else this device's copy, else the server's. `null` when there's no such room or the text can't be read right now (offline and not on this device, a locked room) — `''` is a real, empty room |
+| `roomsApi.write(name, text, opts?)` | Promise: change a room as if the user edited it (see below) → `{ text, changed, merged, open?, pushed?, pending? }` |
+| `roomsApi.onChange(cb)` | `cb(name, text, info)` after a room's text changes here or arrives from another device, debounced (~400 ms per room). Returns `off()`. Costs nothing while nobody listens |
+| `roomsApi.watch(names)` | keep this device's copies of these rooms fresh while you need them (follows each room's server version; a remote edit is fetched and reported through `onChange`). Returns `off()` — call it when hidden / closed |
 | `roomsApi.WS_ALL` / `roomsApi.WS_UNLABELED` | sentinel workspace ids |
+
+### Changing room text — `roomsApi.write(name, text, { reason, create, workspace, base })`
+
+- **The open room** gets ONE editor transaction (`userEvent: 'input.api'`): the
+  smallest change (common start and end kept, so the caret and scroll stay put),
+  its own undo step, then the normal persist + broadcast path.
+- **Any other room**: its local cache is updated (dirty against its synced base)
+  and pushed — but only after reading the server copy: unchanged since the
+  synced base → pushed; moved on → three-way merged (the merge lands in the
+  cache first); a real conflict stays local and dirty, and the room's next
+  reconcile (when it is opened) shows the merge screen. Nothing bypasses
+  conflict handling. A sibling tab showing the room adopts it.
+- `base` (optional) makes it a compare-and-swap: the text you last saw. Edits
+  made since are merged with yours; if both changed the same lines it rejects
+  with `code: 'conflict'` (and `err.current`, the room's text now).
+- `create: true` makes the room if it doesn't exist (`workspace`: an id, `null`
+  for none; omitted = the active workspace, like adding a room).
+- `reason` is passed back in `onChange`'s `info.reason`, so you can tell your
+  own writes from other changes.
+- Text is stored with `\n` line ends (as the editor would).
+- Rejects with `err.code`: `'invalid'` (bad name), `'no-room'`, `'locked'`
+  (password room not unlocked here), `'read-only'` (open room, Read-only mode),
+  `'busy'` (the open room is mid-reconcile — retry shortly), `'offline'`
+  (a sync-only room, or text that only the unreachable server has),
+  `'conflict'` (see `base`).
+
+`onChange` info: `{ kind: 'text' | 'rename' | 'delete', source: 'editor' |
+'api' | 'remote', reason?, from? }` — `'editor'` is the open room's own
+persist (typing, and remote edits that landed in it), `'api'` a `write()`,
+`'remote'` another device's edit to a room that isn't open (via `watch`) or a
+reconcile result. A rename fires `(newName, text, { kind: 'rename', from })`
+and then `(oldName, null, { kind: 'delete' })`; removing a room (here or on
+another device) fires `kind: 'delete'` with `text` null. Used by the Folder
+Mirror widget (`txt/widgets/mirror/`).
 
 ## Cross-module hooks (globals set by modules; feature-detect them)
 
@@ -330,3 +370,12 @@ opening them.
 `fetch(url, { cache: 'no-store' })` bypasses the service worker entirely (nothing is
 stored in the versioned `cade-vN` cache). Use it for live data and for assets a module
 keeps in its own Cache Storage bucket (e.g. `cade-convert-v1`, `cade-tts-hd-v1`).
+
+## Cade.ai — your own model, from any device (opt-in)
+
+Registered by the AI widget (`txt/widgets/ai/`) once it has loaded. Nothing answers until the user has set AI up: either "This computer" (a local Ollama / LM Studio / OpenAI-compatible server) or "Another of my devices" (a device sharing its model through Sync, end-to-end encrypted with the sync key).
+
+- `Cade.ai.status()` → Promise `{ available, via: 'local' | 'host' | null, host, model, reason, message, setup }`
+- `Cade.ai.chat(messages, { model, temperature, maxTokens, signal, onToken(delta, full) })` → Promise of the full answer. `messages` may be a string; the AI preferences' system prompt is added when none is given. Rejects with an Error carrying `.code`, `.info { title, steps }` and `.partial` (text received so far).
+- `Cade.ai.models()` → Promise of the model names of whatever would answer.
+- `Cade.ai.open()` opens the AI panel.

@@ -9695,6 +9695,7 @@ function persistContent() {
     // hashes they reference — otherwise the blob GC can't see them and would
     // delete the attachments (server copy included) as orphans.
     try { if (roomIsSyncOnly(syncState.roomName)) noteRoomRefs(syncState.roomName, text); } catch {}
+    try { _roomTextNotify(syncState.roomName, text); } catch {}   // Cade.roomsApi.onChange
   } else {
     store.set('cade-content', text);
   }
@@ -14474,6 +14475,7 @@ function initFirebase(databaseURL) {
   syncState.firebaseApp = app;
   syncState.firebaseUrl = databaseURL;
   syncState.firebaseDb = db;
+  try { if (_roomWatches.size) setTimeout(_roomWatchReattach, 0); } catch {}   // Cade.roomsApi.watch
   return db;
 }
 
@@ -15384,6 +15386,7 @@ function applyResolvedServer(roomName, serverText, serverVer) {
     saveRoomSynced(roomName, serverText);
     if (serverVer != null) saveRoomVersion(roomName, serverVer);
     store.set('cade-room-cache:' + roomName, serverText);
+    try { _roomTextNotify(roomName, serverText, { source: 'remote' }); } catch {}
     return;
   }
   dispatchRemoteDoc(serverText);
@@ -15403,6 +15406,7 @@ async function applyResolvedAppend(roomName, localText, serverText, where) {
   // never touch the live editor of a different room.
   if (syncState.roomName !== roomName) {
     store.set('cade-room-cache:' + roomName, merged);
+    try { _roomTextNotify(roomName, merged, { source: 'remote' }); } catch {}
     return;
   }
   dispatchRemoteDoc(merged);
@@ -15431,6 +15435,7 @@ async function applyResolvedMerge(roomName, merged) {
   // cache. It's dirty against the base, so its next reconcile pushes it.
   if (syncState.roomName !== roomName) {
     store.set('cade-room-cache:' + roomName, merged);
+    try { _roomTextNotify(roomName, merged, { source: 'remote' }); } catch {}
     return;
   }
   const cur = editor.state.doc.toString();
@@ -16347,6 +16352,7 @@ window.renameRoom = async function(oldName) {
   // Follow into the new room BEFORE purging the old identity, so the purge's
   // active-room handling never fires.
   if (wasActive) { try { await switchRoom(name); } catch {} }
+  try { _roomTextNotify(name, name === activeRoom ? editor.state.doc.toString() : _roomLocalText(name), { kind: 'rename', from: oldName }); } catch {}
   tombstoneRoom(oldName);
   purgeLocalRoom(oldName);
   renderRoomTabs();
@@ -17853,6 +17859,7 @@ window.addRoomFromManager = function() {
 // the non-destructive "Remove from list" and the destructive server delete.
 function purgeLocalRoom(name) {
   const wasActive = activeRoom === name;
+  try { _roomTextNotify(name, null, { kind: 'delete' }); } catch {}
   rooms = rooms.filter(r => r !== name);
   delete roomWorkspace[name];
   delete roomMeta[name];
@@ -19439,8 +19446,320 @@ window.__roomsApi = {
     saveRooms();
     renderRoomTabs();
   },
+  // Room TEXT (see ROOM TEXT API below): read → Promise<string|null>,
+  // write(name, text, { reason, create, workspace, base }) → Promise<result>,
+  // onChange(cb(name, text, info)) → off, watch(names) → off.
+  read: (n) => _roomRead(n),
+  write: (n, text, opts) => _roomWrite(n, text, opts),
+  onChange: (cb) => _roomOnChange(cb),
+  watch: (names) => _roomWatch(names),
   WS_ALL, WS_UNLABELED,
 };
+
+// ---------- ROOM TEXT API (Cade.roomsApi.read / write / onChange / watch) ----------
+// For modules that keep rooms in step with something outside the editor (Folder
+// Mirror keeps rooms as .md files in a folder). write() changes a room as if the
+// user had edited it: the OPEN room through one undoable editor transaction
+// (minimal change, so the caret stays put; the normal persist + broadcast path
+// does the rest); any other room through its local cache and then a push that
+// never bypasses conflict handling — the server copy is compared with the synced
+// base first, a clean three-way merge is taken, and a real conflict stays local
+// and dirty for the room's next reconcile (the merge screen) to settle. With
+// opts.base (the text the caller last saw) a write is a compare-and-swap: edits
+// made since are merged in, or it rejects with code 'conflict'. onChange hears
+// text that changed here or arrived from another device (watch() keeps chosen
+// non-open rooms fresh by following their server version counters), plus
+// renames and removals. All idle until a module listens or calls.
+const _roomTextCbs = new Set();
+const _roomTextPend = new Map();   // room -> { text, info, t } — debounced text events
+const _roomTextSig = new Map();    // room -> signature of the text last reported
+const _roomApiWrites = new Map();  // room -> { text, reason } — tags the editor's echo of write()
+const _roomOps = new Map();        // room -> tail of its serialized write/refresh chain
+const _roomWatches = new Map();    // room -> { n, db, ref, fn } — watch() refcounts
+const _roomFreshT = new Map();     // room -> debounce timer of a server re-read
+const ROOM_EVENT_MS = 400;
+
+function _roomName(n) { return String(n == null ? '' : n).trim().toLowerCase(); }
+function _roomExists(n) { return !!n && (rooms.includes(n) || n === activeRoom); }
+function _roomApiErr(code, msg, extra) { const e = new Error(msg || code); e.code = code; if (extra) Object.assign(e, extra); return e; }
+function _roomTextSigOf(t) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return t.length + ':' + (h >>> 0).toString(36);
+}
+function _roomOnChange(cb) {
+  if (typeof cb !== 'function') return () => {};
+  _roomTextCbs.add(cb);
+  return () => {
+    _roomTextCbs.delete(cb);
+    if (_roomTextCbs.size) return;
+    _roomTextPend.forEach(p => clearTimeout(p.t));
+    _roomTextPend.clear(); _roomTextSig.clear(); _roomApiWrites.clear();
+  };
+}
+function _roomTextFire(name, text, info) {
+  if (info.kind === 'text') {
+    const sig = _roomTextSigOf(text);
+    if (_roomTextSig.get(name) === sig) return;      // same text as last time — nothing to say
+    _roomTextSig.set(name, sig);
+  } else _roomTextSig.delete(name);
+  for (const cb of Array.from(_roomTextCbs)) {
+    try { cb(name, text, info); } catch (e) { console.warn('roomsApi.onChange listener failed:', e); }
+  }
+}
+// info: { kind: 'text' | 'rename' | 'delete', source: 'editor' | 'api' | 'remote', reason?, from? }.
+// Text events are debounced per room; renames and removals go out at once.
+function _roomTextNotify(name, text, info) {
+  if (!_roomTextCbs.size || !name || name === '__local__') return;
+  info = Object.assign({ kind: 'text', source: 'editor' }, info || {});
+  if (info.kind !== 'text') {
+    [name, info.from].forEach(n => { const p = n && _roomTextPend.get(n); if (p) { clearTimeout(p.t); _roomTextPend.delete(n); } });
+    if (info.from) _roomTextSig.delete(info.from);
+    setTimeout(() => _roomTextFire(name, text, info), 0);
+    return;
+  }
+  if (text == null) return;
+  const w = _roomApiWrites.get(name);
+  if (w && w.text === text) { _roomApiWrites.delete(name); info.source = 'api'; if (w.reason) info.reason = w.reason; }
+  const prev = _roomTextPend.get(name);
+  if (prev) clearTimeout(prev.t);
+  const ev = { text, info };
+  ev.t = setTimeout(() => {
+    if (_roomTextPend.get(name) === ev) _roomTextPend.delete(name);
+    _roomTextFire(name, ev.text, ev.info);
+  }, ROOM_EVENT_MS);
+  _roomTextPend.set(name, ev);
+}
+// One write / refresh of a room at a time.
+function _roomSerial(name, fn) {
+  const run = (_roomOps.get(name) || Promise.resolve()).then(fn);
+  const tail = run.then(() => {}, () => {});
+  _roomOps.set(name, tail);
+  tail.then(() => { if (_roomOps.get(name) === tail) _roomOps.delete(name); });
+  return run;
+}
+// This device's copy (cache, else synced base) — null when it keeps none
+// (offloaded or sync-only after a reload).
+function _roomLocalText(name) {
+  try {
+    const c = store.get('cade-room-cache:' + name);
+    return c != null ? c : loadRoomSynced(name);
+  } catch { return null; }
+}
+// The server's copy: '' when it has none (or sync is off), null when it can't
+// be read right now (offline, a locked room, a failed fetch).
+async function _roomServerText(name, withVer) {
+  if (!_syncConfigured()) return withVer ? { text: '', ver: null } : '';
+  if (!navigator.onLine || (roomHasPassword(name) && !roomIsUnlocked(name))) return null;
+  try {
+    const [val, ver] = await Promise.all([
+      _restFetchRoomVal(name, 'text', 8000),
+      withVer ? _restFetchRoomVal(name, 'v', 8000).catch(() => null) : null,
+    ]);
+    const enc = unpackRoomText(val);
+    let text = '';
+    if (enc) {
+      text = await decodeRoomPlain(name, enc, getRoomEncKey(name, store.get('cade-sync-key') || ''));
+      if (text == null) return null;
+    }
+    return withVer ? { text, ver: typeof ver === 'number' ? ver : null } : text;
+  } catch { return null; }
+}
+function _roomDb() {
+  if (syncState.firebaseDb) return syncState.firebaseDb;
+  if (!_syncConfigured()) return null;
+  try { return initFirebase(store.get('cade-firebase-url')); } catch { return null; }
+}
+function _roomCanPush(name) {
+  return _syncConfigured() && navigator.onLine && !syncState.rekeying
+    && !(roomHasPassword(name) && !roomIsUnlocked(name)) && !!_roomDb();
+}
+// base → cur is what changed in the room since the caller looked, base → text
+// the caller's change. null = both changed the same lines differently.
+function _roomMerge(base, cur, text) {
+  if (cur === base || cur === text) return text;
+  if (text === base) return cur;
+  const core = window.__cadeMergeCore;
+  if (core) { try { const r = core.merge3(base, cur, text); return r.conflicts ? null : r.merged; } catch {} }
+  return _merge3(base, cur, text);
+}
+
+async function _roomRead(name) {
+  name = _roomName(name);
+  if (!_roomExists(name)) return null;
+  if (name === activeRoom) return editor.state.doc.toString();
+  const local = _roomLocalText(name);
+  return local != null ? local : _roomServerText(name, false);
+}
+
+async function _roomWrite(name, text, opts) {
+  opts = opts || {};
+  name = _roomName(name);
+  text = String(text == null ? '' : text).replace(/\r\n?/g, '\n');   // the editor's line ends
+  const base = opts.base == null ? null : String(opts.base).replace(/\r\n?/g, '\n');
+  if (!name || name.startsWith('__') || name.length > 100) throw _roomApiErr('invalid', 'Invalid room name');
+  let created = false;
+  if (!_roomExists(name)) {
+    if (!opts.create) throw _roomApiErr('no-room', 'No room named “' + name + '”');
+    rooms.push(name);
+    touchRoomCreated(name);   // fresh created stamp beats any deletion tombstone
+    const ws = opts.workspace === undefined ? activeWorkspace : opts.workspace;
+    if (ws && ws !== WS_ALL && ws !== WS_UNLABELED && getWorkspace(ws)) { addRoomToWorkspace(name, ws); saveWorkspaces(); }
+    saveRooms();
+    try { renderRoomTabs(); } catch {}
+    created = true;
+  }
+  if (roomHasPassword(name) && !roomIsUnlocked(name)) throw _roomApiErr('locked', 'Room “' + name + '” is locked — unlock it first');
+  if (base != null) { try { await _loadMergeLib(); } catch {} }   // so the merges below run in one go
+  if (name === activeRoom) return _roomWriteOpen(name, text, base, opts);
+  return _roomSerial(name, () => _roomWriteOther(name, text, base, opts, created));
+}
+
+function _roomWriteOpen(name, text, base, opts) {
+  if (_readOnly || editor.state.readOnly) throw _roomApiErr('read-only', 'Read-only mode is on');
+  if (syncState.conflictResolving) throw _roomApiErr('busy', 'This room is being reconciled with the server — try again in a moment');
+  const cur = editor.state.doc.toString();
+  let next = text;
+  if (base != null) {
+    next = _roomMerge(base, cur, text);
+    if (next == null) throw _roomApiErr('conflict', 'The room changed meanwhile, on the same lines', { current: cur });
+  }
+  if (next === cur) return { text: cur, changed: false, merged: false, open: true };
+  _roomApiWrites.set(name, { text: next, reason: opts.reason || '' });
+  // Not 'input.type': its own undo step, never joined to the typing before it.
+  editor.dispatch({ changes: _minimalRemoteChange(cur, next), userEvent: 'input.api', scrollIntoView: false });
+  return { text: next, changed: true, merged: next !== text, open: true };
+}
+
+async function _roomWriteOther(name, text, base, opts, created) {
+  if (name === activeRoom) return _roomWriteOpen(name, text, base, opts);   // opened while queued
+  let cur = _roomLocalText(name), srv = null;
+  if (cur == null && !created) {
+    srv = await _roomServerText(name, true);
+    if (srv == null) throw _roomApiErr('offline', 'This room’s text isn’t on this device and the server can’t be reached');
+    if (name === activeRoom) return _roomWriteOpen(name, text, base, opts);
+    cur = srv.text;
+  }
+  if (cur == null) cur = '';
+  let next = text;
+  if (base != null) {
+    next = _roomMerge(base, cur, text);
+    if (next == null) throw _roomApiErr('conflict', 'The room changed meanwhile, on the same lines', { current: cur });
+  }
+  if (next === cur && !created) return { text: cur, changed: false, merged: false, pushed: null };
+  const syncOnly = roomIsSyncOnly(name), canPush = _roomCanPush(name);
+  // A sync-only room's copy lives in memory only — unsent, a reload would lose it.
+  if (syncOnly && !canPush) throw _roomApiErr('offline', 'Sync-only room — can’t be changed while offline');
+  if (srv) { saveRoomSynced(name, srv.text); if (srv.ver != null) saveRoomVersion(name, srv.ver); }
+  store.set('cade-room-cache:' + name, next);   // dirty against the synced base until pushed
+  try { touchRoomModified(name); } catch {}
+  try { if (syncOnly) noteRoomRefs(name, next); } catch {}
+  try { tabSync.postDoc(name, next); } catch {}  // a sibling tab showing this room adopts it
+  _roomTextNotify(name, next, { source: 'api', reason: opts.reason || '' });
+  const res = { text: next, changed: true, merged: next !== text, pushed: false };
+  if (canPush) Object.assign(res, await _roomPushOther(name));
+  return res;
+}
+
+// Push a non-open room's local copy. The server decides how: unchanged since
+// the synced base → push ours; moved on → three-way merge (the merge lands in
+// the cache first, so a switch into the room mid-push already shows it); a real
+// conflict stays local and dirty for the room's next reconcile. Runs inside the
+// room's _roomSerial chain.
+async function _roomPushOther(name) {
+  if (name === activeRoom || !_roomCanPush(name)) return { pushed: false };
+  const local = store.get('cade-room-cache:' + name);
+  if (local == null) return { pushed: false };
+  const base = loadRoomSynced(name);
+  if (base === local) return { pushed: true };
+  const srv = await _roomServerText(name, true);
+  if (srv == null) return { pushed: false, pending: 'offline' };
+  if (name === activeRoom || store.get('cade-room-cache:' + name) !== local) return { pushed: false };
+  if (srv.text === local) {
+    saveRoomSynced(name, local);
+    if (srv.ver != null) saveRoomVersion(name, srv.ver);
+    return { pushed: true };
+  }
+  let out = local;
+  if (!(base != null ? srv.text === base : srv.text === '')) {
+    const m = base != null ? _roomMerge(base, srv.text, local) : null;
+    if (m == null) return { pushed: false, pending: 'conflict' };
+    out = m;
+    if (out !== local) {
+      store.set('cade-room-cache:' + name, out);
+      try { tabSync.postDoc(name, out); } catch {}
+      _roomTextNotify(name, out, { source: 'remote' });
+    }
+  }
+  try { await pushRoomTextQuiet(name, out, getRoomEncKey(name, store.get('cade-sync-key') || '')); }
+  catch { return { pushed: false, pending: 'offline', text: out }; }
+  return { pushed: true, merged: out !== local, text: out };
+}
+
+// Keep this device's copies of `names` (non-open rooms) fresh: follow each
+// room's server version counter and re-read the text when it moves past ours.
+function _roomWatch(names) {
+  const list = Array.from(new Set((Array.isArray(names) ? names : [names]).map(_roomName).filter(Boolean)));
+  list.forEach(n => {
+    const w = _roomWatches.get(n) || { n: 0 };
+    w.n++;
+    _roomWatches.set(n, w);
+    _roomWatchAttach(n, w);
+  });
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    list.forEach(n => {
+      const w = _roomWatches.get(n);
+      if (!w || --w.n > 0) return;
+      _roomWatchDetach(w);
+      _roomWatches.delete(n);
+      clearTimeout(_roomFreshT.get(n)); _roomFreshT.delete(n);
+    });
+  };
+}
+function _roomWatchAttach(name, w) {
+  const db = _roomDb();
+  if (!db || w.db === db) return;
+  _roomWatchDetach(w);
+  try {
+    w.db = db;
+    w.ref = db.ref('rooms/' + name + '/v');
+    w.fn = w.ref.on('value', (snap) => {
+      const v = snap && snap.val();
+      if (typeof v !== 'number' || name === activeRoom) return;
+      const mine = loadRoomVersion(name);
+      if (mine != null && v <= mine) return;
+      clearTimeout(_roomFreshT.get(name));
+      _roomFreshT.set(name, setTimeout(() => {
+        _roomFreshT.delete(name);
+        _roomSerial(name, () => _roomFreshen(name)).catch(() => {});
+      }, 300));
+    });
+  } catch { w.db = w.ref = w.fn = null; }
+}
+function _roomWatchDetach(w) {
+  if (w.ref && w.fn) { try { w.ref.off('value', w.fn); } catch {} }
+  w.db = w.ref = w.fn = null;
+}
+// A new database connection (first connect, a changed URL): follow it.
+function _roomWatchReattach() { _roomWatches.forEach((w, n) => _roomWatchAttach(n, w)); }
+async function _roomFreshen(name) {
+  if (name === activeRoom || !rooms.includes(name) || !_roomWatches.has(name)) return;
+  const cache = store.get('cade-room-cache:' + name), base = loadRoomSynced(name);
+  // Unsynced edits here (e.g. written while offline): the push merges them.
+  if (cache != null && cache !== base) { await _roomPushOther(name); return; }
+  const srv = await _roomServerText(name, true);
+  if (srv == null || name === activeRoom) return;
+  if (store.get('cade-room-cache:' + name) !== cache || loadRoomSynced(name) !== base) return;   // moved meanwhile
+  if (srv.ver != null) saveRoomVersion(name, srv.ver);
+  const local = cache != null ? cache : base;
+  if (local === srv.text) { if (base !== srv.text) saveRoomSynced(name, srv.text); return; }
+  // An offloaded room stays offloaded — listeners just hear the text.
+  if (local != null) { store.set('cade-room-cache:' + name, srv.text); saveRoomSynced(name, srv.text); }
+  _roomTextNotify(name, srv.text, { source: 'remote' });
+}
 
 // ---------- Workspace tree helpers (Feature 54) ----------
 function workspaceChildren(parentId) {
@@ -20502,7 +20821,7 @@ async function applyRemoteWorkspaceBlob(encrypted, baseKey, source) {
     // Rooms that just died here: free their local storage (memory care) and
     // note them for the active-room check below.
     const removedLocally = rooms.filter(n => !mergedRooms.includes(n));
-    removedLocally.forEach(n => { try { _purgeRoomStorageKeys(n); } catch {} });
+    removedLocally.forEach(n => { try { _purgeRoomStorageKeys(n); } catch {} try { _roomTextNotify(n, null, { kind: 'delete', source: 'remote' }); } catch {} });
 
     // Did our merge produce information the remote blob doesn't have? Then we
     // must push back so every device converges. (Meta stamp drift is excluded —
