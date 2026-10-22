@@ -1072,6 +1072,11 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
     padding: 4px 8px 4px 22px; border-radius: var(--radius-sm); cursor: pointer;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text);
   }
+  /* Nested mode (Preferences → Appearance): each level indents 12px, capped
+     at 4 so deep trees stay readable in a narrow sidebar. */
+  #side-nav .sn-ws[style*="--sn-depth"] { padding-left: calc(8px + min(var(--sn-depth), 4) * 12px); }
+  #side-nav .sn-room[style*="--sn-depth"] { padding-left: calc(22px + min(var(--sn-depth), 4) * 12px); }
+  #side-nav .sn-ws.sn-nested { margin-top: 4px; }
   #side-nav .sn-room:hover { background: var(--surface-hover, rgba(127,127,127,0.12)); }
   #side-nav .sn-room.active { background: var(--accent-bg); color: var(--accent); }
   #side-nav .sn-count { margin-left: auto; color: var(--text-faint); font-size: var(--text-xs); font-weight: 400; }
@@ -16114,12 +16119,13 @@ window.toggleSidebar = function() {
   try { editor.requestMeasure(); } catch {}
 };
 setTimeout(() => { const l = document.getElementById('sidebar-label'); if (l && _sidebarOn) l.textContent = 'Sidebar: On'; }, 100);
-function _sidebarRoomRow(name, wsId) {
+function _sidebarRoomRow(name, wsId, depth) {
   const escAttr = escapeHtml(name.replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
   const escWs = escapeHtml(String(wsId ?? '').replace(/'/g, "\\'"));
   const active = name === activeRoom;
   const pin = roomPinnedHere(name) ? '📌 ' : '';
-  return `<div class="sn-room${active ? ' active' : ''}" onclick="sidebarPickRoom('${escWs}', '${escAttr}')" oncontextmenu="sidebarRoomMenu(event, '${escAttr}')">${pin}${escapeHtml(name)}</div>`;
+  const indent = depth ? ` style="--sn-depth:${depth}"` : '';
+  return `<div class="sn-room${active ? ' active' : ''}"${indent} onclick="sidebarPickRoom('${escWs}', '${escAttr}')" oncontextmenu="sidebarRoomMenu(event, '${escAttr}')">${pin}${escapeHtml(name)}</div>`;
 }
 // Clicking a room under a workspace section adopts THAT section as the active
 // workspace (the navbar pill follows) — even for pinned rooms, which appear in
@@ -16154,21 +16160,54 @@ function renderSidebar() {
     _snAttachResize(el);
   }
   const wsRows = [];
-  const wsSection = (label, colorClass, wsId, roomList) => {
+  // `depth` is set only in nested mode; returns whether the section is folded
+  // so the tree walk can skip a folded workspace's descendants.
+  const wsSection = (label, colorClass, wsId, roomList, depth, title) => {
     const escId = escapeHtml(String(wsId).replace(/'/g, "\\'"));
     const folded = _snCollapsed.has(wsId);
+    const nested = depth != null;
     wsRows.push(
-      `<div class="sn-ws ${colorClass}${activeWorkspace === wsId ? ' active' : ''}" onclick="sidebarPickWs('${escId}')">` +
+      `<div class="sn-ws ${colorClass}${nested && depth ? ' sn-nested' : ''}${activeWorkspace === wsId ? ' active' : ''}"` +
+      `${nested ? ` style="--sn-depth:${depth}"` : ''}${title ? ` title="${escapeHtml(title)}"` : ''} onclick="sidebarPickWs('${escId}')">` +
       `<span class="sn-fold" onclick="sidebarToggleWs(event, '${escId}')" title="${folded ? 'Expand' : 'Collapse'}">${folded ? '▸' : '▾'}</span>` +
       `<span class="ws-badge-dot"></span>${escapeHtml(label)}<span class="sn-count">${roomList.length}</span></div>`
     );
-    if (!folded) wsRows.push(...roomList.map(n => _sidebarRoomRow(n, wsId)));
+    if (!folded) wsRows.push(...roomList.map(n => _sidebarRoomRow(n, wsId, nested ? depth + 1 : 0)));
+    return folded;
   };
   const live = rooms.filter(r => !roomIsArchived(r));
-  workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach(w => {
-    const inWs = orderRooms(live.filter(r => roomInWorkspace(r, w.id)));
-    wsSection(w.name, 'ws-color-' + (WS_COLORS.includes(w.color) ? w.color : 'neutral'), w.id, inWs);
-  });
+  const wsColorClass = w => 'ws-color-' + (WS_COLORS.includes(w.color) ? w.color : 'neutral');
+  if (window.Settings && Settings.get('sidebar.nested')) {
+    // Workspace tree: rooms sit directly under their own workspace, child
+    // workspaces follow, indented; folding a workspace hides its whole
+    // subtree. Workspaces the walk can't reach from the root (a parentId
+    // that no longer exists, or a cycle) are listed at the top level so
+    // nothing disappears from the sidebar.
+    const seen = new Set();
+    const walk = (w, depth) => {
+      if (seen.has(w.id)) return;
+      seen.add(w.id);
+      const inWs = orderRooms(live.filter(r => roomInWorkspace(r, w.id)));
+      const kids = workspaceChildren(w.id);
+      const title = kids.length ? `${inWs.length} here · ${workspaceRoomCountSafe(w.id)} including nested workspaces` : '';
+      if (wsSection(w.name, wsColorClass(w), w.id, inWs, depth, title)) {
+        // Mark the folded subtree as placed so the orphan pass skips it.
+        const stack = [...kids];
+        while (stack.length) { const c = stack.pop(); if (!seen.has(c.id)) { seen.add(c.id); stack.push(...workspaceChildren(c.id)); } }
+        return;
+      }
+      kids.forEach(c => walk(c, depth + 1));
+    };
+    const byOrder = workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    workspaceChildren(null).forEach(w => walk(w, 0));
+    byOrder.filter(w => !getWorkspace(w.parentId)).forEach(w => walk(w, 0));
+    byOrder.forEach(w => walk(w, 0));
+  } else {
+    workspaces.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach(w => {
+      const inWs = orderRooms(live.filter(r => roomInWorkspace(r, w.id)));
+      wsSection(w.name, wsColorClass(w), w.id, inWs);
+    });
+  }
   const unlabeled = orderRooms(live.filter(r => roomIsUnlabeled(r)));
   if (unlabeled.length) wsSection('Unlabeled', 'ws-color-neutral', WS_UNLABELED, unlabeled);
   el.innerHTML = `<div class="sn-resize" title="Drag to resize"></div><div class="sn-peek">›</div><div class="sn-scroll">` +
@@ -24632,6 +24671,7 @@ let _syncOnlyAllApplied; // last value storage.syncOnlyAll's apply() acted on
 try {
   registerSetting({ key: 'widgets.clock', label: 'Footer clock', type: 'toggle', default: false, section: 'Appearance', apply(v) { setClockEnabled(!!v); } });
   registerSetting({ key: 'widgets.clockTz', label: 'Extra timezones', type: 'text', default: '', section: 'Appearance', hint: 'Comma-separated IANA names, e.g. America/New_York, Europe/London', apply() { if (document.getElementById('footer-clock')) clockTick(); } });
+  registerSetting({ key: 'sidebar.nested', label: 'Nest workspaces in sidebar', type: 'toggle', default: false, section: 'Appearance', hint: 'Show sub-workspaces indented under their parent in the desktop sidebar; folding a workspace hides everything inside it', apply() { try { renderSidebar(); } catch {} } });
   registerSetting({ key: 'sidebar.events', label: 'Upcoming events in sidebar', type: 'toggle', default: true, section: 'Appearance', hint: 'Show the next 7 days of Calendar Events at the foot of the desktop sidebar', apply() { try { renderSidebar(); } catch {} } });
   // (Timer settings — widgets.timerFlashUntilAck / widgets.timerMinimizeOnClose —
   // are registered by the timer module itself when it loads.)
