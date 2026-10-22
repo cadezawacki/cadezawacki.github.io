@@ -1,0 +1,87 @@
+/* AI — model scores, a dated snapshot (the offline fallback for the live list).
+ *
+ * Source: LMArena text leaderboard, category "overall" — the Hugging Face dataset
+ *   lmarena-ai/leaderboard-dataset (config "text", split "latest"), licence CC BY 4.0,
+ *   https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset · https://lmarena.ai/leaderboard/text
+ * Leaderboard published 2026-10-20; fetched 2026-10-22 through
+ *   https://datasets-server.huggingface.co/filter?dataset=lmarena-ai/leaderboard-dataset&config=text&split=latest&where="category"='overall'
+ * Rows: [model name as LMArena writes it, Arena rating rounded] — all 417 entries, best first,
+ * copied as published (nothing added or edited). The host prefers the live list (cached a day)
+ * and falls back to this; ai-core.js matches names (normName). */
+(function (root) {
+  'use strict';
+  var api = { date: '2026-10-20', source: 'LMArena text leaderboard (overall), lmarena.ai, CC BY 4.0', rows: [
+    ["Gemini 4 Argon (High)",1532],["Claude Opus 5.5 (High)",1516],["Claude Fable 5.1 (Max)",1512],["Claude Opus 5 (Max)",1509],["Claude Opus 5 (High)",1503],["Muse Wonder (Max)",1502],
+    ["Claude Opus 4.6 (High)",1501],["Gemini 3.8 Flash (High)",1499],["Claude Opus 4.6",1497],["Claude Fable 5 (High)",1491],["MiMo-V2.6-Pro",1491],["Muse Spark 1.3 (Max)",1490],
+    ["Claude Opus 4.7 (High)",1490],["Gemini 3.7 Flash (High)",1489],["Qwen3.8-Max",1483],["Claude Opus 4.7",1483],["Muse Spark 1.2 (xHigh)",1482],["Gemini 3.5 Flash (High)",1482],
+    ["Gemini 3.1 Pro Preview",1480],["Gemini 3.6 Flash (High)",1480],["Gemini 3 Pro",1479],["Muse Spark 1.1",1478],["Gemini 3.5 Flash (Medium)",1478],["Kimi K3 (Max)",1476],
+    ["Qwen3.7-Max-Preview",1475],["Muse Spark",1474],["GLM-5.3 (Max)",1474],["Claude Sonnet 5.5 (xHigh)",1473],["GLM-5.3-Flash",1471],["GPT-5.5 (High)",1471],
+    ["Qwen3.5-Max-Preview",1470],["GLM-5.2 (Max)",1470],["GPT-5.4 (High)",1469],["ERNIE 5.1",1468],["GPT-5.5",1467],["Gemini 3 Flash",1466],
+    ["MiMo-V2.5-Pro",1464],["DeepSeek-V4.1-Flash-20260910 (Max)",1464],["GLM-5.1",1463],["Claude Opus 4.8 (High)",1461],["Claude Sonnet 4.6",1458],["Gemini 2.5 Pro",1458],
+    ["GPT-5.6 Sol (xHigh)",1457],["Kimi K2.6",1455],["Qwen3.7-Plus",1454],["Claude Opus 4.8",1454],["MiMo-V2.6-Flash",1453],["GPT-5.4",1452],
+    ["DeepSeek-V4-Pro",1451],["Claude Opus 4.5 (20251101)",1451],["Grok 4.20 Beta (Reasoning, 0309)",1451],["Grok 4.20 Multi-Agent Beta (0309)",1450],["amazon-nova-experimental-chat (26-02-10)",1448],["Dola Seed 2.0 Pro",1448],
+    ["Claude Opus 4.5 (High, 32K, 20251101)",1448],["GPT-5.6 Terra (xHigh)",1448],["Grok 4.5",1448],["Qwen3.6-Max-Preview",1447],["GLM-5",1446],["DeepSeek-V4-Pro (High, 20260813)",1446],
+    ["Kimi K2.5 (Thinking)",1445],["DeepSeek-V4-Pro Preview (High)",1445],["NVIDIA-Nemotron-3-Ultra-550B-A55B (NVFP4)",1445],["ERNIE 5.0 (0110)",1445],["Grok 4.20 Beta 1",1444],["GPT-6.1 Sol (Max)",1443],
+    ["GPT-5.1 (High)",1443],["Gemma 4 31B",1443],["ERNIE-5.0-Preview (1203)",1442],["Gemini 3 Flash (Minimal)",1442],["Claude Sonnet 5 (High)",1442],["Inkling",1442],
+    ["GPT-6 Astra (Max)",1441],["Step 5 Preview",1440],["GLM-4.6",1440],["Qwen3.8-27B",1440],["Qwen3-Max-Preview",1439],["Claude Sonnet 4.5 (20250929)",1438],
+    ["GPT-5.2 Chat (20260210)",1438],["Hy3",1438],["Qwen3.5-397B-A17B",1437],["GLM-5V-Turbo",1437],["Grok 4.1 (Thinking)",1436],["Qwen3.6-Plus",1436],
+    ["MiMo-V2-Pro",1436],["Grok 4.1",1436],["GLM-4.7",1435],["Gemini 3.5 Flash-Lite",1435],["Claude Sonnet 4.5 (High, 32K, 20250929)",1435],["Gemma 4 26B A4B",1434],
+    ["MiniMax-M3",1433],["DeepSeek-V4-Flash",1432],["Mistral Large 4",1431],["GPT-5.6 Luna (xHigh)",1431],["GLM-4.5",1430],["ERNIE-5.0-Preview (1022)",1430],
+    ["Mistral Large 3",1429],["Grok 4.6 (High)",1429],["ChatGPT-4o Latest (20250326)",1428],["MiMo-V2.5",1428],["DeepSeek-R1 (0528)",1428],["LongCat-Flash-Chat Exp (2602)",1427],
+    ["Grok 3 Preview (02-24)",1426],["Beam 1.0 501B A23B",1425],["DeepSeek-V3.2-Exp (Thinking)",1425],["DeepSeek-V3.2",1425],["DeepSeek-V4-Flash Preview (High)",1424],["Mistral Medium 3.1 (2508)",1424],
+    ["MiMo-V2-Omni",1423],["LongCat-Flash-Chat",1423],["DeepSeek-V3.2-Exp",1422],["GPT-5.1",1422],["Mistral Medium 3.5",1421],["Kimi K2.5 (Instant)",1420],
+    ["Qwen3-VL-235B-A22B-Instruct",1420],["DeepSeek-V3.2 (Thinking)",1420],["DeepSeek-V3.1",1420],["amazon-nova-experimental-chat (12-10)",1419],["Claude Opus 4.1 (Thinking 16K, 20250805)",1419],["Qwen3-235B-A22B-Instruct (2507)",1419],
+    ["GPT-5.5 Instant",1419],["DeepSeek-V3.1-Terminus (Thinking)",1419],["Claude Opus 4.1 (20250805)",1419],["Qwen3.5-122B-A10B",1417],["GPT-4.5 Preview (2025-02-27)",1417],["DeepSeek-V3.1-Terminus",1417],
+    ["Qwen3-Next-80B-A3B-Instruct",1417],["Gemini 2.5 Flash",1417],["DeepSeek-V3.1 (Thinking)",1417],["GPT-5.2 (High)",1416],["Gemini 3.1 Flash-Lite Preview",1416],["Qwen3-235B-A22B-Thinking (2507)",1415],
+    ["amazon-nova-experimental-chat (11-10)",1415],["Kimi K2 Thinking Turbo",1414],["Inkling-Small",1413],["Qwen3-Max (2025-09-23)",1413],["GPT-5.2",1412],["GPT-5.4 mini (High)",1412],
+    ["Grok 4 (0709)",1411],["MiMo-V2-Flash (Non-Thinking)",1411],["o3 (2025-04-16)",1410],["Qwen3.5-27B",1409],["Grok 4.1 Fast (Reasoning)",1408],["Grok 4 Fast (Non-Reasoning)",1407],
+    ["NVIDIA-Nemotron-3.5-Super-VL-120B-A12B (NVFP4)",1407],["Gemini 2.5 Flash Preview (09-2025)",1406],["GPT-5 (High)",1406],["Hunyuan Vision 1.5 Thinking",1406],["MiniMax-M2.7",1405],["GPT-5 Chat",1403],
+    ["Step-3.5-Flash",1403],["Hy3 preview",1401],["Hunyuan T1 (20250711)",1401],["Qwen3-VL-235B-A22B-Thinking",1400],["Grok 4 Fast (Reasoning)",1400],["Grok 4.7 (xHigh)",1399],
+    ["GPT-6 Sol (Max)",1398],["Claude Haiku 4.5 (20251001)",1397],["Qwen3.5-Flash",1397],["Grok 4.3",1397],["amazon-nova-experimental-chat (26-01-10)",1396],["MiMo-V2-Flash (Thinking)",1395],
+    ["Qwen3.5-35B-A3B",1395],["amazon-nova-experimental-chat (10-20)",1394],["Qwen3-235B-A22B (Non-Thinking)",1394],["MiniMax-M2.1 Preview",1392],["GPT-6 Luna (Max)",1389],["Muse Glimmer",1389],
+    ["GPT-5.3 Chat",1389],["Solar Pro 4",1388],["Qwen3-30B-A3B-Instruct (2507)",1384],["GLM-4.5-Air",1384],["GPT-4.1 (2025-04-14)",1383],["Kimi K2 Preview (0905)",1380],
+    ["Gemini 2.5 Flash-Lite Preview (Non-Thinking, 09-2025)",1379],["NVIDIA-Nemotron-3-Super-120B-A12B",1378],["Hunyuan TurboS (20250416)",1377],["Claude Opus 4 (Thinking 16K, 20250514)",1377],["GLM-4.6V",1376],["DeepSeek-V3 (0324)",1375],
+    ["GPT-5 mini (High)",1373],["DeepSeek-R1",1373],["GPT-5.4 nano (High)",1372],["Kimi K2 Preview (0711)",1371],["Mistral Medium 3 (2505)",1370],["Grok 3 Mini (High)",1370],
+    ["Gemini 2.5 Flash-Lite Preview (Thinking, 06-17)",1369],["Qwen3-Next-80B-A3B-Thinking",1368],["Qwen2.5-Max",1367],["Qwen3-235B-A22B",1366],["Claude Opus 4 (20250514)",1366],["o1 (2024-12-17)",1366],
+    ["gpt-oss-120b",1366],["Grok 3 Mini Beta",1364],["amazon-nova-experimental-chat (10-09)",1364],["Amazon Nova 2 Lite",1362],["Granite 4.2 30B",1361],["Ling-flash-2.0",1361],
+    ["MiniMax-M2.5",1359],["Gemma 3 27B IT",1358],["Qwen3-Coder-480B-A35B-Instruct",1357],["INTELLECT-3",1356],["Mercury 2",1354],["Gemini 2.0 Flash (001)",1354],
+    ["o4-mini (2025-04-16)",1353],["o1-preview",1353],["Claude Sonnet 4 (Thinking 32K, 20250514)",1351],["GLM-4.7-Flash",1351],["Step-3",1351],["NVIDIA-Nemotron-3-Nano-30B-A3B (BF16)",1348],
+    ["MiniMax-M1",1343],["GPT-4.1 mini (2025-04-14)",1341],["Trinity Large Thinking",1340],["Qwen3-32B",1340],["MiniMax-M2",1340],["Claude Sonnet 4 (20250514)",1339],
+    ["Trinity Large Preview",1339],["Mistral Small 3.2 (2506)",1338],["Llama 3.3 Nemotron Super 49B v1.5",1338],["o3-mini (High)",1337],["Step-1o Turbo (202506)",1336],["Gemma 3 12B IT",1334],
+    ["Ring-flash-2.0",1334],["GLM-4.5V",1333],["DeepSeek-V3",1333],["Command A (03-2025)",1331],["GLM-4-Plus (0111)",1331],["NVIDIA-Nemotron-3.5-Lightning-30B-A3B (NVFP4)",1331],
+    ["Gemini 2.0 Flash-Lite Preview (02-05)",1330],["QwQ-32B",1329],["Qwen-Plus (0125)",1326],["Step-2 16K Exp (202412)",1321],["GPT-5 nano (High)",1320],["Hunyuan TurboS (20250226)",1320],
+    ["Llama 3.1 Nemotron Ultra 253B v1",1320],["o3-mini",1319],["Granite 4.2 8B",1319],["Gemini 1.5 Pro (002)",1319],["o1-mini",1317],["Qwen3-30B-A3B",1317],
+    ["Claude 3.7 Sonnet (Thinking 32K, 20250219)",1314],["Hunyuan Turbo (0110)",1311],["Olmo 3.1 32B Instruct",1311],["Llama 3.3 Nemotron Super 49B v1",1308],["Gemma 3n E4B IT",1306],["Grok 2 (2024-08-13)",1305],
+    ["Yi Lightning",1302],["GPT-4o (2024-05-13)",1300],["Olmo 3 32B Think",1300],["Claude 3.7 Sonnet (20250219)",1299],["Qwen2.5-Plus (1127)",1299],["Claude 3.5 Sonnet (20241022)",1298],
+    ["DeepSeek-V2.5 (1210)",1294],["Granite 4.2 3B",1294],["Athene V2 Chat",1291],["Gemma 3 4B IT",1291],["Granite 4.1 8B",1290],["GLM-4-Plus",1290],
+    ["Hunyuan Large (2025-02-10)",1288],["Molmo 2 8B",1288],["gpt-oss-20b",1288],["Llama 4 Maverick 17B 128E Instruct",1287],["Gemini 1.5 Flash (002)",1287],["GPT-4o mini (2024-07-18)",1286],
+    ["GPT-4.1 nano (2025-04-14)",1285],["Llama 3.1 405B Instruct (BF16)",1284],["Llama 3.1 Nemotron 70B Instruct",1283],["GPT-4o (2024-08-06)",1283],["Qwen-Max (0919)",1282],["Mercury",1282],
+    ["Llama 3.1 405B Instruct (FP8)",1282],["Claude 3.5 Sonnet (20240620)",1281],["Grok 2 mini (2024-08-13)",1281],["Llama 4 Scout 17B 16E Instruct",1279],["Gemini Advanced (0514)",1279],["Mistral Small 3.1 24B Instruct (2503)",1277],
+    ["Llama 3.3 70B Instruct",1274],["Hunyuan Standard (2025-02-10)",1274],["Gemini 1.5 Pro (001)",1274],["GPT-4 Turbo (2024-04-09)",1272],["Olmo 3.1 32B Think",1271],["DeepSeek-V2.5",1271],
+    ["Qwen2.5-72B-Instruct",1269],["Mistral Large 2 (2407)",1266],["Mistral Large (2411)",1265],["Athene 70B (0725)",1265],["GPT-4 Turbo Preview (1106)",1263],["Hunyuan Large Vision",1263],
+    ["GPT-4 Turbo Preview (0125)",1262],["Claude 3 Opus (20240229)",1262],["Llama 3.1 70B Instruct",1261],["Amazon Nova Pro 1.0",1259],["Llama 3.1 Tulu 3 70B",1256],["Claude 3.5 Haiku (20241022)",1255],
+    ["Magistral Medium (2506)",1255],["Reka Core (20240904)",1248],["Granite-4.0-H-Small",1241],["Gemini 1.5 Flash (001)",1239],["Jamba 1.5 Large",1237],["Mistral Small 24B Instruct (2501)",1234],
+    ["Gemma 2 27B IT",1231],["Qwen2.5-Coder-32B-Instruct",1230],["Command R+ (08-2024)",1229],["Amazon Nova Lite 1.0",1229],["Llama 3.1 Nemotron 51B Instruct",1228],["Gemma 2 9B IT SimPO",1227],
+    ["GLM-4 (0520)",1226],["Gemini 1.5 Flash-8B (001)",1226],["Nemotron-4 340B Instruct",1225],["Aya Expanse 32B",1224],["Llama 3 70B Instruct",1221],["Claude 3 Sonnet (20240229)",1218],
+    ["OLMo 2 32B Instruct (0325)",1218],["Reka Flash (20240904)",1218],["Phi-4",1217],["Amazon Nova Micro 1.0",1208],["Gemma 2 9B IT",1207],["GPT-4 (0314)",1206],
+    ["Command R+",1204],["Qwen2-72B-Instruct",1203],["Hunyuan Standard 256K",1202],["Claude 3 Haiku (20240307)",1195],["Llama 3.1 Tulu 3 8B",1193],["DeepSeek-Coder-V2",1191],
+    ["Ministral 8B (2410)",1191],["Command R (08-2024)",1187],["Jamba 1.5 Mini",1187],["Llama 3.1 8B Instruct",1187],["GPT-4 (0613)",1186],["Aya Expanse 8B",1185],
+    ["Mistral Large (2402)",1177],["Qwen1.5-110B-Chat",1175],["Yi 1.5 34B Chat",1173],["Reka Flash 21B (Online, 20240226)",1170],["Qwen1.5-72B-Chat",1166],["Llama 3 8B Instruct",1166],
+    ["Mistral Medium",1165],["Reka Flash 21B (20240226)",1165],["Command R",1163],["Mixtral 8x22B Instruct v0.1",1162],["QwQ-32B-Preview",1162],["InternLM2.5 20B Chat",1158],
+    ["Gemma 2 2B IT",1156],["Granite 3.1 8B Instruct",1150],["Gemini Pro (Dev API)",1149],["Zephyr ORPO 141B A35B v0.1",1144],["Phi-3 Medium 4K Instruct",1138],["Qwen1.5-32B-Chat",1137],
+    ["Starling LM 7B Beta",1132],["Mixtral 8x7B Instruct v0.1",1132],["Gemini Pro",1131],["Yi 34B Chat",1128],["Qwen1.5-14B-Chat",1128],["Granite 3.1 2B Instruct",1127],
+    ["GPT-3.5 Turbo (0125)",1125],["Tulu 2 DPO 70B",1121],["WizardLM 70B",1120],["DBRX Instruct Preview",1119],["Llama 2 70B Chat",1115],["Nous Hermes 2 Mixtral 8x7B DPO",1112],
+    ["Phi-3 Small 8K Instruct",1110],["Llama 3.2 3B Instruct",1110],["Starling LM 7B Alpha",1108],["OpenChat 3.5 (0106)",1107],["Vicuna 33B",1105],["DeepSeek LLM 67B Chat",1105],
+    ["Snowflake Arctic Instruct",1101],["Llama 2 70B SteerLM Chat",1098],["OpenChat 3.5",1097],["Granite 3.0 8B Instruct",1096],["GPT-3.5 Turbo (1106)",1094],["Gemma 1.1 7B IT",1094],
+    ["OpenHermes 2.5 Mistral 7B",1093],["Mistral 7B Instruct v0.2",1090],["Llama 2 13B Chat",1084],["Qwen1.5-7B-Chat",1083],["SOLAR 10.7B Instruct v1.0",1083],["Dolphin 2.2.1 Mistral 7B",1081],
+    ["Phi-3 Mini 4K Instruct (June 2024)",1080],["Granite 3.0 2B Instruct",1080],["WizardLM 13B",1077],["Phi-3 Mini 4K Instruct",1073],["Zephyr 7B Beta",1069],["MPT 30B Chat",1069],
+    ["Code Llama 34B Instruct",1066],["Zephyr 7B Alpha",1058],["Vicuna 13B",1058],["Code Llama 70B Instruct",1057],["Gemma 7B IT",1056],["Llama 3.2 1B Instruct",1055],
+    ["Falcon 180B Chat",1054],["Llama 2 7B Chat",1053],["Guanaco 33B",1053],["Qwen-14B-Chat",1051],["Phi-3 Mini 128K Instruct",1050],["SmolLM2 1.7B Instruct",1042],
+    ["StripedHyena Nous 7B",1038],["OLMo 7B Instruct",1032],["Vicuna 7B",1031],["PaLM 2",1027],["Mistral 7B Instruct",1024],["Gemma 1.1 2B IT",1022],
+    ["Gemma 2B IT",1002],["Qwen1.5-4B-Chat",997],["Koala 13B",990],["ChatGLM3 6B",972],["GPT4All 13B Snoozy",956],["MPT 7B Chat",955],
+    ["RWKV-4 Raven 14B",948],["ChatGLM2 6B",939],["Alpaca 13B",933],["ChatGLM 6B",918],["OpenAssistant Pythia 12B",916],["FastChat-T5 3B",894],
+    ["StableLM Tuned Alpha 7B",867],["Dolly 2.0 12B",851],["LLaMA 13B",834]
+  ] };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  if (root && typeof window !== 'undefined' && root === window) root.__cadeAiScores = api;
+})(typeof self !== 'undefined' ? self : this);

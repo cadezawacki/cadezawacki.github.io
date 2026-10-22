@@ -1,17 +1,20 @@
-/* AI — sharing plugin ("Share my AI model with my other devices"; off by
+/* AI — sharing plugin ("Share my AI models with my other devices"; off by
  * default, turned on by the AI widget's setup when you choose to share).
  *
- * While it is on and this device is set up with "This computer" (its model
- * server runs here), the AI service (ai-service.js) keeps this copy of txt
- * findable by the account's other devices and answers their questions with
- * the local model — end-to-end encrypted with the Sync key, one question at a
- * time with a short queue, every request / answer deleted once delivered. It
+ * While it is on and this device is set up with "This device" (it calls its
+ * model services itself), the AI service (ai-service.js) keeps this copy of
+ * txt findable by the account's other devices and answers their questions —
+ * with its local models, and with its cloud services (its own API keys) only
+ * when "Share cloud services too" is on — end-to-end encrypted with the Sync
+ * key, one question at a time with a short queue, every request / answer
+ * deleted once delivered. The keys never leave this device. It
  * keeps going while the tab is in the background (the phone asks while the
  * laptop's tab sits behind other windows); one tab per browser hosts (a Web
  * Lock), the others stand by.
  *
- * "Ask me each time" (AI preferences): each question shows a card here —
- * Answer / Decline — and the tab title flashes while one waits; no decision
+ * "Ask me each time" (AI preferences): each question shows a card here — who
+ * asks which model (and whether it's a paid cloud one), Answer / Decline —
+ * and the tab title flashes while one waits; no decision
  * within a minute counts as Decline.
  *
  * Lifetime is tied to the plugin's editor extension (a ViewPlugin): turning
@@ -120,15 +123,17 @@
   function ask(job) {
     css();
     return new Promise(function (resolve) {
-      var r = job.req || {}, last = '';
+      var r = job.req || {}, last = '', t = job.target || {}, ep = t.ep || {}, mname = t.model || r.model || '';
+      if (mname && ep.models) ep.models.some(function (m) { if (m.id === mname && m.name) { mname = m.name; return true; } return false; });
       for (var i = (r.messages || []).length - 1; i >= 0; i--) if (r.messages[i].role === 'user') { last = r.messages[i].content; break; }
       var q = last.split('\n--- ')[0].replace(/\s+/g, ' ').trim();
       var el = document.createElement('div');
       el.className = 'ai-ask';
       el.setAttribute('role', 'alertdialog');
       el.setAttribute('aria-label', 'AI question from ' + (r.name || 'another device'));
-      el.innerHTML = '<div class="ai-ask-t"><span class="ai-ask-ic" aria-hidden="true">✨</span><span><b>' + esc(r.name || 'Another device') + '</b> asks your model' +
-        (r.model ? ' <span class="ai-ask-m">' + esc(r.model) + '</span>' : '') + '</span></div>' +
+      el.innerHTML = '<div class="ai-ask-t"><span class="ai-ask-ic" aria-hidden="true">✨</span><span><b>' + esc(r.name || 'Another device') + '</b> asks ' +
+        (mname ? '<span class="ai-ask-m">' + esc(mname) + '</span>' : 'your model') + (ep.label ? ' · ' + esc(ep.label) : '') +
+        (ep.where === 'cloud' ? ' <span class="ai-ask-cloud">cloud — uses your API key</span>' : '') + '</span></div>' +
         (q ? '<div class="ai-ask-q">“' + esc(q.length > 140 ? q.slice(0, 140) + '…' : q) + '”</div>' : '') +
         '<div class="ai-ask-b"><button type="button" class="ai-ask-no">Decline</button><button type="button" class="ai-ask-yes">Answer</button></div>';
       var stack = document.querySelector('.ai-ask-stack');

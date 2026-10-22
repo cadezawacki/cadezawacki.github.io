@@ -1697,60 +1697,31 @@
       "id": "ai",
       "type": "widget",
       "name": "AI",
-      "description": "Your own AI model — Ollama, LM Studio or any OpenAI-compatible server on your computer — with your note as context: summarise, rewrite, continue, explain code, checklists, translate. Use it from your phone too, end-to-end encrypted through Sync; no cloud AI service",
+      "description": "Your own AI — local models (Ollama, LM Studio…) or cloud APIs with your keys (OpenAI, Anthropic, Gemini, OpenRouter…) — with your note as context: summarise, rewrite, continue, explain code, checklists, translate. Use it from your phone too: it asks your computer, end-to-end encrypted through Sync",
       "icon": "✨",
-      "tags": "ai,assistant,chat,llm,local llm,local ai,private ai,ollama,lm studio,llama,llama.cpp,mistral,gemma,qwen,deepseek,phi,openai compatible,gpt,chatgpt,summarise,summarize,rewrite,continue writing,explain code,checklist,translate,ask,prompt,model",
+      "tags": "ai,assistant,chat,llm,local llm,local ai,private ai,ollama,lm studio,llama,llama.cpp,mistral,gemma,qwen,deepseek,phi,openai,openai compatible,gpt,chatgpt,anthropic,claude,gemini,openrouter,groq,grok,together,summarise,summarize,rewrite,continue writing,explain code,checklist,translate,ask,prompt,model",
       "entry": "widgets/ai/ai.js",
       "css": "widgets/ai/ai.css",
       "precache": [
         "widgets/ai/ai-core.js",
-        "widgets/ai/ai-service.js"
+        "widgets/ai/ai-service.js",
+        "widgets/ai/ai-scores.js"
       ],
       "prefs": {
         "title": "AI",
         "fields": [
           {
             "type": "heading",
-            "label": "Model server"
-          },
-          {
-            "key": "provider",
-            "type": "select",
-            "label": "Server type",
-            "default": "ollama",
-            "hint": "Used on a device you set up with “This computer”. Your other devices reach it through Sync",
-            "options": [
-              {
-                "value": "ollama",
-                "label": "Ollama"
-              },
-              {
-                "value": "lmstudio",
-                "label": "LM Studio"
-              },
-              {
-                "value": "openai",
-                "label": "Other (OpenAI-compatible)"
-              }
-            ]
-          },
-          {
-            "key": "endpoint",
-            "type": "text",
-            "label": "Server address",
-            "default": "",
-            "maxLength": 300,
-            "placeholder": "Automatic",
-            "hint": "Empty = the usual address (Ollama http://127.0.0.1:11434, LM Studio http://127.0.0.1:1234/v1)"
+            "label": "Model"
           },
           {
             "key": "model",
             "type": "text",
             "label": "Default model",
             "default": "",
-            "maxLength": 200,
-            "placeholder": "First available",
-            "hint": "A model name such as llama3.2 or qwen2.5:7b — the AI panel lists what is installed"
+            "maxLength": 240,
+            "placeholder": "Automatic",
+            "hint": "What a note starts with — the ▾ next to the model in the AI panel switches it per note. Written as service:model, e.g. ollama:llama3.2 or anthropic:claude-opus-5-5. Services and API keys are set up in the panel (⚙) and stay on the device"
           },
           {
             "type": "heading",
@@ -1764,28 +1735,29 @@
             "min": 0,
             "max": 2,
             "step": 0.1,
-            "hint": "Lower is focused and repeatable, higher is more varied"
+            "hint": "Lower is focused and repeatable, higher is more varied. Not sent where the model only takes its default (Anthropic, OpenAI reasoning models)"
           },
           {
             "key": "maxTokens",
             "type": "number",
             "label": "Longest answer",
-            "default": 1024,
+            "default": 4096,
             "min": 32,
-            "max": 16384,
+            "max": 32768,
             "step": 32,
-            "unit": "tokens"
+            "unit": "tokens",
+            "hint": "Thinking models count their thinking in this too"
           },
           {
             "key": "contextWindow",
             "type": "number",
-            "label": "Context window",
+            "label": "Context window (local models)",
             "default": 0,
             "min": 0,
             "max": 262144,
             "step": 1024,
             "unit": "tokens",
-            "hint": "How much text the model reads at once. 0 = the server’s own setting (counted as 4096 when fitting a note in). Bigger needs more memory"
+            "hint": "How much text an Ollama model reads at once. 0 = the server’s own setting (counted as 4096 when fitting a note in; cloud models use their own window). Bigger needs more memory"
           },
           {
             "key": "system",
@@ -1810,7 +1782,7 @@
             "max": 900,
             "step": 5,
             "unit": "s",
-            "hint": "With no answer coming in. The first answer can take a while as the model loads"
+            "hint": "With no answer coming in. The first answer can take a while as a local model loads"
           },
           {
             "type": "heading",
@@ -1821,7 +1793,7 @@
             "type": "toggle",
             "label": "Share with my other devices",
             "default": false,
-            "hint": "This device answers the AI on your other devices, end-to-end encrypted with your Sync key. Same switch as Preferences → Devices → “Share my AI model with my other devices”"
+            "hint": "This device answers the AI on your other devices, end-to-end encrypted with your Sync key; they never contact a model service themselves. Same switch as Preferences → Devices → “Share my AI models with my other devices”"
           },
           {
             "key": "policy",
@@ -1839,6 +1811,26 @@
                 "label": "Ask me each time"
               }
             ]
+          },
+          {
+            "key": "shareCloud",
+            "type": "toggle",
+            "label": "Share cloud services too",
+            "default": false,
+            "showIf": "share",
+            "hint": "Lets your other devices use this device’s API keys (OpenAI, Anthropic, …) — that can cost money. Local models are shared whenever sharing is on"
+          },
+          {
+            "key": "cloudMaxTokens",
+            "type": "number",
+            "label": "Longest cloud answer for another device",
+            "default": 2048,
+            "min": 64,
+            "max": 16384,
+            "step": 64,
+            "unit": "tokens",
+            "showIf": "shareCloud",
+            "hint": "A cap on what one question from another device may spend"
           }
         ]
       }
@@ -1877,12 +1869,13 @@
     {
       "id": "ai-host",
       "type": "plugin",
-      "name": "Share my AI model with my other devices",
-      "description": "This computer answers the AI widget on your other devices (same Sync) with its own model (Ollama, LM Studio…) — end-to-end encrypted, deleted once delivered. Works while a txt tab stays open here (Chrome, Edge or Firefox). Set it up in the AI widget",
+      "name": "Share my AI models with my other devices",
+      "description": "This computer answers the AI widget on your other devices (same Sync) with its models — Ollama, LM Studio, and cloud APIs only if you allow it — end-to-end encrypted, deleted once delivered; your API keys never leave this computer. Works while a txt tab stays open here. Set it up in the AI widget",
       "entry": "widgets/ai/ai-host.js",
       "precache": [
         "widgets/ai/ai-core.js",
         "widgets/ai/ai-service.js",
+        "widgets/ai/ai-scores.js",
         "widgets/ai/ai.css"
       ],
       "settingKey": "plugins.ai-host",
