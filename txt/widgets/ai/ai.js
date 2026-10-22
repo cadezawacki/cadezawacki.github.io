@@ -1,34 +1,35 @@
-/* AI — your own model (Ollama, LM Studio or any OpenAI-compatible server on
- * your computer) with the note as context, usable from every device.
+/* AI — your own models (Ollama, LM Studio, any OpenAI-compatible server) and
+ * cloud APIs with your own keys (OpenAI, Anthropic, Gemini, OpenRouter, Groq,
+ * Mistral, DeepSeek, xAI, Together), with the note as context — usable from
+ * every device: a phone asks the computer that holds the models and keys,
+ * end-to-end encrypted through Sync, and never contacts a model service.
  *
  * SETUP (first open, and ⚙ later): three steps.
- *   ① Where does your model run? — "This computer" or "Another of my devices"
- *     (lists the account's devices that share a model right now).
- *   ② Connect — finds servers on the usual ports by itself; Test connection
- *     shows the models, the latency and a one-word answer. When the browser
- *     is blocked (CORS, Safari's localhost block, "apps on this device"
- *     permission) it shows the exact fix for THIS OS / browser, with Copy
- *     buttons, and Test again. For another device: pick it (or "whichever is
- *     sharing") and test the round trip.
- *   ③ Pick a model; on a model computer, "Share with my other devices" (turns
- *     on the ai-host plugin) and Answer automatically / Ask me each time.
- * Nothing loads or announces before that. A status line always says what will
- * answer ("● Using llama3.2 on MacBook (via Sync)"); tapping it fixes or
- * refreshes.
+ *   ① Where do your models run? — "This device" or "Another of my devices"
+ *     (lists the account's devices that share models right now).
+ *   ② This device: its services, one card each — local servers are found by
+ *     themselves; a cloud service takes an API key (a "Get a key" link; the
+ *     key stays on this device). Test connection lists the models, the
+ *     latency and a one-word answer, or shows the exact fix (CORS for THIS
+ *     OS, Safari's localhost block, a wrong key…). Another device: pick it,
+ *     test the round trip.
+ *   ③ The default model, and on a computer: "Share with my other devices"
+ *     (turns on the ai-host plugin), "Share cloud services too" (off by
+ *     default: they spend your money), which models each service shares.
  *
- * CHAT: what the model reads (Selection / This note / Another note… /
- * Nothing), quick actions (Summarise, Rewrite clearer, Continue writing,
- * Explain this code, Make a checklist, Translate to…), a streamed answer with
- * Stop, then Insert (after the cursor) / Replace selection / Copy / New note.
- * Long notes are trimmed to the model's window (start and end kept). The
- * conversation is kept per note in IndexedDB on this device (a pref; Clear).
- * Answers render as Markdown — the app's marked when loaded, else a small
- * built-in renderer — and are sanitised either way (no HTML, no images, only
- * http(s)/mailto links).
+ * CHAT: the status line is the model switcher ("● Claude Opus 5.5 ·
+ * Anthropic on MacBook ▾"): every model of this device and of the online
+ * hosts, grouped by service, searchable, recently used first, with badges —
+ * local / cloud, price per 1M tokens, context window, size, LMArena score
+ * (sources in the tooltips and the legend). The choice is kept per note; a
+ * switch keeps the conversation. Context chips, quick actions, streamed
+ * answers with Stop, Insert / Replace selection / Copy / New note, the
+ * conversation kept per note in IndexedDB (a pref). Answers render as
+ * sanitised Markdown.
  *
- * Code: ai-core.js (pure, tested), ai-service.js (routing, local server,
- * relay, hosting, Cade.ai), ai-host.js (the sharing plugin). Cade.ai is
- * registered as soon as this file loads (lazy until the service is in).
+ * Code: ai-core.js (pure, tested), ai-service.js (routing, services, relay,
+ * hosting, Cade.ai), ai-host.js (the sharing plugin), ai-scores.js (dated
+ * score snapshot). Cade.ai is registered as soon as this file loads.
  * Close removes every listener, timer and request. */
 (function () {
   'use strict';
@@ -38,13 +39,13 @@
   Cade.loadCSS('ai.css');
   var CORE_URL = BASE + 'ai-core.js', SVC_URL = BASE + 'ai-service.js';
   var ID = 'ai', PANEL_ID = 'ai-panel', CHAT_KEY = 'ai-chat:';
-  var MAX_SAVED = 60, MAX_SAVED_CHARS = 400000;
+  var MAX_SAVED = 60, MAX_SAVED_CHARS = 400000, PICKER_ROWS = 250;
 
   var META = {
     name: 'AI',
-    description: 'Your own AI model — Ollama, LM Studio or any OpenAI-compatible server on your computer — with your note as context: summarise, rewrite, continue, explain code, checklists, translate. Use it from your phone too, end-to-end encrypted through Sync; no cloud AI service',
+    description: 'Your own AI — local models (Ollama, LM Studio…) or cloud APIs with your keys (OpenAI, Anthropic, Gemini, OpenRouter…) — with your note as context: summarise, rewrite, continue, explain code, checklists, translate. Use it from your phone too: it asks your computer, end-to-end encrypted through Sync',
     icon: '✨',
-    tags: 'ai,assistant,chat,llm,local llm,local ai,private ai,ollama,lm studio,llama,llama.cpp,mistral,gemma,qwen,deepseek,phi,openai compatible,gpt,chatgpt,summarise,summarize,rewrite,continue writing,explain code,checklist,translate,ask,prompt,model'
+    tags: 'ai,assistant,chat,llm,local llm,local ai,private ai,ollama,lm studio,llama,llama.cpp,mistral,gemma,qwen,deepseek,phi,openai,openai compatible,gpt,chatgpt,anthropic,claude,gemini,openrouter,groq,grok,together,summarise,summarize,rewrite,continue writing,explain code,checklist,translate,ask,prompt,model'
   };
 
   var esc = function (s) { return Cade.escapeHtml(String(s == null ? '' : s)); };
@@ -72,7 +73,7 @@
   }
   // Cade.ai before the service is in: same calls, loading it on first use.
   function lazy(name) { return function () { var a = arguments; return loadSvc().then(function (s) { return s.api[name].apply(null, a); }); }; }
-  if (!Cade.ai) Cade.ai = { version: 1, status: lazy('status'), chat: lazy('chat'), models: lazy('models'), open: function () { open(); } };
+  if (!Cade.ai) Cade.ai = { version: 2, status: lazy('status'), chat: lazy('chat'), models: lazy('models'), open: function () { open(); } };
 
   var I = {
     gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
@@ -82,7 +83,9 @@
     insert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
     replace: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13l-3.5-3.5"/><path d="M20 16H7l3.5 3.5"/></svg>',
     note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/><path d="M12 12v6M9 15h6"/></svg>',
-    retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.5 15a9 9 0 1 0 2.1-9.4L1 10"/></svg>'
+    retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.5 15a9 9 0 1 0 2.1-9.4L1 10"/></svg>',
+    down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
   };
 
   var S = null;   // the open panel's state
@@ -161,6 +164,27 @@
     return tpl.innerHTML;
   }
 
+  // "anthropic:claude-opus-5-5" → "claude-opus-5-5 · Anthropic"
+  function prettyPref(v) {
+    var d = S.C.parsePrefModel(v);
+    if (!d.model) return 'Automatic';
+    return d.model + (d.ep ? ' · ' + S.C.providerOf(d.ep).label + (/\d$/.test(d.ep) ? ' ' + d.ep.replace(/^\D+/, '') : '') : '');
+  }
+
+  // ---- badges -------------------------------------------------------------------------------------
+  function badgesHtml(m, o) {
+    return '<span class="ai-badges">' + S.C.badges(m, o).map(function (b) {
+      return '<span class="ai-bdg ai-b-' + b.k + '" title="' + esc(b.title) + '">' + esc(b.t) + '</span>';
+    }).join('') + '</span>';
+  }
+  function legendHtml(dates) {
+    dates = dates || {};
+    return '<details class="ai-legend"' + (coarse() ? '' : ' open') + '><summary>What the badges mean</summary><span class="ai-bdg ai-b-local">Local</span> runs on your hardware, free · <span class="ai-bdg ai-b-cloud">Cloud</span> billed to an API key · ' +
+      '<span class="ai-bdg ai-b-price">$in · $out</span> price per million tokens (OpenRouter’s public list' + (dates.catalog ? ', ' + esc(dates.catalog) : '') + ') · ' +
+      '<span class="ai-bdg ai-b-ctx">200K</span> context window · <span class="ai-bdg ai-b-score">★1450</span> LMArena text score, higher is better' +
+      (dates.scores ? ' (as of ' + esc(dates.scores) + ')' : '') + ' — lmarena.ai, CC BY 4.0. No badge = no reliable data.</details>';
+  }
+
   // ---- open / close ------------------------------------------------------------------------------
   function open() {
     try { Cade.closeAllMenus(); } catch (e) {}
@@ -190,7 +214,7 @@
     s.offs.forEach(function (f) { try { f(); } catch (e) {} });
     s.offs = [];
     if (s.offHosts) { s.offHosts(); s.offHosts = null; }
-    clearTimeout(s.saveT); clearTimeout(s.ctxT); cancelAnimationFrame(s.raf);
+    clearTimeout(s.ctxT); clearTimeout(s.pkT); cancelAnimationFrame(s.raf);
     try { Cade.offEditorUpdate(onEd); } catch (e) {}
     document.removeEventListener('visibilitychange', onVis);
     if (s.unuse) s.unuse();
@@ -202,7 +226,8 @@
     }).join('');
     var langs = '<option value="" selected disabled>Translate to…</option>' + C.LANGS.map(function (l) { return '<option value="' + esc(l) + '">' + esc(l) + '</option>'; }).join('') + '<option value="?">Other…</option>';
     return '<div class="ai-root" data-view="chat">' +
-      '<button type="button" class="ai-status" data-act="status"><span class="ai-dot" aria-hidden="true"></span><span class="ai-status-t" role="status">Checking…</span><span class="ai-status-a"></span></button>' +
+      '<button type="button" class="ai-status" data-act="picker" aria-haspopup="dialog"><span class="ai-dot" aria-hidden="true"></span>' +
+        '<span class="ai-status-t" role="status">Checking…</span><span class="ai-status-a"></span><span class="ai-status-dn">' + I.down + '</span></button>' +
       '<div class="ai-chat">' +
         '<div class="ai-log" tabindex="-1" aria-live="polite"></div>' +
         '<div class="ai-dock">' +
@@ -224,6 +249,7 @@
         '</div>' +
       '</div>' +
       '<div class="ai-setup" hidden></div>' +
+      '<div class="ai-picker" hidden role="dialog" aria-label="Choose a model"></div>' +
     '</div>';
   }
 
@@ -244,9 +270,10 @@
     head.insertBefore(gear, q('.cade-panel-popbtn') || q('.cade-panel-minbtn'));
 
     S = {
-      panel: panel, q: q, svc: svc, C: C, root: q('.ai-root'), log: q('.ai-log'), input: q('.ai-in'), setupEl: q('.ai-setup'),
+      panel: panel, q: q, svc: svc, C: C, root: q('.ai-root'), log: q('.ai-log'), input: q('.ai-in'), setupEl: q('.ai-setup'), pkEl: q('.ai-picker'),
       view: 'chat', wiz: null, msgs: [], room: currentRoom(), ctx: 'auto', ctxRoom: '', busy: null, route: null, routeGen: 0, histGen: 0,
-      offs: [], offHosts: null, unuse: svc.use(), raf: 0, saveT: 0, ctxT: 0, copies: [], fixOs: null, hosts: null
+      pick: svc.notePick(currentRoom()), pk: null, pkT: 0,
+      offs: [], offHosts: null, unuse: svc.use(), raf: 0, ctxT: 0, copies: [], fixOs: null, hosts: null
     };
     panel._onClose = cleanup;
     panel.addEventListener('click', onClick);
@@ -256,9 +283,10 @@
     panel.addEventListener('pointerdown', onPickOpen);
     panel.addEventListener('focusin', onPickOpen);
     S.offs.push(svc.on('host', function () { if (S) { paintStatus(); if (S.view === 'setup' && S.wiz && S.wiz.step === 3) renderSetup(); } }));
+    S.offs.push(svc.on('badges', function () { if (!S) return; if (S.pk) loadPicker(); if (S.view === 'chat') refreshRoute(); }));
     S.offs.push(svc.on('prefs', function (k) {
       if (!S) return;
-      if (k === 'provider' || k === 'endpoint' || k === 'model') refreshRoute();
+      if (k === 'model') refreshRoute();
       if (k === 'history') loadHistory();
       paintCtx();
     }));
@@ -269,7 +297,7 @@
     loadHistory();
   }
 
-  // ---- status ----------------------------------------------------------------------------------------
+  // ---- status line = the model switcher ---------------------------------------------------------------
   function hostSuffix() {
     var h = S.svc.host.status();
     if (!h.enabled || S.svc.local().role !== 'local') return '';
@@ -279,27 +307,31 @@
     if (h.phase === 'starting' || h.phase === 'retry') return ' · starting to share…';
     return '';
   }
+  function remoteLine(hostName) {
+    return 'This device never contacts the model service — questions go end-to-end encrypted through Sync to ' + (hostName || 'your computer') + ', which makes the call.';
+  }
   function paintStatus() {
     if (!S) return;
-    var r = S.route, el = S.q('.ai-status'), cls = 'wait', t = 'Checking…', a = '';
+    var r = S.route, el = S.q('.ai-status'), cls = 'wait', html = 'Checking…', a = '', title = 'Choose the model';
     if (r) {
-      if (r.available && r.via === 'local') { cls = 'ok'; t = 'Using ' + r.model + ' on this device (' + r.server.label + ')' + hostSuffix(); }
-      else if (r.available && r.via === 'host') {
-        var busy = r.host.busy && !S.busy;   // busy with our own question isn't news
-        cls = busy ? 'busy' : 'ok'; t = 'Using ' + r.model + ' on ' + r.host.name + ' (via Sync)' + (busy ? ' · busy' : '');
-      }
-      else { cls = 'off'; t = (r.error && r.error.info && r.error.info.title) || 'Not available'; a = 'Fix'; }
+      if (r.available) {
+        var busy = r.via === 'host' && r.host && r.host.busy && !S.busy;
+        cls = busy ? 'busy' : 'ok';
+        html = '<b class="ai-mname">' + esc(r.model.name || r.model.id) + '</b><span class="ai-msub"> · ' + esc(r.group.label) +
+          (r.via === 'host' ? ' on ' + esc(r.host.name) + (busy ? ' · busy' : '') : ' · this device' + esc(hostSuffix())) + '</span>';
+        if (r.via === 'host') title = remoteLine(r.host.name) + ' Tap to choose another model.';
+      } else { cls = 'off'; html = esc((r.error && r.error.info && r.error.info.title) || 'Not available'); a = /^(not-shared|model)$/.test(r.reason) ? 'Choose' : 'Fix'; }
     }
     el.className = 'ai-status ai-s-' + cls;
-    el.querySelector('.ai-status-t').textContent = t;
+    el.querySelector('.ai-status-t').innerHTML = html;
     el.querySelector('.ai-status-a').textContent = a;
-    el.title = a ? 'Show how to fix this' : 'Check again';
+    el.title = title;
   }
-  function refreshRoute() {
+  function refreshRoute(force) {
     if (!S) return;
     var g = ++S.routeGen;
     if (!S.route) paintStatus();
-    S.svc.route().then(function (r) {
+    S.svc.route(S.pick || null, force).then(function (r) {
       if (!S || g !== S.routeGen) return;
       S.route = r;
       paintStatus();
@@ -310,19 +342,167 @@
     if (on && !S.offHosts) S.offHosts = S.svc.watchHosts(function (list) {
       if (!S) return;
       S.hosts = list;
-      if (S.view === 'setup') { if (S.wiz && (S.wiz.step === 1 || (S.wiz.step === 2 && S.wiz.where === 'remote') || (S.wiz.step === 3 && S.wiz.where === 'remote'))) renderSetup(); }
+      if (S.view === 'setup') { if (S.wiz && (S.wiz.step === 1 || (S.wiz.step === 2 && S.wiz.where === 'remote'))) renderSetup(); }
       else refreshRoute();
+      if (S.pk && S.pk.mode !== 'allow') loadPicker();
     });
     if (!on && S.offHosts) { S.offHosts(); S.offHosts = null; }
   }
 
+  // ---- the model picker (chat: per note · default: setup · allow: what a service shares) ----------------
+  function openPicker(mode, opts) {
+    S.pk = { mode: mode, opts: opts || {}, q: '', groups: null, loading: true, sel: null };
+    if (mode === 'allow') {
+      var ep = S.svc.endpoint(opts.ep);
+      S.pk.sel = ep && ep.allow.length ? ep.allow.slice() : null;
+    }
+    S.pkEl.hidden = false;
+    S.root.classList.add('ai-pk-open');
+    renderPicker();
+    loadPicker();
+    var qi = S.pkEl.querySelector('.ai-pk-q');
+    if (qi && !coarse()) qi.focus();
+  }
+  function closePicker() {
+    if (!S || !S.pk) return;
+    S.pk = null;
+    S.pkEl.hidden = true;
+    S.pkEl.innerHTML = '';
+    S.root.classList.remove('ai-pk-open');
+  }
+  function loadPicker() {
+    var pk = S.pk, svc = S.svc;
+    if (!pk) return;
+    var p;
+    if (pk.mode === 'allow') p = svc.localGroups(false, true).then(function (g) { return g.filter(function (x) { return x.ep === pk.opts.ep; }); });
+    else if (pk.mode === 'default' && S.wiz && S.wiz.where === 'local') p = svc.localGroups(false, true);
+    else if (pk.mode === 'default') p = Promise.resolve(svc.hostGroups(S.hosts || []));
+    else p = svc.available(false).then(function (av) { return av.groups; });
+    p.then(function (groups) {
+      if (!S || S.pk !== pk) return;
+      pk.groups = groups; pk.loading = false;
+      renderPicker();
+    });
+  }
+  function curRef() {
+    var pk = S.pk;
+    if (pk.mode === 'default') return S.wiz ? S.wiz.model : '';
+    var r = S.route;
+    return r && r.available ? S.C.refKey(r.group.src, r.group.ep, r.model.id) : '';
+  }
+  function pkRow(g, m, cur, mode) {
+    var ref = S.C.refKey(g.src, g.ep, m.id), on, extra = '';
+    if (mode === 'allow') {
+      on = !S.pk.sel || S.pk.sel.indexOf(m.id) >= 0;
+      extra = '<span class="ai-pk-ck" aria-hidden="true">' + (on ? '☑' : '☐') + '</span>';
+    } else on = mode === 'default' ? cur === g.ep + ':' + m.id : cur === ref;
+    return '<button type="button" class="ai-pk-row' + (on ? ' on' : '') + '" role="option" aria-selected="' + on + '" data-pk="' + esc(ref) + '">' + extra +
+      '<span class="ai-pk-main"><span class="ai-pk-n">' + esc(m.name || m.id) + '</span>' + (m.name && m.name !== m.id ? '<span class="ai-pk-id">' + esc(m.id) + '</span>' : '') + '</span>' +
+      badgesHtml(m, { catalogDate: g.catalogDate || S.svc.catalogDate() }) + '</button>';
+  }
+  function renderPicker() {
+    var pk = S.pk, C = S.C;
+    if (!pk) return;
+    var role = S.svc.local().role, head, body = '', foot = '', q = pk.q.trim().toLowerCase(), cur = curRef(), shown = 0, total = 0, scoresDate = '', catDate = S.svc.catalogDate();
+    var title = pk.mode === 'allow' ? 'Models ' + esc((S.svc.endpoint(pk.opts.ep) || {}).label || '') + ' shares' : pk.mode === 'default' ? 'Default model' : 'Choose a model';
+    head = '<div class="ai-pk-head"><span class="ai-pk-title">' + title + '</span><button type="button" class="ai-pk-x" data-act="pk-close" aria-label="Close">×</button></div>' +
+      '<input class="ai-pk-q" type="search" placeholder="Search models, services, devices" aria-label="Search models" value="' + esc(pk.q) + '" autocomplete="off" spellcheck="false">';
+    if (pk.loading && !pk.groups) body = '<div class="ai-busyline"><span class="ai-spin"></span>Loading models…</div>';
+    else {
+      var groups = pk.groups || [], match = function (g, m) {
+        if (!q) return true;
+        return (m.name + ' ' + m.id + ' ' + g.label + ' ' + g.srcName + ' ' + (m.where || '')).toLowerCase().indexOf(q) >= 0;
+      };
+      if (pk.mode === 'allow') {
+        var g0 = groups[0];
+        body += '<label class="ai-switch ai-pk-all"><input type="checkbox" class="ai-pk-allcb"' + (!pk.sel ? ' checked' : '') + '><span class="ai-switch-ui" aria-hidden="true"></span><span><b>Share every model</b><small>Or pick the ones your other devices may use</small></span></label>';
+        if (g0) g0.models.forEach(function (m) { total++; if (match(g0, m) && shown < PICKER_ROWS) { shown++; body += pkRow(g0, m, '', 'allow'); } });
+      } else {
+        if (pk.mode === 'default') body += '<button type="button" class="ai-pk-row' + (!cur ? ' on' : '') + '" data-pk=""><span class="ai-pk-main"><span class="ai-pk-n">Automatic</span><span class="ai-pk-id">' +
+          (pk.opts.where === 'remote' ? 'what the sharing device picks' : 'the first available model') + '</span></span></button>';
+        // recently used, then each service
+        var rec = pk.mode === 'chat' ? S.svc.recent() : [], recRows = '';
+        rec.forEach(function (ref) {
+          var r = C.parseRef(ref);
+          if (!r) return;
+          groups.some(function (g) {
+            if (g.src !== r.src || g.ep !== r.ep || !g.ok) return false;
+            var m = g.models.filter(function (x) { return x.id === r.model; })[0];
+            if (m && match(g, m)) recRows += pkRow(g, m, cur, pk.mode).replace('<span class="ai-pk-main">', '<span class="ai-pk-main"><span class="ai-pk-via">' + esc(g.label + (g.src === 'local' ? '' : ' · ' + g.srcName)) + '</span>');
+            return !!m;
+          });
+        });
+        if (recRows && !q) body += '<div class="ai-pk-g">Recently used</div>' + recRows;
+        groups.forEach(function (g) {
+          if (g.scoresDate) scoresDate = g.scoresDate;
+          if (g.catalogDate) catDate = g.catalogDate;
+          var rows = '';
+          g.models.forEach(function (m) { total++; if (match(g, m) && shown < PICKER_ROWS) { shown++; rows += pkRow(g, m, cur, pk.mode); } });
+          var gh = '<div class="ai-pk-g"><span>' + esc(g.label) + '</span><span class="ai-pk-gs">' + (g.src === 'local' ? 'this device' : 'on ' + esc(g.srcName)) + ' · ' + (g.where === 'cloud' ? 'cloud' : 'local') + '</span></div>';
+          if (!g.ok) { if (!q) body += gh + '<div class="ai-pk-err">' + esc((g.error && g.error.info && g.error.info.title) || 'Not answering') + ' — <button type="button" class="ai-link" data-act="setup2">Fix</button></div>'; return; }
+          if (rows) body += gh + rows + (g.more && !q ? '<div class="ai-pk-more">+' + g.more + ' more not shared — choose them on ' + esc(g.srcName) + '</div>' : '');
+        });
+        if (!groups.length) body += '<div class="ai-pk-empty">' + (role === 'local' ? 'No services set up yet.' : 'None of your devices is sharing a model right now.') +
+          ' <button type="button" class="ai-link" data-act="setup2">Open setup</button></div>';
+      }
+      if (q && !shown) body += '<div class="ai-pk-empty">No model matches “' + esc(pk.q) + '”.</div>';
+      if (shown >= PICKER_ROWS && total > shown) body += '<div class="ai-pk-more">Showing ' + shown + ' of ' + total + ' — type to narrow it down.</div>';
+      var sc = S.svc.badges().scores;
+      if (!scoresDate && sc) scoresDate = sc.date;
+    }
+    if (pk.mode === 'allow') foot = '<div class="ai-pk-btns"><button type="button" class="ai-btn" data-act="pk-close">Cancel</button><button type="button" class="ai-btn ai-pri" data-act="pk-save">Save</button></div>';
+    else {
+      var r = S.route;
+      if (pk.mode === 'chat' && role !== 'local') foot += '<div class="ai-guard">' + I.lock + '<span>' + esc(remoteLine(r && r.host ? r.host.name : '')) + '</span></div>';
+      if (pk.mode === 'chat') {
+        var d = S.svc.pref('model');
+        foot += '<div class="ai-pk-def">Default for new notes: <b>' + esc(prettyPref(d)) + '</b>' +
+          (r && r.available && d !== r.group.ep + ':' + r.model.id ? ' · <button type="button" class="ai-link" data-act="pk-default">Make this one the default</button>' : '') +
+          ' · <button type="button" class="ai-link" data-act="setup2">Services…</button></div>';
+      }
+      foot += legendHtml({ scores: scoresDate, catalog: catDate });
+    }
+    var y = 0, list = S.pkEl.querySelector('.ai-pk-list');
+    if (list) y = list.scrollTop;
+    var hadFocus = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('ai-pk-q');
+    S.pkEl.innerHTML = head + '<div class="ai-pk-list" role="listbox">' + body + '</div><div class="ai-pk-foot">' + foot + '</div>';
+    list = S.pkEl.querySelector('.ai-pk-list');
+    if (list) list.scrollTop = y;
+    if (hadFocus) { var qi = S.pkEl.querySelector('.ai-pk-q'); qi.focus(); try { qi.setSelectionRange(qi.value.length, qi.value.length); } catch (e) {} }
+  }
+  function pickerChoose(ref) {
+    var pk = S.pk, C = S.C;
+    if (pk.mode === 'allow') {
+      var r = C.parseRef(ref), all = ((pk.groups || [])[0] || { models: [] }).models.map(function (m) { return m.id; });
+      if (!pk.sel) pk.sel = all.slice();
+      var i = pk.sel.indexOf(r.model);
+      if (i >= 0) pk.sel.splice(i, 1); else pk.sel.push(r.model);
+      if (pk.sel.length === all.length) pk.sel = null;
+      renderPicker();
+      return;
+    }
+    if (pk.mode === 'default') {
+      var d = ref ? C.parseRef(ref) : null;
+      S.wiz.model = d ? d.ep + ':' + d.model : '';
+      closePicker();
+      renderSetup();
+      return;
+    }
+    S.pick = ref;
+    S.svc.setNotePick(S.room, ref);
+    closePicker();
+    S.route = null;
+    refreshRoute();
+  }
+
   // ---- views -----------------------------------------------------------------------------------------
   function showChat() {
+    closePicker();
     S.view = 'chat'; S.wiz = null;
     S.root.dataset.view = 'chat';
     S.setupEl.hidden = true;
     S.q('.ai-chat').hidden = false;
-    watchHosts(S.svc.local().role !== 'local');
+    watchHosts(S.svc.synced());
     refreshRoute();
     paintCtx();
     renderLog();
@@ -350,7 +530,7 @@
     if (!S || !S.svc.pref('history') || !Cade.idbStore) return;
     var keep = msgs.filter(function (m) { return !m.pending && (m.content || m.err); }).map(function (m) {
       var o = { role: m.role, content: m.content, at: m.at };
-      ['show', 'ctxLabel', 'action', 'model', 'host', 'via', 'ms', 'stopped', 'reason'].forEach(function (k) { if (m[k]) o[k] = m[k]; });
+      ['show', 'ctxLabel', 'action', 'model', 'modelName', 'epLabel', 'host', 'via', 'ms', 'stopped', 'reason'].forEach(function (k) { if (m[k]) o[k] = m[k]; });
       if (m.sel) o.sel = m.sel;
       if (m.err) o.err = { code: m.err.code, title: m.err.title };
       return o;
@@ -363,17 +543,19 @@
   function emptyHtml() {
     var r = S.route, lines = '';
     if (r && !r.available && r.error && r.error.info) lines = fixHtml(r.error.info, { setup: true });
+    else if (r && r.available && r.via === 'host') lines = '<div class="ai-guard">' + I.lock + '<span>' + esc(remoteLine(r.host.name)) + '</span></div>';
     return '<div class="ai-empty"><div class="ai-empty-ic" aria-hidden="true">✨</div>' +
-      '<p><b>Ask your own model about this note.</b></p>' +
-      '<p>Choose what it reads below, then tap an action or type a question. Answers stay on your devices.</p>' + lines + '</div>';
+      '<p><b>Ask your AI about this note.</b></p>' +
+      '<p>Choose what it reads below, then tap an action or type a question. The ▾ above switches the model.</p>' + lines + '</div>';
   }
   function metaHtml(m) {
     if (m.role === 'user') return m.ctxLabel ? '<div class="ai-meta">' + esc(m.ctxLabel) + '</div>' : '';
     var bits = [];
-    if (m.model) bits.push(esc(m.model));
+    if (m.model) bits.push(esc(m.modelName || m.model) + (m.epLabel ? ' · ' + esc(m.epLabel) : ''));
     if (m.via === 'host' && m.host) bits.push('on ' + esc(m.host));
     if (m.ms) bits.push(esc(S.C.fmtMs(m.ms)));
     if (m.reason === 'length') bits.push('cut off at the length limit');
+    if (m.reason === 'refusal') bits.push('the model declined');
     if (m.stopped) bits.push('stopped');
     if (m.pending && m.note) bits.push('<span class="ai-note">' + esc(m.note) + '</span>');
     return bits.length ? '<div class="ai-meta">' + bits.join(' · ') + '</div>' : '';
@@ -396,7 +578,8 @@
     var err = '';
     if (m.err) {
       var info = m.err.info || { title: m.err.title || 'Something went wrong', steps: [] };
-      err = fixHtml(info, { retry: i, setup: /^(unreachable|cors|mixed|lna|auth|notfound|nosync|not-setup|host-offline)$/.test(m.err.code) });
+      err = fixHtml(info, { retry: i, pick: /^(not-shared|model|host-unready|refusal)$/.test(m.err.code),
+        setup: /^(unreachable|cors|mixed|lna|auth|key-missing|billing|notfound|nosync|not-setup|host-offline)$/.test(m.err.code) });
     }
     return '<div class="ai-msg ai-a' + (m.pending ? ' ai-live' : '') + '" data-i="' + i + '"><div class="ai-md">' + body + '</div>' + err + metaHtml(m) + toolsHtml(m, i) + '</div>';
   }
@@ -437,6 +620,11 @@
 
   // ---- context --------------------------------------------------------------------------------------
   function ctxMode() { return S.ctx !== 'auto' ? S.ctx : (selection() ? 'sel' : 'none'); }
+  function budgetNow() {
+    var r = S.route;
+    return S.C.budget({ contextWindow: r && r.available && r.group.provider === 'ollama' ? S.svc.pref('contextWindow') : 0, maxTokens: S.svc.pref('maxTokens'),
+      modelCtx: r && r.available ? r.model.ctx : 0 });
+  }
   function paintCtx() {
     if (!S || S.view !== 'chat') return;
     var mode = ctxMode(), sel = selection();
@@ -449,7 +637,7 @@
     sc.textContent = sel ? 'Selection · ' + words(sel.text) + (words(sel.text) === 1 ? ' word' : ' words') : 'Selection';
     sc.classList.toggle('ai-dim', !sel);
     S.q('.ai-chip[data-ctx="room"] .ai-pick-t').textContent = mode === 'room' && S.ctxRoom ? '📄 ' + S.ctxRoom : 'Another note…';
-    var info = '', B = S.C.budget({ contextWindow: S.svc.pref('contextWindow'), maxTokens: S.svc.pref('maxTokens') });
+    var info = '', B = budgetNow();
     if (mode === 'sel' && sel) info = 'Reads your selection (~' + kTok(S.C.estTokens(sel.text)) + ' tokens)';
     else if (mode === 'note') {
       var t = 0;
@@ -505,7 +693,7 @@
       if (!S || S.busy || S.room !== room) return;
       if (o.action && !ctx) { toast('Write or select some text first', 'info'); return; }
       var hist = msgs.filter(function (m) { return !m.err && !m.pending && m.content; }).map(function (m) { return { role: m.role, content: m.content }; });
-      var a = C.assemble({ system: svc.pref('system'), history: hist, instruction: text, ctx: ctx, budget: C.budget({ contextWindow: svc.pref('contextWindow'), maxTokens: svc.pref('maxTokens') }) });
+      var a = C.assemble({ system: svc.pref('system'), history: hist, instruction: text, ctx: ctx, budget: budgetNow() });
       var um = { role: 'user', content: a.user, show: o.show || text, ctxLabel: ctx ? 'Read: ' + ctx.short + (a.trimmed ? ' — trimmed to fit' : '') : '', action: o.action || '', at: Date.now() };
       if (ctx && ctx.sel) um.sel = ctx.sel;
       if (!o.keepInput) { S.input.value = ''; grow(); }
@@ -521,20 +709,26 @@
     paintBusy();
     renderLog();
     S.svc.chat(messages, {
+      model: S.pick || null,
       signal: ctl.signal,
-      onStart: function (i) { bm.model = i.model; bm.host = i.host || ''; bm.via = i.via; bm.note = i.via === 'host' ? 'Sending to ' + i.host + '…' : 'Waiting for the model… (the first answer loads it)'; scheduleLive(); },
+      onStart: function (i) {
+        bm.model = i.model; bm.modelName = i.modelName; bm.epLabel = i.epLabel; bm.host = i.host || ''; bm.via = i.via;
+        bm.note = i.via === 'host' ? 'Sending to ' + i.host + '…' : (i.provider === 'ollama' || i.provider === 'lmstudio' ? 'Waiting for the model… (the first answer loads it)' : 'Waiting for ' + i.epLabel + '…');
+        scheduleLive();
+      },
       onToken: function (d, full) { bm.content = full; bm.note = ''; scheduleLive(); },
       onThinking: function () { if (!bm.content) { bm.note = 'Thinking…'; scheduleLive(); } },
       onEvent: function (m) {
         if (bm.content) return;
         if (m.t === 'a') bm.note = m.pos > 0 ? 'Waiting in line (' + m.pos + ' ahead)…' : 'Working on it…';
         else if (m.t === 'w') bm.note = 'Waiting for ' + (bm.host || 'the other device') + ' to say yes…';
-        else if (m.t === 's') { bm.model = m.model || bm.model; bm.note = 'Waiting for the model… (the first answer loads it)'; }
+        else if (m.t === 's') { bm.model = m.model || bm.model; bm.note = 'Waiting for the model…'; }
         else if (m.t === 'k') bm.note = 'Thinking…';
         scheduleLive();
       }
     }).then(function (r) {
       bm.content = r.text; bm.ms = r.ms; bm.reason = r.reason; bm.model = r.model || bm.model;
+      if (r.reason === 'refusal' && !stripThink(r.text).trim()) bm.err = { code: 'refusal', info: S && S.svc.decorate(S.C.AiError('refusal', 'declined')).info, title: 'The model declined this request' };
     }, function (e) {
       bm.content = (e && e.partial) || bm.content;
       if (e && e.code === 'aborted') bm.stopped = true;
@@ -546,8 +740,7 @@
       paintBusy();
       if (S.room === room) renderLog();
       save(room, msgs);
-      if (bm.err && /^(unreachable|cors|mixed|lna|model|host-offline|host-silent|host-unready|nosync)$/.test(bm.err.code)) refreshRoute();
-      else if (bm.model && S.route && S.route.available && S.route.model !== bm.model) refreshRoute();
+      if (bm.err && /^(unreachable|cors|mixed|lna|model|auth|key-missing|host-offline|host-silent|host-unready|not-shared|nosync)$/.test(bm.err.code)) refreshRoute(true);
     });
   }
   function retry(i) {
@@ -557,7 +750,7 @@
     var svc = S.svc;
     var hist = S.msgs.slice(0, i - 1).filter(function (m) { return !m.err && m.content; }).map(function (m) { return { role: m.role, content: m.content }; });
     // the stored question already holds its context; keep the history that fits
-    var a = S.C.assemble({ system: svc.pref('system'), history: hist, instruction: um.content, ctx: null, budget: S.C.budget({ contextWindow: svc.pref('contextWindow'), maxTokens: svc.pref('maxTokens') }) });
+    var a = S.C.assemble({ system: svc.pref('system'), history: hist, instruction: um.content, ctx: null, budget: budgetNow() });
     run(um, a.messages, S.room, S.msgs);
   }
   function action(id, lang) {
@@ -630,10 +823,11 @@
         return '<div class="ai-cmd">' + (s.label ? '<span class="ai-cmd-l">' + esc(s.label) + '</span>' : '') + '<code>' + esc(s.cmd) + '</code>' +
           '<button type="button" class="ai-copy" data-copy="' + k + '">' + I.copy + '<span>Copy</span></button></div>';
       }
+      if (s.link) return '<p><a class="ai-ext" href="' + esc(S.C.safeUrl(s.link)) + '" target="_blank" rel="noopener noreferrer">' + esc(s.label || s.link) + ' ↗</a></p>';
       return '<p>' + esc(s.t) + '</p>';
     }).join('');
   }
-  // info: C.explain(...) result. o: { retry: msg index, setup: bool, again: bool }
+  // info: C.explain(...) result. o: { retry: msg index, setup: bool, again: ep id }
   function fixHtml(info, o) {
     o = o || {};
     var h = '<div class="ai-fix" role="alert"><div class="ai-fix-t">' + esc(info.title) + '</div>' + (info.text ? '<p>' + esc(info.text) + '</p>' : '');
@@ -645,21 +839,23 @@
     }
     h += stepsHtml(info.steps);
     var btns = '';
-    if (o.again) btns += '<button type="button" class="ai-btn ai-pri" data-act="w-test">Test again</button>';
+    if (o.again) btns += '<button type="button" class="ai-btn ai-pri" data-act="ep-test" data-ep="' + esc(o.again) + '">Test again</button>';
     if (o.retry != null) btns += '<button type="button" class="ai-btn" data-act="retry" data-i="' + o.retry + '">' + I.retry + '<span>Try again</span></button>';
+    if (o.pick) btns += '<button type="button" class="ai-btn" data-act="picker">' + I.down + '<span>Choose another model</span></button>';
     if (o.setup) btns += '<button type="button" class="ai-btn" data-act="setup2">Open setup</button>';
     return h + (btns ? '<div class="ai-btns">' + btns + '</div>' : '') + '</div>';
   }
 
   // ---- setup wizard ------------------------------------------------------------------------------------
   function showSetup(step, first) {
-    var svc = S.svc, lc = svc.local(), s = svc.server();
+    var svc = S.svc, lc = svc.local();
+    closePicker();
     if (S.wiz && S.wiz.abort) S.wiz.abort.abort();
     S.wiz = {
       step: step || 1, first: !!first, where: lc.role || (phoneish() ? 'remote' : 'local'),
-      provider: s.provider, url: String(svc.pref('endpoint') || ''), key: lc.key || '',
-      phase: '', det: null, test: null, err: null, model: String(svc.pref('model') || ''), models: [],
-      share: lc.role === 'local' && !!svc.pref('share'), policy: svc.pref('policy') || 'auto', host: lc.host || '', htest: null, gen: 0, abort: null
+      open: '', tests: {}, det: null, detecting: false, model: String(svc.pref('model') || ''),
+      share: lc.role === 'local' && !!svc.pref('share'), shareCloud: !!svc.pref('shareCloud'), policy: svc.pref('policy') || 'auto',
+      host: lc.host || '', htest: null, phase: '', gen: 0, abort: null
     };
     S.view = 'setup';
     S.root.dataset.view = 'setup';
@@ -667,9 +863,10 @@
     S.setupEl.hidden = false;
     watchHosts(true);
     renderSetup();
+    if (S.wiz.step === 2) enterStep2();
   }
   function stepsBar(W) {
-    var names = ['Where', 'Connect', 'Model'];
+    var names = ['Where', W.where === 'remote' ? 'Device' : 'Services', 'Model'];
     return '<ol class="ai-steps-bar">' + names.map(function (n, i) {
       return '<li class="' + (i + 1 === W.step ? 'on' : i + 1 < W.step ? 'done' : '') + '"><span>' + (i + 1) + '</span>' + n + '</li>';
     }).join('') + '</ol>';
@@ -679,9 +876,10 @@
       (next ? '<button type="button" class="ai-btn ai-pri" data-act="' + next + '"' + (nextOff ? ' disabled' : '') + '>' + esc(nextLabel || 'Next') + '</button>' : '') + '</div>';
   }
   function hostLine(h) {
-    var bits = [h.models.length + (h.models.length === 1 ? ' model' : ' models')];
-    if (h.model) bits.push(h.model);
-    if (!h.ok) bits.push('its model server isn’t answering');
+    var n = 0, cloud = 0;
+    h.providers.forEach(function (p) { n += p.models.length; if (p.where === 'cloud') cloud++; });
+    var bits = [n + (n === 1 ? ' model' : ' models') + ' · ' + h.providers.map(function (p) { return p.label; }).join(', ')];
+    if (!h.ok) bits.push('its model services aren’t answering');
     else if (h.busy) bits.push('busy');
     if (h.policy === 'ask') bits.push('asks first');
     return bits.join(' · ');
@@ -693,37 +891,36 @@
     var hosts = S.hosts || [];
     h += '<div class="ai-wiz">' + stepsBar(W);
     if (W.step === 1) {
-      var local = '<button type="button" class="ai-card' + (W.where === 'local' ? ' on' : '') + '" data-where="local"><span class="ai-card-ic" aria-hidden="true">💻</span><span class="ai-card-b"><b>This computer</b>' +
-        '<span>Ollama, LM Studio or another model server runs here</span>' +
-        (e.secure && e.browser === 'safari' && !e.ios ? '<span class="ai-warn">Safari can’t connect to it — use Chrome, Edge or Firefox for this part</span>' : '') +
-        (e.ios || e.os === 'android' ? '<span class="ai-faint">Phones usually use another device’s model</span>' : '') + '</span></button>';
+      var local = '<button type="button" class="ai-card' + (W.where === 'local' ? ' on' : '') + '" data-where="local"><span class="ai-card-ic" aria-hidden="true">💻</span><span class="ai-card-b"><b>This device</b>' +
+        '<span>Ollama or LM Studio on this computer, and/or cloud services with your API key (OpenAI, Anthropic, Gemini, OpenRouter…)</span>' +
+        (e.secure && e.browser === 'safari' && !e.ios ? '<span class="ai-warn">Safari can’t reach models on this Mac (cloud services work) — Chrome, Edge or Firefox can</span>' : '') +
+        (e.ios || e.os === 'android' ? '<span class="ai-faint">On a phone, usually only cloud services — or use your computer’s</span>' : '') + '</span></button>';
       var hl = hosts.length ? '<span class="ai-ok">● ' + esc(hosts.map(function (x) { return x.name; }).slice(0, 2).join(', ')) + (hosts.length > 1 ? ' are' : ' is') + ' sharing now</span>'
         : (svc.synced() ? '<span class="ai-faint">None of your devices is sharing yet</span>' : '<span class="ai-faint">Needs Sync on both devices</span>');
       var remote = '<button type="button" class="ai-card' + (W.where === 'remote' ? ' on' : '') + '" data-where="remote"><span class="ai-card-ic" aria-hidden="true">📱</span><span class="ai-card-b"><b>Another of my devices</b>' +
-        '<span>Use the model on your computer from here, end-to-end encrypted through Sync</span>' + hl + '</span></button>';
-      h += '<h3 class="ai-h">Where does your model run?</h3><p class="ai-sub">Your own AI: questions go to your model, never to a cloud AI service.</p>' +
+        '<span>Ask your computer’s models from here — end-to-end encrypted through Sync; this device never contacts a model service</span>' + hl + '</span></button>';
+      h += '<h3 class="ai-h">Where do your models run?</h3><p class="ai-sub">Your own AI: your models and your keys.</p>' +
         '<div class="ai-cards">' + (phoneish() ? remote + local : local + remote) + '</div>';
       h += '<div class="ai-wiz-foot">' + (!W.first ? '<button type="button" class="ai-link" data-act="w-cancel">Cancel</button>' : '<span></span>') +
         '<button type="button" class="ai-link" data-act="prefs">All preferences…</button>' +
         (svc.local().role ? '<button type="button" class="ai-link ai-danger" data-act="w-off">Turn AI off on this device</button>' : '') + '</div>';
     } else if (W.step === 2 && W.where === 'local') {
-      var pre = C.presetOf(W.provider);
-      h += '<h3 class="ai-h">Connect to your model server</h3>' +
-        '<div class="ai-seg" role="radiogroup" aria-label="Server type">' + ['ollama', 'lmstudio', 'openai'].map(function (p) {
-          var on = W.provider === p;
-          return '<button type="button" role="radio" aria-checked="' + on + '" class="' + (on ? 'on' : '') + '" data-prov="' + p + '">' + (p === 'openai' ? 'Other' : esc(C.PRESETS[p].label)) + '</button>';
-        }).join('') + '</div>' +
-        '<label class="ai-field"><span>Server address</span><input class="ai-url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="' + esc(pre.url) + '" value="' + esc(W.url) + '"></label>' +
-        '<div class="ai-btns"><button type="button" class="ai-btn" data-act="w-detect"' + (W.phase === 'detect' ? ' disabled' : '') + '>Find it automatically</button>' +
-        '<button type="button" class="ai-btn ai-pri" data-act="w-test"' + (W.phase === 'test' ? ' disabled' : '') + '>Test connection</button></div>' +
-        '<div class="ai-result">' + resultHtml(W) + '</div>' +
-        '<details class="ai-adv"' + (W.key || (W.err && W.err.code === 'auth') ? ' open' : '') + '><summary>Advanced</summary>' +
-        '<label class="ai-field"><span>API key <small>optional — kept on this device only, never synced</small></span><input class="ai-key" type="password" autocomplete="off" spellcheck="false" value="' + esc(W.key) + '"></label></details>' +
-        navHtml('w-back', 'w-next', 'Next', !(W.test && W.test.ok));
+      var eps = svc.endpoints(true), anyOk = eps.some(function (x) { var t = W.tests[x.id]; return x.on && t && t.res; });
+      h += '<h3 class="ai-h">Connect your model services</h3><p class="ai-sub">Use one or several. Addresses and API keys stay on this device — never synced, never sent to your other devices.</p>';
+      if (W.detecting) h += '<div class="ai-busyline"><span class="ai-spin"></span>Looking for Ollama, LM Studio and other servers on this computer…</div>' + lnaHint();
+      if (W.det && W.det.mixed && !eps.some(function (x) { return x.where === 'cloud'; })) h += fixHtml(C.explain('mixed', e), {});
+      h += '<div class="ai-eps">' + eps.map(epCardHtml).join('') + '</div>';
+      if (!eps.length && !W.detecting) h += '<p class="ai-faint ai-c">Nothing set up yet — add a service below.</p>';
+      h += '<div class="ai-add"><div class="ai-add-h">On this computer <button type="button" class="ai-link" data-act="w-detect"' + (W.detecting ? ' disabled' : '') + '>Find automatically</button></div><div class="ai-add-row">' +
+        ['ollama', 'lmstudio', 'custom'].map(addBtn).join('') + '</div>' +
+        '<div class="ai-add-h">Cloud — with your API key</div><div class="ai-add-row">' +
+        C.PROVIDER_ORDER.filter(function (p) { return C.PROVIDERS[p].where === 'cloud'; }).map(addBtn).join('') + '</div></div>';
+      h += navHtml('w-back', 'w-next', 'Next', !anyOk);
     } else if (W.step === 2) {
-      h += '<h3 class="ai-h">Use a model on another device</h3>';
+      h += '<h3 class="ai-h">Use models on another device</h3>';
       if (!svc.synced()) h += fixHtml(C.explain('nosync', e), {});
       else {
+        h += '<div class="ai-guard">' + I.lock + '<span>' + esc(remoteLine(hosts.length === 1 ? hosts[0].name : '')) + ' Its API keys stay there.</span></div>';
         h += '<div class="ai-opts" role="radiogroup" aria-label="Which device">' +
           '<label class="ai-opt"><input type="radio" name="ai-host" value=""' + (!W.host ? ' checked' : '') + '><span><b>Whichever of my devices is sharing</b><small>Recommended</small></span></label>' +
           hosts.map(function (x) {
@@ -740,68 +937,78 @@
       }
       h += navHtml('w-back', 'w-next', 'Next', !svc.synced());
     } else {
-      h += '<h3 class="ai-h">Pick a model</h3>';
-      var list = W.where === 'local' ? C.chatModels(W.models) : modelsOfHost(W);
-      if (!list.length) h += '<p class="ai-sub">' + (W.where === 'local' ? 'No models are installed yet — the setup will use whichever you add later.' : 'The model is chosen by the sharing device.') + '</p>';
-      else {
-        var cur = W.model && list.some(function (m) { return m.name === W.model; }) ? W.model : '';
-        h += '<div class="ai-opts ai-models" role="radiogroup" aria-label="Model">' +
-          '<label class="ai-opt"><input type="radio" name="ai-model" value=""' + (!cur ? ' checked' : '') + '><span><b>' + (W.where === 'local' ? 'Automatic' : 'The other device’s default') + '</b><small>' + esc(W.where === 'local' ? 'The first installed model (' + list[0].name + ')' : (list[0].name || '')) + '</small></span></label>' +
-          list.slice(0, 50).map(function (m) {
-            var sub = [m.size ? C.fmtBytes(m.size) : '', m.params, m.quant].filter(Boolean).join(' · ');
-            return '<label class="ai-opt"><input type="radio" name="ai-model" value="' + esc(m.name) + '"' + (cur === m.name ? ' checked' : '') + '><span><b>' + esc(m.name) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span></label>';
-          }).join('') + '</div>';
-      }
+      h += '<h3 class="ai-h">' + (W.where === 'local' ? 'Model and sharing' : 'Pick a model') + '</h3>';
+      h += '<div class="ai-field"><span>Default model <small>new notes start with it; ▾ in the chat switches per note</small></span>' +
+        '<button type="button" class="ai-defbtn" data-act="w-model"><span>' + esc(prettyPref(W.model)) + '</span>' + I.down + '</button></div>';
       if (W.where === 'local') {
-        var sync = svc.synced();
+        var sync = svc.synced(), cloudEps = svc.endpoints(false).filter(function (x) { return x.where === 'cloud'; });
         h += '<div class="ai-share">' +
           '<label class="ai-switch"><input type="checkbox" class="ai-share-cb"' + (W.share && sync ? ' checked' : '') + (sync ? '' : ' disabled') + '><span class="ai-switch-ui" aria-hidden="true"></span>' +
-          '<span><b>Share with my other devices</b><small>' + (sync ? 'Your phone and other devices with the same Sync can use this model.' : 'Needs Sync — set it up first (the dot in the menu bar).') + '</small></span></label>' +
-          '<p class="ai-privacy">🔒 Questions and answers are end-to-end encrypted with your Sync key and deleted once delivered — only your own devices can use it.</p>';
+          '<span><b>Share with my other devices</b><small>' + (sync ? 'Your phone and other devices with the same Sync can use the models here.' : 'Needs Sync — set it up first (the dot in the menu bar).') + '</small></span></label>' +
+          '<p class="ai-privacy">🔒 Questions and answers are end-to-end encrypted with your Sync key and deleted once delivered. Your other devices never see your API keys or contact a model service — this device makes the calls.</p>';
         if (W.share && sync) {
           h += '<div class="ai-seg ai-pol" role="radiogroup" aria-label="When another device asks">' + [['auto', 'Answer automatically'], ['ask', 'Ask me each time']].map(function (x) {
             return '<button type="button" role="radio" aria-checked="' + (W.policy === x[0]) + '" class="' + (W.policy === x[0] ? 'on' : '') + '" data-pol="' + x[0] + '">' + x[1] + '</button>';
-          }).join('') + '</div>' +
-          '<p class="ai-tip">Keep a txt tab open on this computer (in the background is fine) and the computer awake. ' +
-          (e.browser === 'chrome' || e.browser === 'edge' ? 'Tip: add this site to Settings → Performance → “Always keep these sites active”.' : '') + '</p>';
+          }).join('') + '</div>';
+          if (cloudEps.length) h += '<label class="ai-switch ai-sub2"><input type="checkbox" class="ai-sharecloud-cb"' + (W.shareCloud ? ' checked' : '') + '><span class="ai-switch-ui" aria-hidden="true"></span>' +
+            '<span><b>Share cloud services too</b><small>' + esc(cloudEps.map(function (x) { return x.label; }).join(', ')) + ' — your other devices would spend this device’s API keys (up to ' + svc.pref('cloudMaxTokens') + ' tokens an answer; AI preferences). Off: only local models are shared.</small></span></label>';
+          h += '<div class="ai-shared"><div class="ai-add-h">Shared models</div>' + svc.endpoints(false).map(function (x) {
+            var off = x.where === 'cloud' && !W.shareCloud;
+            return '<div class="ai-shared-r' + (off ? ' off' : '') + '"><span><b>' + esc(x.label) + '</b> <small>' + (off ? 'not shared (cloud)' : x.allow.length ? x.allow.length + ' chosen' : 'all models') + '</small></span>' +
+              (off ? '' : '<button type="button" class="ai-link" data-act="w-allow" data-ep="' + esc(x.id) + '">Choose…</button>') + '</div>';
+          }).join('') + '</div>';
+          h += '<p class="ai-tip">Keep a txt tab open on this computer (in the background is fine) and the computer awake. ' +
+            (e.browser === 'chrome' || e.browser === 'edge' ? 'Tip: add this site to Settings → Performance → “Always keep these sites active”.' : '') + '</p>';
         }
         h += '</div>';
-      }
+      } else h += '<div class="ai-guard">' + I.lock + '<span>' + esc(remoteLine('')) + '</span></div>';
       h += navHtml('w-back', 'w-done', 'Start chatting', false);
     }
     h += '</div>';
-    var y = S.setupEl.scrollTop, focus = document.activeElement && S.setupEl.contains(document.activeElement) ? document.activeElement.className : '';
+    var y = S.setupEl.scrollTop, ae = document.activeElement, focusKey = ae && S.setupEl.contains(ae) && ae.dataset ? (ae.dataset.f || '') : '';
+    var caret = focusKey && ae.selectionStart != null ? ae.selectionStart : null;
     S.setupEl.innerHTML = h;
     S.setupEl.scrollTop = y;
-    if (focus && /ai-url|ai-key/.test(focus)) { var f = S.setupEl.querySelector('.' + focus.split(' ')[0]); if (f) { f.focus(); try { f.setSelectionRange(f.value.length, f.value.length); } catch (x) {} } }
+    if (focusKey) { var f = S.setupEl.querySelector('[data-f="' + focusKey + '"]'); if (f) { f.focus(); try { if (caret != null) f.setSelectionRange(caret, caret); } catch (x) {} } }
   }
-  function modelsOfHost(W) {
-    var h = S.C.pickHost(S.hosts || [], W.host);
-    return h ? h.models.map(function (n) { return { name: n }; }) : [];
+  function addBtn(pid) {
+    var P = S.C.PROVIDERS[pid], have = S.svc.endpoint(pid);
+    return '<button type="button" class="ai-addbtn' + (have && pid !== 'custom' ? ' have' : '') + '" data-add="' + pid + '"' + (have && pid !== 'custom' ? ' disabled' : '') + ' title="' + esc(P.sub) + '">' +
+      (P.where === 'cloud' ? '☁ ' : '') + esc(P.label) + (have && pid !== 'custom' ? ' ✓' : '') + '</button>';
   }
-  function resultHtml(W) {
-    var C = S.C, h = '';
-    if (W.phase === 'detect') return '<div class="ai-busyline"><span class="ai-spin"></span>Looking for Ollama, LM Studio and other servers on this computer…</div>' + lnaHint();
-    if (W.det && !W.test && !W.err) {
-      if (W.det.mixed) return fixHtml(C.explain('mixed', S.svc.env()), {});
-      if (!W.det.list.length) h += '<p class="ai-faint">Nothing found on the usual ports.</p>' + fixHtml(C.explain(W.det.lna === 'denied' ? 'lna' : 'unreachable', S.svc.env({ provider: W.provider, base: S.svc.server({ provider: W.provider, url: W.url }).base })), { again: true });
-      else h += '<div class="ai-found">' + W.det.list.map(function (r, i) {
-        var n = C.chatModels(r.models).length;
-        var txt = r.state === 'ok' ? n + (n === 1 ? ' model' : ' models') + ' · ' + r.ms + ' ms' : r.state === 'auth' ? 'needs an API key' : 'running, but blocks this page';
-        return '<div class="ai-found-r"><span class="' + (r.state === 'ok' ? 'ai-ok' : 'ai-warnc') + '">' + (r.state === 'ok' ? '✓' : '⚠') + '</span><span><b>' + esc(r.name) + '</b> <small>' + esc(r.base) + '</small><br><small>' + esc(txt) + '</small></span>' +
-          '<button type="button" class="ai-btn" data-act="w-use" data-i="' + i + '">Use</button></div>';
-      }).join('') + '</div>';
-      return h;
+  function epCardHtml(x) {
+    var W = S.wiz, C = S.C, P = C.providerOf(x.provider), t = W.tests[x.id] || {}, open = W.open === x.id, st;
+    if (t.phase === 'test') st = '<span class="ai-busytxt"><span class="ai-spin"></span>Connecting…</span>';
+    else if (t.err) st = '<span class="ai-warnc">⚠ ' + esc(t.err.info ? t.err.info.title : t.err.message) + '</span>';
+    else if (t.res) st = '<span class="ai-ok">✓</span> ' + t.res.models.length + (t.res.models.length === 1 ? ' model' : ' models') + ' · ' + esc(C.fmtMs(t.res.ms));
+    else if (P.key === 'required' && !x.apiKey) st = '<span class="ai-faint">Needs an API key</span>';
+    else st = '<span class="ai-faint">Not tested yet</span>';
+    var h = '<div class="ai-ep' + (open ? ' open' : '') + (x.on ? '' : ' off') + '" data-ep="' + esc(x.id) + '">' +
+      '<div class="ai-ep-h"><button type="button" class="ai-ep-t" data-act="ep-open" data-ep="' + esc(x.id) + '" aria-expanded="' + open + '">' +
+      '<span class="ai-ep-ic" aria-hidden="true">' + (x.where === 'cloud' ? '☁' : '💻') + '</span><span class="ai-ep-tt"><b>' + esc(x.label) + '</b><small>' + st + '</small></span></button>' +
+      '<label class="ai-mini" title="' + (x.on ? 'In use — switch off to keep it but not use it' : 'Not in use') + '"><input type="checkbox" class="ai-ep-on" data-ep="' + esc(x.id) + '"' + (x.on ? ' checked' : '') + ' aria-label="Use ' + esc(x.label) + '"><span class="ai-switch-ui" aria-hidden="true"></span></label></div>';
+    if (open) {
+      h += '<div class="ai-ep-b">' +
+        '<label class="ai-field"><span>Address</span><input class="ai-ep-url" data-f="url-' + esc(x.id) + '" data-ep="' + esc(x.id) + '" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="' + esc(P.url) + '" value="' + esc(x.url || P.url) + '"></label>';
+      if (P.key !== 'none') h += '<label class="ai-field"><span>API key' + (P.key === 'optional' ? ' <small>if the server wants one</small>' : '') + '</span><input class="ai-ep-key" data-f="key-' + esc(x.id) + '" data-ep="' + esc(x.id) + '" type="password" autocomplete="off" spellcheck="false" value="' + esc(x.apiKey) + '" placeholder="' + (P.key === 'required' ? 'Paste your key' : 'Optional') + '"></label>' +
+        '<p class="ai-keynote">' + I.lock + ' Stays on this device only — never synced, never sent to your other devices.' + (P.keyUrl ? ' <a class="ai-ext" href="' + esc(P.keyUrl) + '" target="_blank" rel="noopener noreferrer">Get a key at ' + esc(C.hostOf(P.keyUrl)) + ' ↗</a>' : '') + '</p>';
+      h += '<div class="ai-btns"><button type="button" class="ai-btn ai-pri" data-act="ep-test" data-ep="' + esc(x.id) + '"' + (t.phase === 'test' ? ' disabled' : '') + '>Test connection</button>' +
+        '<button type="button" class="ai-btn" data-act="ep-remove" data-ep="' + esc(x.id) + '">Remove</button></div>' +
+        '<div class="ai-result">' + epResultHtml(x, t) + '</div></div>';
     }
-    if (W.phase === 'test') return '<div class="ai-busyline"><span class="ai-spin"></span>Connecting…</div>' + lnaHint();
-    if (W.err) return fixHtml(W.err.info, { again: true });
-    if (W.test && W.test.ok) {
-      var t = W.test;
-      h += '<p class="ai-good">✓ Connected to ' + esc(C.presetOf(W.provider).label) + ' in ' + esc(C.fmtMs(t.ms)) + ' — ' + C.chatModels(t.models).length + (C.chatModels(t.models).length === 1 ? ' model' : ' models') + '</p>';
-      if (!t.model) h += '<p class="ai-faint">No models installed yet.' + (W.provider === 'ollama' ? ' Download one:' : '') + '</p>' + (W.provider === 'ollama' ? stepsHtml([{ cmd: 'ollama pull llama3.2' }]) : '');
-      else if (W.phase === 'gen') h += '<div class="ai-busyline"><span class="ai-spin"></span>Asking ' + esc(t.model) + ' for a one-word reply… (the first answer loads the model — up to a minute)</div>';
-      else if (t.genError) h += fixHtml(t.genError.info, { again: true });
-      else if (t.reply) h += '<p class="ai-good">✓ ' + esc(t.model) + ' answered “' + esc(t.reply) + '” in ' + esc(C.fmtMs(t.genMs)) + '</p>';
+    return h + '</div>';
+  }
+  function epResultHtml(x, t) {
+    var C = S.C, h = '';
+    if (t.phase === 'test') return '<div class="ai-busyline"><span class="ai-spin"></span>Connecting…</div>' + (x.where === 'local' ? lnaHint() : '');
+    if (t.err) return fixHtml(t.err.info || C.explain('server', {}), { again: x.id });
+    if (t.res) {
+      var r = t.res, n = r.models.length;
+      h += '<p class="ai-good">✓ Connected to ' + esc(x.label) + ' in ' + esc(C.fmtMs(r.ms)) + ' — ' + n + (n === 1 ? ' model' : ' models') + '</p>';
+      if (!r.model) h += '<p class="ai-faint">No models yet.' + (x.provider === 'ollama' ? ' Download one:' : '') + '</p>' + (x.provider === 'ollama' ? stepsHtml([{ cmd: 'ollama pull llama3.2' }]) : '');
+      else if (t.phase === 'gen') h += '<div class="ai-busyline"><span class="ai-spin"></span>Asking ' + esc(r.model) + ' for a one-word reply…' + (x.where === 'local' ? ' (the first answer loads the model — up to a minute)' : '') + '</div>';
+      else if (r.genError) h += fixHtml(r.genError.info, { again: x.id });
+      else if (r.reply) h += '<p class="ai-good">✓ ' + esc(r.model) + ' answered “' + esc(r.reply) + '” in ' + esc(C.fmtMs(r.genMs)) + '</p>';
     }
     return h;
   }
@@ -813,40 +1020,8 @@
     var C = S.C;
     if (W.phase === 'htest') return '<div class="ai-busyline"><span class="ai-spin"></span>Sending a test question through Sync…</div>';
     if (!W.htest) return '';
-    if (W.htest.ok) return '<p class="ai-good">✓ ' + esc(W.htest.host) + ' answered “' + esc(W.htest.reply) + '” with ' + esc(W.htest.model || 'its model') + ' in ' + esc(C.fmtMs(W.htest.ms)) + '</p>';
+    if (W.htest.ok) return '<p class="ai-good">✓ ' + esc(W.htest.host) + ' answered “' + esc(W.htest.reply) + '” with ' + esc(W.htest.model || 'its model') + (W.htest.provider ? ' (' + esc(W.htest.provider) + ')' : '') + ' in ' + esc(C.fmtMs(W.htest.ms)) + '</p>';
     return fixHtml(W.htest.error.info || C.explain('server', {}), {});
-  }
-  function wizSet(patch) { for (var k in patch) S.wiz[k] = patch[k]; renderSetup(); }
-  function readWizFields() {
-    var W = S.wiz, u = S.setupEl.querySelector('.ai-url'), k = S.setupEl.querySelector('.ai-key');
-    if (u) W.url = u.value.trim();
-    if (k) W.key = k.value.trim();
-  }
-  function wizDetect() {
-    var W = S.wiz, g = ++W.gen;
-    wizSet({ phase: 'detect', det: null, test: null, err: null });
-    S.svc.detect().then(function (d) {
-      if (!S || !S.wiz || S.wiz.gen !== g) return;
-      W.phase = '';
-      W.det = d;
-      var ok = d.list.filter(function (r) { return r.state === 'ok'; });
-      var pick = ok.filter(function (r) { return r.provider === W.provider; })[0] || ok[0];
-      if (pick && ok.length === 1) { useFound(pick); return; }
-      var blocked = d.list.filter(function (r) { return r.state === 'blocked'; })[0];
-      if (!ok.length && blocked) {
-        W.provider = blocked.provider; W.url = '';
-        W.err = S.svc.decorate(S.C.AiError('cors', 'blocked'), { base: blocked.base, provider: blocked.provider });
-      }
-      renderSetup();
-    });
-  }
-  function useFound(r) {
-    var W = S.wiz, pre = S.C.presetOf(r.provider);
-    W.provider = r.provider;
-    W.url = S.C.normBase(pre.kind, r.base) === S.C.normBase(pre.kind, pre.url) ? '' : r.base;
-    if (r.state === 'auth') { W.err = S.svc.decorate(S.C.AiError('auth', 'key'), {}); W.det = null; renderSetup(); return; }
-    if (r.state === 'blocked') { W.err = S.svc.decorate(S.C.AiError('cors', 'blocked'), { base: r.base, provider: r.provider }); W.det = null; renderSetup(); return; }
-    wizTest();
   }
   function wizAbort() {
     var W = S.wiz;
@@ -854,28 +1029,78 @@
     W.abort = new AbortController();
     return W.abort.signal;
   }
-  function wizTest() {
-    readWizFields();
-    var W = S.wiz, g = ++W.gen, signal = wizAbort();
-    wizSet({ phase: 'test', det: null, test: null, err: null });
-    S.svc.testLocal({ provider: W.provider, url: W.url, key: W.key, model: W.model, signal: signal }, function (stage, res) {
-      if (!S || !S.wiz || S.wiz.gen !== g) return;
-      if (stage === 'models') { W.test = res; W.models = res.models; W.phase = res.model ? 'gen' : ''; renderSetup(); }
-    }).then(function (res) {
-      if (!S || !S.wiz || S.wiz.gen !== g) return;
-      W.test = res; W.models = res.models; W.phase = '';
+  // Test one endpoint (models, and unless quick a one-word answer).
+  function epTest(id, quick) {
+    var W = S.wiz, x = S.svc.endpoint(id);
+    if (!x) return;
+    var gen = ++W.gen, t = W.tests[id] = { phase: 'test' }, raw = (S.svc.local().endpoints || []).filter(function (e) { return e.id === id; })[0];
+    renderSetup();
+    S.svc.testEndpoint(raw, function (stage, res) {
+      if (!S || !S.wiz || W.tests[id] !== t) return;
+      if (stage === 'models') { t.res = res; t.phase = res.model && !quick ? 'gen' : ''; renderSetup(); }
+    }, quick ? null : wizAbort(), quick).then(function (res) {
+      if (!S || !S.wiz || W.tests[id] !== t) return;
+      t.res = res; t.phase = ''; t.err = null;
       renderSetup();
     }, function (e) {
-      if (!S || !S.wiz || S.wiz.gen !== g) return;
-      W.phase = ''; W.test = null; W.err = e;
+      if (!S || !S.wiz || W.tests[id] !== t) return;
+      t.phase = ''; t.res = null; t.err = e;
       renderSetup();
     });
+    return gen;
+  }
+  function readEpFields(id) {
+    var u = S.setupEl.querySelector('.ai-ep-url[data-ep="' + id + '"]'), k = S.setupEl.querySelector('.ai-ep-key[data-ep="' + id + '"]');
+    var x = S.svc.endpoint(id);
+    if (!x) return;
+    var P = S.C.providerOf(x.provider), patch = { id: id };
+    if (u) { var v = u.value.trim(); patch.url = v && S.C.normBase(P.kind, v) !== S.C.normBase(P.kind, P.url) ? v : ''; }
+    if (k) patch.key = k.value.trim();
+    if ((u && patch.url !== x.url) || (k && patch.key !== x.apiKey)) { S.svc.saveEndpoint(patch); delete S.wiz.tests[id]; }
+  }
+  function addEndpoint(pid, base) {
+    var svc = S.svc, C = S.C, id = svc.newEndpointId(pid), P = C.providerOf(pid);
+    var url = base && C.normBase(P.kind, base) !== C.normBase(P.kind, P.url) ? base : '';
+    svc.saveEndpoint({ id: id, p: pid, url: url, on: true });
+    S.wiz.open = id;
+    if (P.key !== 'required') epTest(id); else renderSetup();
+    setTimeout(function () { if (!S) return; var k = S.setupEl.querySelector('.ai-ep-key[data-ep="' + id + '"]'); if (k && !coarse()) k.focus(); var c = S.setupEl.querySelector('.ai-ep[data-ep="' + id + '"]'); if (c && c.scrollIntoView) c.scrollIntoView({ block: 'nearest' }); }, 30);
+  }
+  function wizDetect() {
+    var W = S.wiz, svc = S.svc;
+    W.detecting = true;
+    renderSetup();
+    svc.detect().then(function (d) {
+      if (!S || S.wiz !== W) return;
+      W.detecting = false; W.det = d;
+      var have = svc.endpoints(true);
+      d.list.forEach(function (r) {
+        var P = S.C.providerOf(r.provider);
+        var dup = have.some(function (x) { return x.provider === r.provider && x.base === S.C.normBase(P.kind, r.base); });
+        if (dup) return;
+        var id = svc.newEndpointId(r.provider);
+        if (r.provider !== 'custom' && svc.endpoint(id)) return;
+        svc.saveEndpoint({ id: id, p: r.provider, url: S.C.normBase(P.kind, r.base) !== S.C.normBase(P.kind, P.url) ? r.base : '', on: true });
+        if (r.state === 'blocked') W.tests[id] = { err: svc.decorate(S.C.AiError('cors', 'blocked'), { base: r.base, provider: r.provider }) };
+        else if (r.state === 'auth') W.tests[id] = { err: svc.decorate(S.C.AiError('auth', 'key'), { provider: r.provider }) };
+        if (!W.open) W.open = id;
+      });
+      svc.endpoints(true).forEach(function (x) { if (!W.tests[x.id]) epTest(x.id, true); });
+      renderSetup();
+    });
+  }
+  function enterStep2() {
+    var W = S.wiz, eps = S.svc.endpoints(true);
+    if (W.where !== 'local') return;
+    if (!eps.length) wizDetect();
+    else eps.forEach(function (x) { if (x.on && !W.tests[x.id] && !(S.C.providerOf(x.provider).key === 'required' && !x.apiKey)) epTest(x.id, true); });
   }
   function wizHostTest() {
     var W = S.wiz, h = S.C.pickHost(S.hosts || [], W.host), g = ++W.gen;
     if (!h) return;
     var signal = wizAbort();
-    wizSet({ phase: 'htest', htest: null });
+    W.phase = 'htest'; W.htest = null;
+    renderSetup();
     S.svc.testHost(h, signal).then(function (r) {
       if (!S || !S.wiz || S.wiz.gen !== g) return;
       r.host = h.name;
@@ -885,56 +1110,48 @@
   }
   function wizGo(step) {
     var W = S.wiz;
-    readWizFields();
-    if (W.phase === 'gen' || W.phase === 'test' || W.phase === 'htest') wizAbort();
+    if (W.phase === 'htest') wizAbort();
     W.step = step;
     W.gen++;
     W.phase = '';
     renderSetup();
     S.setupEl.scrollTop = 0;
-    if (step === 2 && W.where === 'local' && !W.test && !W.err) {
-      if (S.svc.local().role === 'local' || W.url) wizTest(); else wizDetect();
-    }
+    if (step === 2) enterStep2();
   }
   function wizFinish() {
-    var W = S.wiz, svc = S.svc, C = S.C, P = svc.P;
-    readWizFields();
-    var sel = S.setupEl.querySelector('input[name="ai-model"]:checked');
-    if (sel) W.model = sel.value;
+    var W = S.wiz, svc = S.svc, P = svc.P;
     var wasLocal = svc.local().role === 'local';
+    P.set('model', W.model || '');
     if (W.where === 'local') {
-      var pre = C.presetOf(W.provider), norm = W.url ? C.normBase(pre.kind, W.url) : '';
-      P.set('provider', W.provider);
-      P.set('endpoint', norm && norm !== C.normBase(pre.kind, pre.url) ? norm : '');
-      P.set('model', W.model || '');
       P.set('policy', W.policy === 'ask' ? 'ask' : 'auto');
-      svc.setLocal({ role: 'local', key: W.key || null, host: null, setupAt: Date.now() });
+      P.set('shareCloud', !!W.shareCloud);
+      svc.setLocal({ role: 'local', host: null, setupAt: Date.now() });
       svc.setShare(!!(W.share && svc.synced()));
     } else {
       if (wasLocal) svc.setShare(false);
       svc.setLocal({ role: 'remote', host: W.host || null, setupAt: Date.now() });
-      if (sel) P.set('model', W.model || '');
     }
-    toast(W.where === 'local' ? (W.share && svc.synced() ? 'AI is ready — and shared with your devices' : 'AI is ready') : 'AI is ready', 'success', 2200);
+    toast(W.where === 'local' && W.share && svc.synced() ? 'AI is ready — and shared with your devices' : 'AI is ready', 'success', 2200);
     S.route = null;
     showChat();
   }
   function turnOff() {
     var svc = S.svc;
     if (svc.local().role === 'local') svc.setShare(false);
-    svc.setLocal({ role: null, host: null, key: null, shareSeen: null });
+    svc.setLocal({ role: null, host: null, endpoints: null, shareSeen: null });
     S.route = null;
     showSetup(1, true);
-    toast('AI is off on this device', 'info', 1800);
+    toast('AI is off on this device — its services and keys are removed', 'info', 2400);
   }
 
   // ---- events ---------------------------------------------------------------------------------------
   function onClick(e) {
     if (!S) return;
-    var t = e.target.closest('[data-act],[data-ctx],[data-action],[data-where],[data-prov],[data-pol],[data-os],[data-copy]');
+    var t = e.target.closest('[data-act],[data-ctx],[data-action],[data-where],[data-pol],[data-os],[data-copy],[data-add],[data-pk]');
     if (!t || !S.panel.contains(t)) return;
     var W = S.wiz, a = t.dataset.act;
     if (t.dataset.copy != null) { copyText(S.copies[+t.dataset.copy] || ''); return; }
+    if (t.dataset.pk != null && S.pk) { pickerChoose(t.dataset.pk); return; }
     if (t.dataset.os) { S.fixOs = t.dataset.os; if (S.view === 'setup') renderSetup(); else renderLog(); return; }
     if (t.dataset.ctx && t.tagName !== 'LABEL') {
       var c = t.dataset.ctx;
@@ -942,8 +1159,8 @@
       S.ctx = c; paintCtx(); return;
     }
     if (t.dataset.action) { action(t.dataset.action); return; }
-    if (t.dataset.where) { W.where = t.dataset.where; W.test = null; W.err = null; W.det = null; W.htest = null; wizGo(2); return; }
-    if (t.dataset.prov) { readWizFields(); W.provider = t.dataset.prov; W.url = ''; W.test = null; W.err = null; W.det = null; wizTest(); return; }
+    if (t.dataset.where) { W.where = t.dataset.where; W.htest = null; wizGo(2); return; }
+    if (t.dataset.add) { addEndpoint(t.dataset.add); return; }
     if (t.dataset.pol) { W.policy = t.dataset.pol; renderSetup(); return; }
     switch (a) {
       case 'send': send(S.input.value); break;
@@ -953,27 +1170,43 @@
         S.msgs = []; renderLog();
         if (Cade.idbStore) Cade.idbStore.remove(CHAT_KEY + S.room).catch(function () {});
         break;
-      case 'status':
+      case 'picker':
         if (S.view === 'setup') return;
-        if (S.route && !S.route.available) showSetup(2, false);
-        else { S.route = null; paintStatus(); refreshRoute(); }
+        if (S.route && !S.route.available && !S.svc.local().role) showSetup(1, true);
+        else openPicker('chat');
         break;
+      case 'pk-close': closePicker(); break;
+      case 'pk-save': {
+        var pk = S.pk;
+        S.svc.saveEndpoint({ id: pk.opts.ep, allow: pk.sel ? pk.sel.slice() : [] });
+        closePicker();
+        renderSetup();
+        break;
+      }
+      case 'pk-default': {
+        var r = S.route;
+        if (r && r.available) { S.svc.P.set('model', r.group.ep + ':' + r.model.id); toast('New notes start with ' + (r.model.name || r.model.id), 'success', 1800); renderPicker(); }
+        break;
+      }
       case 'insert': insertAnswer(+t.dataset.i); break;
       case 'replace': replaceAnswer(+t.dataset.i); break;
       case 'copy': copyText(answerText(+t.dataset.i)); break;
       case 'newnote': newNote(+t.dataset.i); break;
       case 'retry': retry(+t.dataset.i); break;
-      case 'setup2': showSetup(S.svc.local().role ? 2 : 1, !S.svc.local().role); break;
+      case 'setup2': closePicker(); showSetup(S.svc.local().role ? 2 : 1, !S.svc.local().role); break;
       case 'prefs': if (Cade.prefs && Cade.prefs.open) { try { Cade.prefs.open(ID); } catch (x) {} } break;
       case 'w-cancel': showChat(); break;
       case 'w-off': turnOff(); break;
       case 'w-back': wizGo(W.step - 1); break;
       case 'w-next': if (!t.disabled) wizGo(W.step + 1); break;
       case 'w-detect': wizDetect(); break;
-      case 'w-test': if (S.view === 'setup') wizTest(); break;
-      case 'w-use': if (W.det && W.det.list[+t.dataset.i]) useFound(W.det.list[+t.dataset.i]); break;
       case 'w-htest': wizHostTest(); break;
       case 'w-done': wizFinish(); break;
+      case 'w-model': openPicker('default', { where: W.where }); break;
+      case 'w-allow': openPicker('allow', { ep: t.dataset.ep }); break;
+      case 'ep-open': W.open = W.open === t.dataset.ep ? '' : t.dataset.ep; renderSetup(); break;
+      case 'ep-test': if (S.view === 'setup') { readEpFields(t.dataset.ep); epTest(t.dataset.ep); } break;
+      case 'ep-remove': S.svc.removeEndpoint(t.dataset.ep); delete W.tests[t.dataset.ep]; if (W.open === t.dataset.ep) W.open = ''; renderSetup(); break;
     }
   }
   function onChange(e) {
@@ -987,24 +1220,31 @@
       if (lang) action('translate', lang);
       return;
     }
+    if (t.classList.contains('ai-pk-allcb')) { S.pk.sel = t.checked ? null : []; renderPicker(); return; }
     if (t.classList.contains('ai-share-cb')) { S.wiz.share = t.checked; renderSetup(); return; }
+    if (t.classList.contains('ai-sharecloud-cb')) { S.wiz.shareCloud = t.checked; renderSetup(); return; }
+    if (t.classList.contains('ai-ep-on')) { S.svc.saveEndpoint({ id: t.dataset.ep, on: t.checked }); if (t.checked) epTest(t.dataset.ep, true); else renderSetup(); return; }
     if (t.name === 'ai-host') { S.wiz.host = t.value; S.wiz.htest = null; renderSetup(); return; }
-    if (t.name === 'ai-model') { S.wiz.model = t.value; return; }
-    if (t.classList.contains('ai-url') || t.classList.contains('ai-key')) { readWizFields(); }
+    if (t.classList.contains('ai-ep-url') || t.classList.contains('ai-ep-key')) { readEpFields(t.dataset.ep); }
   }
   function onInput(e) {
     if (!S) return;
-    if (e.target === S.input) grow();
-    else if (S.wiz && (e.target.classList.contains('ai-url') || e.target.classList.contains('ai-key'))) {
-      readWizFields();
-      if (S.wiz.test || S.wiz.err) { S.wiz.test = null; S.wiz.err = null; var nx = S.setupEl.querySelector('[data-act="w-next"]'); if (nx) nx.disabled = true; var r = S.setupEl.querySelector('.ai-result'); if (r) r.innerHTML = ''; }
+    var t = e.target;
+    if (t === S.input) grow();
+    else if (t.classList.contains('ai-pk-q') && S.pk) {
+      S.pk.q = t.value;
+      clearTimeout(S.pkT);
+      S.pkT = setTimeout(function () { if (S && S.pk) renderPicker(); }, 120);
     }
   }
   function onKey(e) {
     if (!S) return;
+    if (e.key === 'Escape' && S.pk) { e.preventDefault(); e.stopPropagation(); closePicker(); return; }
     if (e.key === 'Escape' && S.busy) { e.preventDefault(); e.stopPropagation(); S.busy.ctl.abort(); return; }
     if (e.target === S.input && e.key === 'Enter' && !e.shiftKey && !e.isComposing && !coarse()) { e.preventDefault(); send(S.input.value); return; }
-    if (S.wiz && e.key === 'Enter' && e.target.classList && e.target.classList.contains('ai-url')) { e.preventDefault(); wizTest(); }
+    if (S.wiz && e.key === 'Enter' && e.target.classList && (e.target.classList.contains('ai-ep-url') || e.target.classList.contains('ai-ep-key'))) {
+      e.preventDefault(); readEpFields(e.target.dataset.ep); epTest(e.target.dataset.ep);
+    }
   }
   function grow() {
     var ta = S.input;
@@ -1017,6 +1257,8 @@
     if (room !== S.room) {
       S.room = room; S.ctx = 'auto';
       if (S.ctxRoom === room) S.ctxRoom = '';
+      var p = S.svc.notePick(room);
+      if (p !== S.pick) { S.pick = p; S.route = null; refreshRoute(); }
       loadHistory();
     }
     if (u && (u.selectionSet || u.docChanged) && S.view === 'chat' && !S.ctxT) {
@@ -1027,7 +1269,6 @@
     if (!S || document.visibilityState !== 'visible') return;
     if (S.view === 'chat' && !S.busy) refreshRoute();
   }
-
   // The room picker is filled when it's about to open (rooms change).
   function onPickOpen(e) { if (S && e.target && e.target.classList && e.target.classList.contains('ai-room-sel')) fillRooms(); }
 

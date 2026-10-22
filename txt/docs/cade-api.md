@@ -373,9 +373,9 @@ keeps in its own Cache Storage bucket (e.g. `cade-convert-v1`, `cade-tts-hd-v1`)
 
 ## Cade.ai — your own model, from any device (opt-in)
 
-Registered by the AI widget (`txt/widgets/ai/`) once it has loaded. Nothing answers until the user has set AI up: either "This computer" (a local Ollama / LM Studio / OpenAI-compatible server) or "Another of my devices" (a device sharing its model through Sync, end-to-end encrypted with the sync key).
+Registered by the AI widget (`txt/widgets/ai/`) once it has loaded; `Cade.ai.version` is `2`. Nothing answers until the user has set AI up: either "This computer" (one or more services — local Ollama / LM Studio / OpenAI-compatible servers, or cloud APIs such as OpenAI, Anthropic, Gemini or OpenRouter with the user's own key) or "Another of my devices" (a device sharing its services through Sync, end-to-end encrypted with the sync key). A device set up as "Another of my devices" never contacts a model service itself, and API keys never leave the device they were entered on.
 
-- `Cade.ai.status()` → Promise `{ available, via: 'local' | 'host' | null, host, model, reason, message, setup }`
-- `Cade.ai.chat(messages, { model, temperature, maxTokens, signal, onToken(delta, full) })` → Promise of the full answer. `messages` may be a string; the AI preferences' system prompt is added when none is given. Rejects with an Error carrying `.code`, `.info { title, steps }` and `.partial` (text received so far).
-- `Cade.ai.models()` → Promise of the model names of whatever would answer.
+- `Cade.ai.status({ model }?)` → Promise `{ available, via: 'local' | 'host' | null, host, provider, model, reason, message, setup }`
+- `Cade.ai.chat(messages, { model, temperature, maxTokens, signal, onToken(delta, full) })` → Promise of the full answer. `model` is `"service:model"` (e.g. `"ollama:llama3.2"`, `"anthropic:claude-opus-5-5"`); left out, the note's pick or the default is used. `messages` may be a string; the AI preferences' system prompt is added when none is given. Rejects with an Error carrying `.code`, `.info { title, steps }` and `.partial` (text received so far).
+- `Cade.ai.models()` → Promise of `[{ id: "service:model", provider, model, name, via, host, where, price, ctx, score }]` — every model that can answer here, with its badge data (`price` per million tokens, `ctx` context window, `score` LMArena rating; `null`/`0` when no source has the model).
 - `Cade.ai.open()` opens the AI panel.
