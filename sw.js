@@ -15,7 +15,7 @@
 //     Code Runner's Python 'cade-py-<version>'): bypass, so nothing is stored twice
 // ============================================
 
-const CACHE_VERSION = 208;
+const CACHE_VERSION = 209;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 
 // Same-origin pages to precache on install.
@@ -164,6 +164,11 @@ self.addEventListener('activate', (e) => {
 });
 
 // ---- Fetch handler ----
+function isLocalHost(h) {
+  h = String(h || '').toLowerCase().replace(/^\[|\]$/g, '');
+  return h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || /^127\./.test(h) || h === '::1' || h === '0.0.0.0' ||
+    /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || /^169\.254\./.test(h) || /^f[cd][0-9a-f]{2}:/.test(h) || /^fe80:/.test(h);
+}
 self.addEventListener('fetch', (e) => {
   const { request } = e;
   if (request.method !== 'GET') return;
@@ -176,6 +181,13 @@ self.addEventListener('fetch', (e) => {
   // /project/ (Cade.project) registers its own service worker with that
   // scope; leave its requests alone so the two apps never share cache entries.
   if (url.origin === self.location.origin && url.pathname.startsWith('/project/')) return;
+
+  // Servers on this computer or the local network (Ollama, LM Studio, Unsloth
+  // Studio… for the AI widget) and API calls carrying a key are live, private
+  // data: never cached, never answered from here. Passing them through also
+  // keeps a failed fetch inside the worker from turning into a fake 504.
+  if (url.origin !== self.location.origin && isLocalHost(url.hostname)) return;
+  if (request.headers.has('authorization') || request.headers.has('x-api-key') || request.headers.has('x-goog-api-key')) return;
 
   // Firebase realtime DB needs live network; never intercept.
   if (url.hostname.includes('firebaseio.com')) return;
