@@ -43,9 +43,9 @@
 
   var META = {
     name: 'AI',
-    description: 'Your own AI — local models (Ollama, LM Studio…) or cloud APIs with your keys (OpenAI, Anthropic, Gemini, OpenRouter…) — with your note as context: summarise, rewrite, continue, explain code, checklists, translate. Use it from your phone too: it asks your computer, end-to-end encrypted through Sync',
+    description: 'Your own AI — local models (Ollama, LM Studio, Unsloth Studio…) or cloud APIs with your keys (OpenAI, Anthropic, Gemini, OpenRouter…) — with your note as context: summarise, rewrite, continue, explain code, checklists, translate. Use it from your phone too: it asks your computer, end-to-end encrypted through Sync',
     icon: '✨',
-    tags: 'ai,assistant,chat,llm,local llm,local ai,private ai,ollama,lm studio,llama,llama.cpp,mistral,gemma,qwen,deepseek,phi,openai,openai compatible,gpt,chatgpt,anthropic,claude,gemini,openrouter,groq,grok,together,summarise,summarize,rewrite,continue writing,explain code,checklist,translate,ask,prompt,model'
+    tags: 'ai,assistant,chat,llm,local llm,local ai,private ai,ollama,lm studio,unsloth,unsloth studio,llama,llama.cpp,mistral,gemma,qwen,deepseek,phi,openai,openai compatible,gpt,chatgpt,anthropic,claude,gemini,openrouter,groq,grok,together,summarise,summarize,rewrite,continue writing,explain code,checklist,translate,ask,prompt,model'
   };
 
   var esc = function (s) { return Cade.escapeHtml(String(s == null ? '' : s)); };
@@ -713,7 +713,7 @@
       signal: ctl.signal,
       onStart: function (i) {
         bm.model = i.model; bm.modelName = i.modelName; bm.epLabel = i.epLabel; bm.host = i.host || ''; bm.via = i.via;
-        bm.note = i.via === 'host' ? 'Sending to ' + i.host + '…' : (i.provider === 'ollama' || i.provider === 'lmstudio' ? 'Waiting for the model… (the first answer loads it)' : 'Waiting for ' + i.epLabel + '…');
+        bm.note = i.via === 'host' ? 'Sending to ' + i.host + '…' : (i.provider === 'ollama' || i.provider === 'lmstudio' || i.provider === 'unsloth' ? 'Waiting for the model… (the first answer loads it)' : 'Waiting for ' + i.epLabel + '…');
         scheduleLive();
       },
       onToken: function (d, full) { bm.content = full; bm.note = ''; scheduleLive(); },
@@ -907,12 +907,12 @@
     } else if (W.step === 2 && W.where === 'local') {
       var eps = svc.endpoints(true), anyOk = eps.some(function (x) { var t = W.tests[x.id]; return x.on && t && t.res; });
       h += '<h3 class="ai-h">Connect your model services</h3><p class="ai-sub">Use one or several. Addresses and API keys stay on this device — never synced, never sent to your other devices.</p>';
-      if (W.detecting) h += '<div class="ai-busyline"><span class="ai-spin"></span>Looking for Ollama, LM Studio and other servers on this computer…</div>' + lnaHint();
+      if (W.detecting) h += '<div class="ai-busyline"><span class="ai-spin"></span>Looking for Ollama, LM Studio, Unsloth Studio and other servers on this computer…</div>' + lnaHint();
       if (W.det && W.det.mixed && !eps.some(function (x) { return x.where === 'cloud'; })) h += fixHtml(C.explain('mixed', e), {});
       h += '<div class="ai-eps">' + eps.map(epCardHtml).join('') + '</div>';
       if (!eps.length && !W.detecting) h += '<p class="ai-faint ai-c">Nothing set up yet — add a service below.</p>';
       h += '<div class="ai-add"><div class="ai-add-h">On this computer <button type="button" class="ai-link" data-act="w-detect"' + (W.detecting ? ' disabled' : '') + '>Find automatically</button></div><div class="ai-add-row">' +
-        ['ollama', 'lmstudio', 'custom'].map(addBtn).join('') + '</div>' +
+        ['ollama', 'lmstudio', 'unsloth', 'custom'].map(addBtn).join('') + '</div>' +
         '<div class="ai-add-h">Cloud — with your API key</div><div class="ai-add-row">' +
         C.PROVIDER_ORDER.filter(function (p) { return C.PROVIDERS[p].where === 'cloud'; }).map(addBtn).join('') + '</div></div>';
       h += navHtml('w-back', 'w-next', 'Next', !anyOk);
@@ -990,7 +990,7 @@
     if (open) {
       h += '<div class="ai-ep-b">' +
         '<label class="ai-field"><span>Address</span><input class="ai-ep-url" data-f="url-' + esc(x.id) + '" data-ep="' + esc(x.id) + '" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="' + esc(P.url) + '" value="' + esc(x.url || P.url) + '"></label>';
-      if (P.key !== 'none') h += '<label class="ai-field"><span>API key' + (P.key === 'optional' ? ' <small>if the server wants one</small>' : '') + '</span><input class="ai-ep-key" data-f="key-' + esc(x.id) + '" data-ep="' + esc(x.id) + '" type="password" autocomplete="off" spellcheck="false" value="' + esc(x.apiKey) + '" placeholder="' + (P.key === 'required' ? 'Paste your key' : 'Optional') + '"></label>' +
+      if (P.key !== 'none') h += '<label class="ai-field"><span>API key' + (P.key === 'optional' ? ' <small>if the server wants one</small>' : '') + '</span><input class="ai-ep-key" data-f="key-' + esc(x.id) + '" data-ep="' + esc(x.id) + '" type="password" autocomplete="off" spellcheck="false" value="' + esc(x.apiKey) + '" placeholder="' + esc(P.keyHint || (P.key === 'required' ? 'Paste your key' : 'Optional')) + '"></label>' +
         '<p class="ai-keynote">' + I.lock + ' Stays on this device only — never synced, never sent to your other devices.' + (P.keyUrl ? ' <a class="ai-ext" href="' + esc(P.keyUrl) + '" target="_blank" rel="noopener noreferrer">Get a key at ' + esc(C.hostOf(P.keyUrl)) + ' ↗</a>' : '') + '</p>';
       h += '<div class="ai-btns"><button type="button" class="ai-btn ai-pri" data-act="ep-test" data-ep="' + esc(x.id) + '"' + (t.phase === 'test' ? ' disabled' : '') + '>Test connection</button>' +
         '<button type="button" class="ai-btn" data-act="ep-remove" data-ep="' + esc(x.id) + '">Remove</button></div>' +

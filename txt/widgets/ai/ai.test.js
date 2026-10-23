@@ -19,9 +19,9 @@ var SCORES = require('./ai-scores.js');
 var PROPOSED = {
   ai: {
     id: 'ai', type: 'widget', name: 'AI',
-    description: 'Your own AI — local models (Ollama, LM Studio…) or cloud APIs with your keys (OpenAI, Anthropic, Gemini, OpenRouter…) — with your note as context: summarise, rewrite, continue, explain code, checklists, translate. Use it from your phone too: it asks your computer, end-to-end encrypted through Sync',
+    description: 'Your own AI — local models (Ollama, LM Studio, Unsloth Studio…) or cloud APIs with your keys (OpenAI, Anthropic, Gemini, OpenRouter…) — with your note as context: summarise, rewrite, continue, explain code, checklists, translate. Use it from your phone too: it asks your computer, end-to-end encrypted through Sync',
     icon: '✨',
-    tags: 'ai,assistant,chat,llm,local llm,local ai,private ai,ollama,lm studio,llama,llama.cpp,mistral,gemma,qwen,deepseek,phi,openai,openai compatible,gpt,chatgpt,anthropic,claude,gemini,openrouter,groq,grok,together,summarise,summarize,rewrite,continue writing,explain code,checklist,translate,ask,prompt,model',
+    tags: 'ai,assistant,chat,llm,local llm,local ai,private ai,ollama,lm studio,unsloth,unsloth studio,llama,llama.cpp,mistral,gemma,qwen,deepseek,phi,openai,openai compatible,gpt,chatgpt,anthropic,claude,gemini,openrouter,groq,grok,together,summarise,summarize,rewrite,continue writing,explain code,checklist,translate,ask,prompt,model',
     entry: 'widgets/ai/ai.js', css: 'widgets/ai/ai.css',
     precache: ['widgets/ai/ai-core.js', 'widgets/ai/ai-service.js', 'widgets/ai/ai-scores.js'],
     prefs: { title: 'AI', fields: JSON.parse(JSON.stringify(C.PREFS)) }
@@ -311,6 +311,32 @@ test('network failures: probe + environment → cors / unreachable / mixed / lna
   assert.strictEqual(C.refineNetwork('down', {}), 'unreachable');
   assert.strictEqual(C.refineNetwork('down', { mixedBlocked: true }), 'mixed');
   assert.strictEqual(C.refineNetwork('blocked', { lna: 'denied' }), 'lna');
+});
+test('Unsloth Studio: local OpenAI-compatible preset on 8888, Bearer key, loaded models first, own fix texts', function () {
+  var P = C.PROVIDERS.unsloth;
+  assert.strictEqual(P.kind, 'openai'); assert.strictEqual(P.where, 'local'); assert.strictEqual(P.key, 'optional');
+  assert.strictEqual(P.url, 'http://127.0.0.1:8888/v1');
+  assert.ok(C.PROVIDER_ORDER.indexOf('unsloth') > C.PROVIDER_ORDER.indexOf('lmstudio') && C.PROVIDER_ORDER.indexOf('unsloth') < C.PROVIDER_ORDER.indexOf('custom'));
+  assert.ok(C.DETECT.some(function (d) { return d.provider === 'unsloth' && d.base === P.url; }));
+  var b = C.buildChat({ kind: 'openai', provider: 'unsloth', base: P.url, apiKey: 'sk-unsloth-abc', model: 'unsloth/gemma', messages: MSGS, temperature: 0.4, maxTokens: 64 });
+  assert.strictEqual(b.url, 'http://127.0.0.1:8888/v1/chat/completions');
+  assert.strictEqual(b.init.headers.Authorization, 'Bearer sk-unsloth-abc');
+  var body = JSON.parse(b.init.body);
+  assert.strictEqual(body.temperature, 0.4); assert.strictEqual(body.max_tokens, 64); assert.ok(!('stream_options' in body));
+  var l = C.parseModels({ kind: 'openai', provider: 'unsloth' }, { object: 'list', data: [
+    { id: 'unsloth/Qwen3-8B-GGUF', loaded: false }, { id: 'unsloth/gemma-4-26B-A4B-it-GGUF', loaded: true }, { id: 'local/my-finetune' }] });
+  assert.deepStrictEqual(l.map(function (m) { return m.id; }), ['unsloth/gemma-4-26B-A4B-it-GGUF', 'local/my-finetune', 'unsloth/Qwen3-8B-GGUF']);
+  assert.strictEqual(C.pickModel('', l), 'unsloth/gemma-4-26B-A4B-it-GGUF', 'automatic pick is a loaded model');
+  var idle = l[2];
+  assert.ok(C.badges(Object.assign({ where: 'local' }, idle)).some(function (x) { return x.k === 'idle' && x.t === 'Not loaded'; }));
+  assert.ok(!C.badges(Object.assign({ where: 'local' }, l[0])).some(function (x) { return x.k === 'idle'; }));
+  var cmds = function (o) { return o.steps.filter(function (s) { return s.cmd; }).map(function (s) { return s.cmd; }); };
+  var co = C.explain('cors', { provider: 'unsloth', origin: 'https://cadezawacki.github.io' });
+  assert.ok(/Unsloth Studio/.test(co.title));
+  assert.deepStrictEqual(cmds(co), ['unsloth studio', 'UNSLOTH_CORS_ORIGINS=https://cadezawacki.github.io']);
+  assert.ok(cmds(C.explain('unreachable', { provider: 'unsloth', base: P.url })).indexOf('unsloth studio') >= 0);
+  assert.ok(/sk-unsloth-/.test(JSON.stringify(C.explain('auth', { provider: 'unsloth' }).steps)));
+  assert.ok(/Select model/.test(JSON.stringify(C.explain('model', { provider: 'unsloth', model: 'x' }).steps)));
 });
 test('fix texts: OLLAMA_ORIGINS per OS; cloud ones name the provider and link to its key page', function () {
   var o = C.explain('cors', { provider: 'ollama', origin: 'https://cadezawacki.github.io', os: 'win' });

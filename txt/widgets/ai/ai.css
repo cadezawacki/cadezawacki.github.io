@@ -414,3 +414,6 @@
 @media (prefers-reduced-motion: reduce) {
   .ai-caret, .ai-spin, .ai-s-wait .ai-dot, .ai-ask, .ai-picker { animation: none; }
 }
+
+/* Unsloth Studio lists models it hasn't loaded yet. */
+.ai-b-idle { color: var(--text-muted); border-style: dashed; }

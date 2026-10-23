@@ -88,6 +88,11 @@
   var PROVIDERS = {
     ollama: { id: 'ollama', label: 'Ollama', sub: 'Runs models on this computer', kind: 'ollama', where: 'local', url: 'http://127.0.0.1:11434', key: 'none' },
     lmstudio: { id: 'lmstudio', label: 'LM Studio', sub: 'Runs models on this computer', kind: 'openai', where: 'local', url: 'http://127.0.0.1:1234/v1', key: 'none' },
+    // Unsloth Studio: /v1 is OpenAI-compatible on its UI port (8888 by default, -p to change), keys
+    // are sk-unsloth-… unless keyless access is on in its settings. `unsloth studio` answers any
+    // origin; the desktop app only trusts origins listed in UNSLOTH_CORS_ORIGINS.
+    unsloth: { id: 'unsloth', label: 'Unsloth Studio', sub: 'Runs and fine-tunes models on this computer', kind: 'openai', where: 'local', url: 'http://127.0.0.1:8888/v1', key: 'optional',
+      keyHint: 'sk-unsloth-…' },
     custom: { id: 'custom', label: 'Other server', sub: 'Any OpenAI-compatible one: llama.cpp, Jan, vLLM, LocalAI…', kind: 'openai', where: 'local', url: 'http://127.0.0.1:8080/v1', key: 'optional' },
     openai: { id: 'openai', label: 'OpenAI', sub: 'ChatGPT models (GPT-5…)', kind: 'openai', where: 'cloud', url: 'https://api.openai.com/v1', key: 'required',
       keyUrl: 'https://platform.openai.com/api-keys', vendor: 'openai', tokensParam: 'max_completion_tokens', fixedTemp: /^(o\d|gpt-[5-9]|chatgpt-[5-9])/ },
@@ -106,12 +111,13 @@
     together: { id: 'together', label: 'Together AI', sub: 'Open models in the cloud', kind: 'openai', where: 'cloud', url: 'https://api.together.xyz/v1', key: 'required',
       keyUrl: 'https://api.together.ai/settings/api-keys' }
   };
-  var PROVIDER_ORDER = ['ollama', 'lmstudio', 'custom', 'openai', 'anthropic', 'gemini', 'openrouter', 'groq', 'mistral', 'deepseek', 'xai', 'together'];
+  var PROVIDER_ORDER = ['ollama', 'lmstudio', 'unsloth', 'custom', 'openai', 'anthropic', 'gemini', 'openrouter', 'groq', 'mistral', 'deepseek', 'xai', 'together'];
   var PRESETS = PROVIDERS;   // the round-1 name
   // Where "Find local servers" looks (all on this computer).
   var DETECT = [
     { provider: 'ollama', name: 'Ollama', base: 'http://127.0.0.1:11434' },
     { provider: 'lmstudio', name: 'LM Studio', base: 'http://127.0.0.1:1234/v1' },
+    { provider: 'unsloth', name: 'Unsloth Studio', base: 'http://127.0.0.1:8888/v1' },
     { provider: 'custom', name: 'llama.cpp / LocalAI', base: 'http://127.0.0.1:8080/v1' },
     { provider: 'custom', name: 'Jan', base: 'http://127.0.0.1:1337/v1' },
     { provider: 'custom', name: 'vLLM', base: 'http://127.0.0.1:8000/v1' },
@@ -249,7 +255,7 @@
     var fixed = p.fixedTemp && p.fixedTemp.test(String(o.model || ''));
     if (isFinite(o.temperature) && !fixed) body.temperature = p.tempMax ? Math.min(+o.temperature, p.tempMax) : +o.temperature;
     if (o.maxTokens > 0) body[p.tokensParam || 'max_tokens'] = Math.floor(o.maxTokens);
-    if (stream && o.provider && o.provider !== 'custom' && o.provider !== 'lmstudio') body.stream_options = { include_usage: true };
+    if (stream && o.provider && o.provider !== 'custom' && o.provider !== 'lmstudio' && o.provider !== 'unsloth') body.stream_options = { include_usage: true };
     return { url: o.base + '/chat/completions', init: { method: 'POST', headers: headersFor(o, true), body: JSON.stringify(body) } };
   }
   var EMBED_RE = /embed|bge-|e5-|minilm|rerank/i;
@@ -291,12 +297,13 @@
           (m.capabilities && m.capabilities.completion_chat === false) || (Array.isArray(outs) && outs.indexOf('text') < 0);
         if (p.id === 'openai' && !/^(gpt-|o\d|chatgpt-)/.test(id)) nonchat = true;
         out.push({ id: id, name: String(m.display_name || (p.id === 'openrouter' ? m.name : '') || id), ctx: ctx, out: num(m.max_tokens) || (m.top_provider && num(m.top_provider.max_completion_tokens)) || 0,
-          price: price, size: 0, family: '', params: '', quant: '', embed: EMBED_RE.test(id) || !!nonchat });
+          price: price, size: 0, family: '', params: '', quant: '', embed: EMBED_RE.test(id) || !!nonchat, idle: m.loaded === false });
       });
     }
     var seen = {};
     out = out.filter(function (m) { if (seen[m.id]) return false; seen[m.id] = 1; return true; });
-    out.sort(function (a, b) { return (a.embed ? 1 : 0) - (b.embed ? 1 : 0); });
+    // Chat models first; among them, ones the server has in memory (Unsloth's `loaded`) first.
+    out.sort(function (a, b) { return ((a.embed ? 2 : 0) + (a.idle ? 1 : 0)) - ((b.embed ? 2 : 0) + (b.idle ? 1 : 0)); });
     return out;
   }
   function chatModels(list) { return (list || []).filter(function (m) { return !m.embed; }); }
@@ -506,10 +513,12 @@
     var o = { code: code, title: '', text: '', steps: [] };
     switch (code) {
       case 'cors':
-        o.title = cloud ? P.label + ' didn’t let this page in (blocked by the browser)' : (p === 'ollama' ? 'Ollama' : p === 'lmstudio' ? 'LM Studio' : 'The server') + ' is running, but it doesn’t let this page in yet';
+        o.title = cloud ? P.label + ' didn’t let this page in (blocked by the browser)' : (p === 'ollama' ? 'Ollama' : p === 'lmstudio' ? 'LM Studio' : p === 'unsloth' ? 'Unsloth Studio' : 'The server') + ' is running, but it doesn’t let this page in yet';
         o.text = 'Model servers only answer web pages they’ve been told to trust (CORS). Allow ' + origin + ' once:';
         if (p === 'ollama') { o.os = ollamaCors(origin); o.osPick = osPick(env.os); o.steps = [T('Already set for something else? Separate several origins with commas.')]; }
         else if (p === 'lmstudio') o.steps = [T('In LM Studio open the Developer tab → Server settings → turn on “Enable CORS”. Keep the server Running, then Test again.'), T('Or start it from a terminal:'), CMD('lms server start --cors')];
+        else if (p === 'unsloth') o.steps = [T('Started with “unsloth studio” in a terminal it lets every page in — the desktop app only trusts origins you list. Quit the app and run:'),
+          CMD('unsloth studio'), T('Or keep the desktop app and allow this page before launching it:'), CMD('UNSLOTH_CORS_ORIGINS=' + origin)];
         else if (cloud) { o.text = ''; o.steps = [T(P.label + ' normally answers browsers — a privacy extension or a company proxy may be blocking it. Try again, or from another browser.')]; }
         else o.steps = [T('Allow the origin ' + origin + ' in your server’s CORS settings, then Test again.'),
           T('llama.cpp (llama-server) and Jan allow every origin by default; vLLM: --allowed-origins \'["' + origin + '"]\'; LocalAI: set CORS=true.')];
@@ -519,6 +528,8 @@
         if (cloud) o.steps = [T('Check the internet connection. If the address was changed, set it back to ' + P.url + '.')];
         else if (p === 'ollama') o.steps = [T('Is Ollama running? Open the Ollama app, or run:'), CMD('ollama serve'), T('Not installed yet? Get it from ollama.com, then download a model:'), CMD('ollama pull llama3.2')];
         else if (p === 'lmstudio') o.steps = [T('Open LM Studio → Developer tab → switch the server on (Status: Running). It listens on port 1234 unless you changed it; load a model too.')];
+        else if (p === 'unsloth') o.steps = [T('Start Unsloth Studio — it listens on port 8888 (pick another with -p 9000, then change the address here to match):'), CMD('unsloth studio'),
+          T('Then load a model from “Select model” on its Chat page.')];
         else o.steps = [T('Start your server and check the address and port — OpenAI-compatible servers usually end in /v1 (e.g. http://127.0.0.1:8080/v1).')];
         if (env.base && addressSpace(env.base) === 'public' && isHttp(env.base) && /^https:/.test(origin)) o.steps.push(T('Browsers block plain http:// addresses on the internet from this secure page — use https://, or run the server on this computer.'));
         if (!cloud && (env.browser === 'chrome' || env.browser === 'edge')) o.steps.push(T('If the browser asked to let this site reach “apps on this device” or your “local network”, allow it (site settings, left of the address bar).'));
@@ -540,6 +551,7 @@
         o.steps = [T('Pick another model' + (p === 'ollama' ? ', or install this one:' : '.'))];
         if (p === 'ollama') o.steps.push(CMD('ollama pull ' + (env.model || 'llama3.2')));
         else if (p === 'lmstudio') o.steps.push(T('Load it in LM Studio (or turn on “Just-in-time model loading” in the Developer settings).'));
+        else if (p === 'unsloth') o.steps.push(T('Load it in Unsloth Studio from “Select model” on the Chat page — only loaded models answer.'));
         break;
       case 'context':
         o.title = 'That’s more text than the model can read at once';
@@ -549,6 +561,7 @@
       case 'auth':
         o.title = cloud ? P.label + ' didn’t accept the API key' : 'The server wants an API key';
         o.steps = [T('Check the key in Setup → ' + P.label + '. It stays on this device only, never synced.')];
+        if (p === 'unsloth') o.steps.push(T('Use the sk-unsloth-… key Unsloth Studio printed when it started (or make one in its Settings → API keys). Or turn on keyless API access for inference in its Settings.'));
         if (P.keyUrl) o.steps.push(LINK(P.keyUrl, 'Get a key at ' + hostOf(P.keyUrl)));
         break;
       case 'key-missing':
@@ -885,6 +898,7 @@
     if (m.price && m.where === 'cloud') out.push({ k: 'price', t: fmtPrice(m.price),
       title: (m.price.in === 0 && m.price.out === 0 ? 'Free to use' : 'Price per million tokens: $' + fmtNum(m.price.in) + ' in, $' + fmtNum(m.price.out) + ' out') +
         (m.priceSrc === 'openrouter' ? ' — OpenRouter’s public model list' + (o.catalogDate ? ', ' + o.catalogDate : '') + ' (the vendor’s own API price)' : ' — from ' + providerOf(m.priceSrc).label) });
+    if (m.idle) out.push({ k: 'idle', t: 'Not loaded', title: 'Available on the server but not in memory — load it there first (Unsloth Studio: “Select model” on the Chat page)' });
     if (m.ctx) out.push({ k: 'ctx', t: fmtCtx(m.ctx), title: 'Context window: ' + Number(m.ctx).toLocaleString('en-US') + ' tokens it can read at once' });
     if (m.score) out.push({ k: 'score', t: '★' + m.score.r,
       title: 'LMArena text score ' + m.score.r + ' (“' + m.score.n + '”), higher is better' + (m.score.date ? ' — as of ' + m.score.date : '') + '. lmarena.ai, ' + SOURCES.scoresLicence });
@@ -1063,6 +1077,7 @@
           if (m.params) x.z = m.params;
           if (m.quant) x.qt = m.quant;
           if (m.size) x.b = m.size;
+          if (m.idle) x.u = 1;
           return x;
         }),
         more: Math.max(0, list.length - cap)
@@ -1152,7 +1167,7 @@
           models: (Array.isArray(p.m) ? p.m : []).filter(function (m) { return m && typeof m.i === 'string'; }).map(function (m) {
             return { id: m.i, name: String(m.n || m.i), ctx: +m.c || 0, price: Array.isArray(m.p) ? { in: +m.p[0] || 0, out: +m.p[1] || 0 } : null,
               priceSrc: m.ps ? 'openrouter' : (p.w === 'cloud' ? p.id : 'local'), score: Array.isArray(m.s) ? { r: +m.s[0], n: String(m.s[1] || ''), date: String(o.sd || '') } : null,
-              params: String(m.z || ''), quant: String(m.qt || ''), size: +m.b || 0, where: p.w === 'cloud' ? 'cloud' : 'local', embed: false };
+              params: String(m.z || ''), quant: String(m.qt || ''), size: +m.b || 0, where: p.w === 'cloud' ? 'cloud' : 'local', embed: false, idle: m.u === 1 };
           })
         };
       });
