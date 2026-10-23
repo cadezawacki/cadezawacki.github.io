@@ -2991,6 +2991,53 @@
         "widgets/burn/burn-core.js",
         "widgets/merge/merge-core.js"
       ]
+    },
+    {
+      "id": "fontmaker",
+      "type": "widget",
+      "name": "Font Maker",
+      "description": "Turn your handwriting into a real font — draw each letter with a finger or Apple Pencil, save it as an .otf, use it in the app and make pictures of text in it",
+      "icon": "✍️",
+      "tags": "font,font maker,handwriting,hand writing,typeface,otf,woff,opentype,glyph,letters,lettering,calligraphy,pencil,apple pencil,draw,image,png,card",
+      "entry": "widgets/fontmaker/fontmaker.js",
+      "css": "widgets/fontmaker/fontmaker.css",
+      "precache": [
+        "widgets/fontmaker/fontmaker-core.js",
+        "widgets/fontmaker/opentype.min.js"
+      ],
+      "prefs": {
+        "title": "Font Maker",
+        "fields": [
+          {
+            "key": "ghost",
+            "type": "toggle",
+            "label": "Show a faint letter to trace over",
+            "default": true
+          },
+          {
+            "key": "pencil",
+            "type": "toggle",
+            "label": "Pencil only once a pen is used",
+            "default": true,
+            "hint": "On an iPad: after the Apple Pencil touches the drawing square, fingers and palms no longer draw"
+          },
+          {
+            "key": "autoNext",
+            "type": "toggle",
+            "label": "Go to the next letter after a pause",
+            "default": false,
+            "hint": "1.5 s after you lift the pen"
+          },
+          {
+            "key": "preview",
+            "type": "text",
+            "label": "Preview word",
+            "default": "Hamburgefonts",
+            "placeholder": "Hamburgefonts",
+            "maxLength": 40
+          }
+        ]
+      }
     }
   ]
 }
