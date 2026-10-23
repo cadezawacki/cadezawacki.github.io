@@ -997,7 +997,7 @@
   function fmtT(t) { return (Math.round(t * 100) / 100).toFixed(2) + 's'; }
   function starStr(n) { return '★★★'.slice(0, n) + '☆☆☆'.slice(0, 3 - n); }
   function coarse() { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } }
-  function reduced() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
+  function reduced() { return false; }
 
   // ---- tiny WebAudio voice: blips + an engine hum; off by default, created in a gesture ----
   function Snd(on) { this.on = !!on; this.ac = null; this.hum = null; }

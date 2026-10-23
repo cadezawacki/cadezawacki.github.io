@@ -163,7 +163,7 @@
     try { var r = fn.call(document); if (r && r.catch) r.catch(function () {}); } catch (e) {}
   }
   function coarse() { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); }
-  function reducedMotion() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  function reducedMotion() { return false; }
 
   // ======================================================================
   // Prefs

@@ -216,7 +216,5 @@
   .wh-menu > button { padding: 12px 12px; }
   .wh-btn { padding: 10px 13px; }
 }
-@media (prefers-reduced-motion: no-preference) {
   .wh-sheet:not([hidden]) .wh-sh-in { animation: advUp 0.16s ease-out; }
-}
 @keyframes advUp { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }

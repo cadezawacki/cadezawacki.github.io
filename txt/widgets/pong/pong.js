@@ -630,7 +630,7 @@
       panel: p, stage: p.querySelector('.pong-stage'), cv: p.querySelector('.pong-cv'), ovl: p.querySelector('.pong-ovl'),
       bar: p.querySelector('.pong-bar'), hint: p.querySelector('.pong-hint'),
       prefs: prefs, stats: loadStats(), snd: new Snd(prefs.sound),
-      rm: !!(mm && mm('(prefers-reduced-motion: reduce)').matches),
+      rm: false,
       coarse: !!(mm && mm('(pointer: coarse)').matches),
       g: null, raf: 0, last: 0, paused: false, hold: 0, trail: [], ptrs: {}, held: {}, ovlKind: null, portrait: false, k: 1
     };

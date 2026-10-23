@@ -87,7 +87,6 @@
 .ni-btn:hover { background: var(--surface-hover, rgba(127,127,127,0.15)); }
 .ni-btn.primary { border-color: var(--accent); color: var(--accent); }
 
-@media (prefers-reduced-motion: reduce) { .ni-spin, .ni-pbar.pending { animation-duration: 3s; } }
 @media (max-width: 560px) {
   #netinfo-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; height: calc(100vh - 96px); height: calc(100dvh - 96px); }
 }

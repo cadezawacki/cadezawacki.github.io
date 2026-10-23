@@ -266,10 +266,6 @@
   .bt-name { height: 40px; }
   .bt-pk-n button, .bt-pk-v button, .bt-menu button { height: 40px; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .bt-pat.cue, .bt-sus .bt-play.on { animation: none; }
-  .bt-pat.cue { border-color: var(--accent); }
-}
 
 /* ---- narrow panels (phones): pages + ⋯ share the pattern row; swing lives in MIX ---- */
 .bt-more { display: none; }

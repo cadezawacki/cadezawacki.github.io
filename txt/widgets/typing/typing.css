@@ -57,7 +57,6 @@
 .ty-w.ty-end::after { right: -1px; }
 .ty-run .ty-w i.c::before, .ty-run .ty-w.ty-end::after { animation: none; }
 @keyframes ty-blink { 50% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .ty-w i.c::before, .ty-w.ty-end::after { animation: none; } }
 
 /* The real input: invisible, on top, 16px so iOS doesn't zoom. */
 .ty-in {

@@ -112,7 +112,7 @@
     return (h ? h + ':' + pad2(m) : m) + ':' + pad2(s);
   }
   function now() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
-  function reduced() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  function reduced() { return false; }
   function toast(msg, type) { try { Cade.showToast(msg, type || 'info', 2200); } catch (e) {} }
   function haptic(ms) { try { Cade.haptic(ms); } catch (e) {} }
   function esc(s) { return Cade.escapeHtml(String(s)); }

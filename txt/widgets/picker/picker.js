@@ -265,7 +265,7 @@
   // ======================================================================
   function panel() { return document.getElementById(PANEL_ID); }
   function q(sel) { var p = panel(); return p ? p.querySelector(sel) : null; }
-  function reducedMotion() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  function reducedMotion() { return false; }
   function toast(m, t, ms) { Cade.showToast(m, t || 'info', ms || 2000); }
   function copyText(text) {
     var done = function () { toast('Copied', 'success', 1200); };

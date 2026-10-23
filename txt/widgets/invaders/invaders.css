@@ -50,10 +50,6 @@
   .inv-b { min-height: 40px; padding: 6px 14px; }
   .inv-bar { justify-content: center; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .inv-pk { transition: none; }
-  .inv-pk.on { transform: none; }
-}
 
 /* Popped out into its own window (Cade.popOut): the playfield (sized by fit()
    for the app window) is centred in the pop-out rather than left-aligned. */

@@ -123,9 +123,6 @@
 #breathe-panel.br-full .br-phase { font-size: 22px; }
 #breathe-panel.br-full .br-count { font-size: 56px; }
 
-@media (prefers-reduced-motion: reduce) {
-  .br-phase.pop { animation: none; }
-}
 @media (max-width: 560px) {
   #breathe-panel:not(.br-full) { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; }
   .br-sel { flex-basis: 140px; }

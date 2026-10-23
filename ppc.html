@@ -201,7 +201,6 @@ svg { display: block; }
   60% { transform: translateX(-4px); } 80% { transform: translateX(3px); }
 }
 .login-card.fail { animation: loginShake 300ms ease; }
-@media (prefers-reduced-motion: reduce) { .login-card.fail { animation: none; } }
 
 /* ============================================
    Menubar
@@ -332,7 +331,6 @@ svg { display: block; }
   animation: dialogIn 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes dialogIn { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .modal-dialog { animation: none; } }
 .modal-title { font-size: var(--text-lg); font-weight: 600; margin-bottom: var(--space-2); }
 .modal-desc { font-size: var(--text-sm); color: var(--text-muted); margin-bottom: var(--space-4); }
 .modal-actions { display: flex; gap: var(--space-2); justify-content: flex-end; margin-top: var(--space-5); }

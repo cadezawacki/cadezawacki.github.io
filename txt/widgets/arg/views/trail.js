@@ -63,7 +63,7 @@
   function sum(a) { return a.reduce(function (s, x) { return s + (+x || 0); }, 0); }
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
   function layerIds() { return D().layers.map(function (l) { return l.id; }); }
-  function reduced() { return window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  function reduced() { return false; }
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   function evLabel(ev) { return ev ? ev.id + ' · ' + (ev.title || 'Untitled event') : 'No event'; }
   /* <option>s for an event select, grouped by chapter */

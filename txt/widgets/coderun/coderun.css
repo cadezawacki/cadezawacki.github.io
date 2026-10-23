@@ -189,4 +189,3 @@
 @media (max-width: 560px) {
   .cr-opts-body { max-height: calc(100vh - 330px); max-height: calc(100dvh - 330px); }
 }
-@media (prefers-reduced-motion: reduce) { .cr-dot.busy { animation: none; } .cr-pk-bar i { transition: none; } }

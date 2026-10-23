@@ -48,10 +48,6 @@
   .ast-b { min-height: 40px; padding: 6px 14px; }
   .ast-bar { justify-content: center; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .ast-pk { transition: none; }
-  .ast-pk.on { transform: none; }
-}
 
 /* Popped out into its own window (Cade.popOut): the playfield (sized by fit()
    for the app window) is centred in the pop-out rather than left-aligned. */

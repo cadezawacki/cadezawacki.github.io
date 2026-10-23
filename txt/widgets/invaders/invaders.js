@@ -812,7 +812,7 @@
     try { Cade.closeAllMenus(); } catch (e) {}
     if (document.getElementById(PANEL)) { close(true); return; }
     teardown();
-    try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { reduced = false; }
+    reduced = false;
     var prefs = loadPrefs();
     var p = Cade.mkPanel(PANEL, '\ud83d\udc7e Invaders', bodyHtml());
     if (Cade.markGamePanel) Cade.markGamePanel(p);

@@ -150,9 +150,6 @@
 }
 @keyframes xw-pop { 0% { transform: scale(0.3); opacity: 0; } 70% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); } }
 @keyframes xw-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) {
-  .xw-grid.won .xw-cell, .xw-big, .xw-spin { animation: none; }
-}
 
 @media (pointer: coarse) {
   .xw-kb { display: flex; }

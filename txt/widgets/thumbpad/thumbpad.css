@@ -78,7 +78,3 @@ body.cade-tp-on:not(.sel-mode) #cade-panel-dock { bottom: 54px; }
   .cade-tp-pad { margin: 4px 2px; }
   .cade-tp-sel { margin: 4px 0; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .cade-tp { animation: none; }
-  .cade-tp-glow { display: none; }
-}

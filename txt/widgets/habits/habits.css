@@ -374,10 +374,6 @@
 @keyframes hb-tick { 0% { transform: translateY(5px); opacity: 0.3; } 100% { transform: none; opacity: 1; } }
 @keyframes hb-bump { 0% { transform: none; } 30% { transform: translateY(-3px) scale(1.12); color: var(--hc); } 100% { transform: none; } }
 @keyframes hb-cheer { 0% { opacity: 0; letter-spacing: 0.3em; } 100% { opacity: 1; letter-spacing: 0.06em; } }
-@media (prefers-reduced-motion: reduce) {
-  .hb-big.pop, .hb-big.pop > span, .hb-big.tick > span, .hb-d.pop .hb-sq, .hb-streak.bump, .hb-cheer.fresh, .hb-tog.pop { animation: none; }
-  .hb-mrow { transition: none; }
-}
 
 /* ---- phones: full width ---- */
 @media (max-width: 560px) {

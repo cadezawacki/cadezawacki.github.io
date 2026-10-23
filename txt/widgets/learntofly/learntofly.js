@@ -1602,7 +1602,7 @@
       panel: p, head: hb, stage: p.querySelector('.ltf-stage'), cv: p.querySelector('.ltf-cv'), ovl: p.querySelector('.ltf-ovl'),
       pad: p.querySelector('.ltf-pad'), liveEl: p.querySelector('.ltf-live'),
       save: ld.save, firstRun: ld.fresh, snd: new Snd(sget(SOUND_KEY) === '1'),
-      rm: !!(mm && mm('(prefers-reduced-motion: reduce)').matches), coarse: !!(mm && mm('(pointer: coarse)').matches),
+      rm: false, coarse: !!(mm && mm('(pointer: coarse)').matches),
       phase: 'hangar', f: null, hf: null, paused: false, raf: 0, last: 0, endT: 0, puffT: 0,
       keys: { up: false, down: false, boost: false }, held: {}, inp: { up: false, down: false, boost: false },
       pal: new Array(NPAL), col: null, atl: null, cloudT: null, k: 1, VH: 288, v: {},

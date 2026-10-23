@@ -1551,7 +1551,7 @@
         clear: p.querySelector('[data-act="clear"]'), go: p.querySelector('[data-act="go"]') },
       hdr: { levels: hb.querySelector('[data-act="levels"]'), snd: hb.querySelector('[data-act="sound"]') },
       snd: new Snd(sget(K_SOUND) === '1'), prog: loadProg(),
-      rm: !!(mm && mm('(prefers-reduced-motion: reduce)').matches), coarse: !!(mm && mm('(pointer: coarse)').matches),
+      rm: false, coarse: !!(mm && mm('(pointer: coarse)').matches),
       L: null, idx: 0, strokes: [], hist: [], cur: null, mode: 'draw', phase: 'edit', sim: null, parts: [], bumpT: {},
       raf: 0, last: 0, paused: false, ovlKind: null, animUntil: 0, cardAt: 0, endT: 0, k: 1, ptr: null, mark: null, inkUsed: 0
     };

@@ -66,7 +66,6 @@
 .id-wstars { display: flex; justify-content: center; gap: 6px; font-size: 34px; line-height: 1; color: var(--text-faint); }
 .id-wstars span.on { color: var(--ws-amber-fg, var(--accent)); animation: id-pop 0.35s ease both; }
 @keyframes id-pop { 0% { transform: scale(0.3); opacity: 0; } 70% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); } }
-@media (prefers-reduced-motion: reduce) { .id-wstars span.on { animation: none; } .id-ink.id-flash { animation: none; } }
 .id-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; text-align: left; font-size: var(--text-sm); }
 .id-checks li { display: flex; gap: 8px; align-items: baseline; color: var(--text-muted); }
 .id-checks li span { flex: 0 0 auto; width: 1em; font-weight: 700; }

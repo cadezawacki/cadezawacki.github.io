@@ -1165,7 +1165,7 @@
       panel: p, stage: p.querySelector('.pt-stage'), cv: p.querySelector('.pt-cv'), ovl: p.querySelector('.pt-ovl'),
       bar: p.querySelector('.pt-bar'), hint: p.querySelector('.pt-hint'), live: p.querySelector('.pt-live'),
       snd: new Snd(sget(SOUND_KEY) === '1'), notesOn: sget(NOTES_KEY) !== '0', best: best,
-      rm: !!(mm && mm('(prefers-reduced-motion: reduce)').matches),
+      rm: false,
       coarse: !!(mm && mm('(pointer: coarse)').matches),
       g: newGame((Math.random() * 4294967296) >>> 0), viewLevel: 0, tween: null,
       phase: 'ready', ball: null, draft: null, deck: [], draftNo: Math.floor(Math.random() * 40) + 7,

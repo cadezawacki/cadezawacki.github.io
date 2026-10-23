@@ -612,7 +612,7 @@
       panel: p, stage: p.querySelector('.fl-stage'), cv: p.querySelector('.fl-cv'), ovl: p.querySelector('.fl-ovl'),
       bar: p.querySelector('.fl-bar'), hint: p.querySelector('.fl-hint'),
       snd: new Snd(soundOn), best: getBest(), newBest: false,
-      rm: !!(mm && mm('(prefers-reduced-motion: reduce)').matches),
+      rm: false,
       coarse: !!(mm && mm('(pointer: coarse)').matches),
       w: newWorld((Math.random() * 4294967296) >>> 0), flapQ: 0, raf: 0, last: 0, paused: false, ovlKind: null,
       pop: 0, flash: 0, banner: null, k: 1

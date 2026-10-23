@@ -528,7 +528,6 @@
   }
 
   // ---- all chats: every note with a saved conversation on this device ------------------------------------
-  function reduceMotion() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
   function ago(ts) {
     var s = Math.max(0, (Date.now() - (+ts || 0)) / 1000);
     if (!ts) return '';
@@ -1325,7 +1324,7 @@
         if (lbl) { lbl.textContent = 'Copied'; t.classList.add('ai-done'); setTimeout(function () { if (lbl.isConnected) { lbl.textContent = 'Copy'; t.classList.remove('ai-done'); } }, 1400); }
         break;
       }
-      case 'jump': S.log.scrollTo({ top: S.log.scrollHeight, behavior: reduceMotion() ? 'auto' : 'smooth' }); break;
+      case 'jump': S.log.scrollTo({ top: S.log.scrollHeight, behavior: 'smooth' }); break;
       case 'hub': openHub(); break;
       case 'hub-close': closeHub(); break;
       case 'hub-open': hubOpen(t.dataset.room); break;

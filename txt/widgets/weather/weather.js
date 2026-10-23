@@ -12,8 +12,8 @@
  * 'cade-geo-location'); geolocation is only requested on a button press.
  *
  * VISUALS: hand-drawn inline SVG glyphs (sun rays turn, clouds drift, rain
- * and snow fall, lightning flashes, fog bands slide; all CSS animations that
- * stop under prefers-reduced-motion), a hero card tinted by condition and
+ * and snow fall, lightning flashes, fog bands slide; all CSS animations —
+ * the OS reduced-motion setting is deliberately ignored), a hero card tinted by condition and
  * time of day, a monotone-spline temperature line with precipitation bars,
  * iOS-style range bars on a shared scale, and drawn detail tiles.
  *
@@ -478,7 +478,7 @@
     });
     return geoLoading;
   }
-  function reduced() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
+  function reduced() { return false; }
 
   // ---- derived values ----------------------------------------------------------------
   function todayIdx(m, now) {

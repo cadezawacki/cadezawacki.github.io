@@ -412,9 +412,6 @@
   .ai-shared-r .ai-link { padding: 10px 4px; }
   .ai-legend summary { padding: 6px 0; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .ai-caret, .ai-spin, .ai-s-wait .ai-dot, .ai-ask, .ai-picker { animation: none; }
-}
 
 /* Unsloth Studio lists models it hasn't loaded yet. */
 .ai-b-idle { color: var(--text-muted); border-style: dashed; }
@@ -470,5 +467,4 @@
   .ai-hub-del { min-width: 44px; height: 44px; }
   .ai-foot .ai-hubbtn, .ai-foot .ai-clear { min-height: 32px; }
 }
-@media (prefers-reduced-motion: reduce) { .ai-jump { animation: none; } }
 .ai-hub:focus { outline: none; }

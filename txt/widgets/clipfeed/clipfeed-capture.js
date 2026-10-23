@@ -262,7 +262,7 @@
     '.cbf-chip-x:hover{background:var(--surface-hover,rgba(0,0,0,.05))}' +
     '@keyframes cbf-chip-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}' +
     '@media (max-width:560px){.cbf-chip{left:12px;right:12px;max-width:none;bottom:calc(16px + env(safe-area-inset-bottom,0px))}}' +
-    '@media (prefers-reduced-motion:reduce){.cbf-chip{animation:none}}';
+    '';
   function chipShow(rec) {
     chipHide();
     if (!document.getElementById('cbf-chip-css')) {

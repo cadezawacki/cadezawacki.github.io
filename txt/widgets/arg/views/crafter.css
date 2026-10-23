@@ -417,6 +417,3 @@
   .v-crafter .cf-flow { margin-left: 16px; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .v-crafter .cf-menu { animation: none; }
-}
