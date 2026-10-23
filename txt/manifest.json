@@ -2977,6 +2977,20 @@
       "precache": [
         "widgets/stego/stego-core.js"
       ]
+    },
+    {
+      "id": "burn",
+      "type": "widget",
+      "name": "Self-destructing links",
+      "description": "Share a note by a link that self-destructs — after one open, or when a timer runs out — end-to-end encrypted, optionally live-editable; for people without Cade.txt",
+      "icon": "🔥",
+      "tags": "share,link,self-destruct,burn,burn after reading,one-time,expiring,expire,secret,private,encrypted,live,collaborate,guest,send",
+      "entry": "widgets/burn/burn.js",
+      "css": "widgets/burn/burn.css",
+      "precache": [
+        "widgets/burn/burn-core.js",
+        "widgets/merge/merge-core.js"
+      ]
     }
   ]
 }

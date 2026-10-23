@@ -3526,6 +3526,10 @@ body.inbox-list .find-panel { display: none !important; }
         <span class="scb-title">📄 Public Link</span>
         <span class="scb-desc">Embeds a compressed copy of the text in the link — anyone can read it. No sync.</span>
       </button>
+      <button class="btn share-opt" id="share-opt-burn" type="button" onclick="openBurnShare()">
+        <span class="scb-title">🔥 Self-destructing link…</span>
+        <span class="scb-desc">Opens once or until a timer runs out, then deletes itself. End-to-end encrypted; can be live-editable.</span>
+      </button>
     </div>
     <div class="form-group" style="margin-top: var(--space-3);">
       <label class="form-label" for="share-pass">Password (optional — encrypts a Public link)</label>
@@ -21602,6 +21606,56 @@ window.shareNative = function() {
   if (document.readyState === 'complete') setTimeout(openFromHash, 400);
   else window.addEventListener('load', () => setTimeout(openFromHash, 400));
   window.addEventListener('hashchange', openFromHash);
+})();
+
+// Self-destructing links (txt/widgets/burn/) — lazy. The recipient side: a
+// #burn=<payload> link (or this tab's still-open one, after a reload) opens the
+// module's full-page view; the hash is cleared at once, since the payload holds
+// the link's key. The owner side: the module is loaded only while the synced
+// 'burn' list has links that haven't ended (to sweep expired / opened ones and
+// keep live-editable ones in step with their rooms).
+function _burnModule() {
+  if (window.__cadeBurn) return Promise.resolve(window.__cadeBurn);
+  const t0 = Date.now();
+  return new Promise((res, rej) => {
+    (function go() {
+      // The manifest entry once bootModules has it (so the palette stub and this
+      // share one load); else, after a few seconds, the module's known path.
+      const m = _manifestById.get('burn') || (Date.now() - t0 > 4000 ? { id: 'burn', entry: 'widgets/burn/burn.js' } : null);
+      if (!m) { setTimeout(go, 100); return; }
+      loadModule(m).then(() => window.__cadeBurn ? res(window.__cadeBurn) : rej(new Error('burn module missing')), rej);
+    })();
+  });
+}
+window.openBurnShare = function() {
+  try { closeShareModal(); } catch {}
+  _burnModule().then(B => B.openOwner()).catch(() => showToast('Couldn’t load self-destructing links (offline?)', 'error', 3000));
+};
+(function() {
+  let payload = null;
+  try {
+    const m = (window.location.hash || '').match(/[#&]burn=([A-Za-z0-9_-]+)/);
+    if (m) {
+      payload = m[1];
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    } else payload = sessionStorage.getItem('cade-burn-open');
+  } catch (e) {}
+  if (payload) {
+    _burnModule().then(B => B.openLink(payload)).catch(() => showToast('Couldn’t open the self-destructing link — check your connection and reload', 'error', 5000));
+  }
+  // Owner sweep: only when sync is set up and the synced list has live links.
+  setTimeout(() => {
+    try {
+      if (!window.Cade || !Cade.cloud.configured()) return;
+      let started = false;
+      const kick = (d) => {
+        if (started || !d || !Array.isArray(d.shares) || !d.shares.some(x => x && !x.ended)) return;
+        started = true;
+        _burnModule().then(B => B.ownerBoot()).catch(() => { started = false; });
+      };
+      kick(window.__cadeSyncedBlob('burn', { onChange: kick }).get());
+    } catch (e) {}
+  }, 2500);
 })();
 
 // Public share link (#p=...) — a compressed, self-contained copy of a document
