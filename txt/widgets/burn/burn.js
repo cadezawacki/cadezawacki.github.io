@@ -1,20 +1,22 @@
 /* Self-destructing links — share a note with someone who has no Cade.txt
  * account: a link that works for one person, up to N people, or anyone until
- * a timer runs out, read only or live-editable, end-to-end encrypted. burn-core.js holds the pure
+ * a timer runs out — a snapshot, a live view of the owner's changes, or live
+ * two-way editing — end-to-end encrypted. burn-core.js holds the pure
  * logic and the storage layout (see its header); this file is the UI and the
  * Firebase wiring for both sides:
  *
  *  - OWNER (Share → "Self-destructing link…", or Ctrl+K "Self-destructing
- *    links"): a dialog to create a link — expiry, who can open it, editing
- *    up top; under "More options" the name and icon the reader sees, the
+ *    links"): a dialog to create a link — expiry, who can open it, what they
+ *    can do (read a snapshot / watch my changes live / edit with me) up top;
+ *    under "More options" the name and icon the reader sees, the
  *    countdown, saving a copy and the tidy-up tools (an allow-list of the
  *    app's own text scripts, run on the reader's text) — and the list of
  *    links with their status, time left and Revoke.
  *    The list lives in Cade.syncedBlob('burn') — encrypted with the sync key,
  *    so every device of the owner can show and revoke the links, and keep
- *    editable ones live. The core loads this module at boot only while that
+ *    live ones live. The core loads this module at boot only while that
  *    blob lists links that haven't ended (ownerBoot): it sweeps them (expired
- *    / opened ones are destructed) and runs the live merge for editable ones.
+ *    / opened ones are destructed) and runs the live engines.
  *  - RECIPIENT (the core sees #burn= on load and calls openLink): a full-page,
  *    opaque screen over the app with its own named Firebase app, so their own
  *    sync, rooms and Firebase connection are never touched and nothing is
@@ -25,7 +27,10 @@
  * pushes as compare-and-swap transactions on the share's doc, and a three-way
  * merge (merge-core.js via burn-core's mergeLive) whenever someone else's
  * version arrives first. On the owner side the merged text goes into the room
- * through Cade.roomsApi.write, whether or not the room is open. */
+ * through Cade.roomsApi.write, whether or not the room is open.
+ * Watch live: the owner's devices run the same push path (LiveDoc pushOnly —
+ * no merge, no apply: nothing from the share ever reaches the room); the
+ * reader's page follows the versions read-only (burn-core's Follow). */
 (function () {
   'use strict';
   if (typeof window === 'undefined' || !window.Cade) return;
@@ -125,99 +130,12 @@
     return ref.transaction(fn, undefined, false);
   }
 
-  // ---- LiveDoc: one side of a live-editable share ---------------------------------------------------
-  // o: { node, id, key, me, now(), get() → text|Promise|null, apply(merged, seen) → Promise,
-  //      loadBase() → Promise<{ver,text}|null>, saveBase(shared), adoptFirst (bool), onGone(), onSync(state) }
+  // ---- live documents (burn-core's LiveDoc / Follow on this share's doc) ----------------------------
+  // o: as C.LiveDoc, with `node` (the share) instead of the doc ref.
   function LiveDoc(o) {
-    var docRef = o.node.child('doc');
-    var shared = null, latest = null, stopped = false, timer = 0, retry = 0, fails = 0, chain = Promise.resolve(), baseLoaded = null;
-    function enqueue(fn) {
-      chain = chain.then(function () { if (!stopped) return fn(); }).catch(function (e) { console.warn('burn live:', e); });
-      return chain;
-    }
-    function state(s) { if (o.onSync) try { o.onSync(s); } catch (e) {} }
-    function onVal(s) { latest = s.val(); enqueue(incoming); }
-    docRef.on('value', onVal);
-
-    function incoming() {
-      var v = latest;
-      if (!v) { stop(); o.onGone(); return; }
-      if (shared && (v.ct === shared.ct || v.ver <= shared.ver)) return;
-      var theirsP = C.open(o.key, o.id, 'v' + v.ver, v.ct).then(function (x) { return String(x && x.t != null ? x.t : ''); });
-      if (!baseLoaded) baseLoaded = Promise.resolve(o.loadBase ? o.loadBase() : null).catch(function () { return null; });
-      return Promise.all([theirsP, baseLoaded]).then(function (r) {
-        var theirs = r[0], base = shared || r[1];
-        if (stopped) return;
-        if (!base) {
-          // First sight with nothing to merge against: adopt it (the guest
-          // shows it; an owner device without a base leaves the room alone).
-          shared = { ver: v.ver, text: theirs, ct: v.ct };
-          if (o.saveBase) o.saveBase(shared);
-          if (o.adoptFirst) return Promise.resolve(o.apply(theirs, null)).then(function () { state('synced'); });
-          state('synced');
-          return;
-        }
-        if (base.ver >= v.ver) { shared = { ver: base.ver, text: base.text, ct: base.ct }; return; }
-        return Promise.resolve(o.get()).then(function (local) {
-          if (local == null) throw new Error('no local text');
-          var merged = C.mergeLive(M, base.text, local, theirs);
-          var applied = merged === local ? null : o.apply(merged, local);
-          return Promise.resolve(applied).then(function () {
-            shared = { ver: v.ver, text: theirs, ct: v.ct };
-            if (o.saveBase) o.saveBase(shared);
-            fails = 0;
-            if (merged !== theirs) schedule(); else state('synced');
-          });
-        });
-      }).catch(function (e) {
-        // Couldn't apply it here right now (a busy / locked room…): try again soon from the newest version.
-        if (stopped) return;
-        state('retry');
-        clearTimeout(retry);
-        if (++fails <= 40) retry = setTimeout(function () { enqueue(incoming); }, Math.min(1500 * fails, 15000));
-        throw e;
-      });
-    }
-
-    function push() {
-      if (!shared) return;
-      return Promise.resolve(o.get()).then(function (local) {
-        if (stopped || local == null || local === shared.text) { state('synced'); return; }
-        var baseVer = shared.ver, ver = baseVer + 1, me = o.me;
-        state('saving');
-        return C.seal(o.key, o.id, 'v' + ver, { t: local }).then(function (ct) {
-          if (stopped || shared.ver !== baseVer) return;      // someone else's version came in meanwhile
-          return txn(docRef, function (cur) {
-            if (cur === null) return null;                       // gone (or not cached yet: the server reruns us)
-            if (cur.ver !== baseVer) return undefined;           // lost the race: merge, then retry
-            return { ver: ver, ct: ct, by: me, base: baseVer, at: o.now() };
-          }).then(function (r) {
-            var val = r && r.snapshot ? r.snapshot.val() : null;
-            if (r && r.committed && !val) { stop(); o.onGone(); return; }
-            if (r && r.committed && val && val.ct === ct) {
-              if (!shared || shared.ver < ver) { shared = { ver: ver, text: local, ct: ct }; if (o.saveBase) o.saveBase(shared); }
-            }
-            // Typed on while it was in flight, or lost the race (the value listener merges first): go again.
-            return Promise.resolve(o.get()).then(function (now) { if (now != null && shared && now !== shared.text) schedule(); else state('synced'); });
-          });
-        });
-      });
-    }
-    function schedule() {
-      if (stopped || timer) return;
-      state('pending');
-      timer = setTimeout(function () { timer = 0; enqueue(push); }, PUSH_MS);
-    }
-    function flush() { clearTimeout(timer); timer = 0; return enqueue(push); }
-    function stop() {
-      if (stopped) return;
-      stopped = true;
-      clearTimeout(timer); clearTimeout(retry);
-      try { docRef.off('value', onVal); } catch (e) {}
-    }
-    return { changed: schedule, flush: flush, stop: stop, get shared() { return shared; } };
+    o.ref = o.node.child('doc'); o.merge = M; o.pushMs = PUSH_MS;
+    return C.LiveDoc(o);
   }
-
 
   // =====================================================================================================
   // RECIPIENT
@@ -255,7 +173,7 @@
       '<header class="burn-rv-top">' +
         '<div class="burn-rv-brand"><span class="burn-rv-ic" aria-hidden="true" hidden></span><span class="burn-rv-title">Shared note</span></div>' +
         '<div class="burn-rv-chips">' +
-          '<span class="burn-chip burn-chip-live" hidden><i></i><span>Live — your edits are shared</span></span>' +
+          '<span class="burn-chip burn-chip-live" hidden><i></i><span class="burn-chip-t">Live — your edits are shared</span></span>' +
           '<span class="burn-chip burn-chip-clock" hidden title="Time left"><span class="burn-clock-ic" aria-hidden="true">⏱</span><b>–</b></span>' +
         '</div>' +
         '<div class="burn-tidy-w" hidden><button type="button" class="btn burn-tidy" data-act="tidy" aria-haspopup="menu" aria-expanded="false">Tidy up <span aria-hidden="true">▾</span></button></div>' +
@@ -365,9 +283,9 @@
       }
       return withTimeout(claim, 15000).then(function (c) {
         if (r !== R) return;
-        if (!c.mine) return rvEnd(meta.editable ? 'claimed' : 'opened');
+        if (!c.mine) return rvEnd(C.staysLive(meta) ? 'claimed' : 'opened');
         // This browser may come back (a reload, or later) without using up another slot.
-        if (cap && (!v1 || meta.editable)) Cade.store.set(meKey(r.id), r.me);
+        if (cap && (!v1 || C.staysLive(meta))) Cade.store.set(meKey(r.id), r.me);
         var burn = C.burnsAfterRead(meta, c.claims);
         return Promise.all([once(node.child('head')), once(node.child('doc'))]).then(function (v) {
           if (r !== R) return;
@@ -393,17 +311,22 @@
   }
 
   function rvShow(r, text, doc) {
-    var meta = r.meta, head = r.head, editable = !!meta.editable, copy = head.copy, cap = C.capOf(meta);
+    var meta = r.meta, head = r.head, view = C.viewOf(meta, head), editable = view === 'edit', watching = view === 'live';
+    var copy = head.copy, cap = C.capOf(meta);
+    r.view = view;
     rvBrand(head.title || 'Shared note', head.icon);
     r.el.classList.toggle('burn-nocopy', !copy && !editable);
     var main = rvMain();
     main.innerHTML = editable
       ? '<textarea class="burn-rv-text burn-rv-edit" spellcheck="true" autocapitalize="sentences" aria-label="Shared note (live)"></textarea>'
-      : '<div class="burn-rv-text burn-rv-read" tabindex="0"></div>';
+      : '<div class="burn-rv-text burn-rv-read" tabindex="0"' + (watching ? ' aria-live="off" aria-label="Shared note (updates live)"' : '') + '></div>';
     var box = main.firstChild;
-    if (editable) box.value = text; else box.textContent = text;
+    // (one text node, so a live update can patch it in place)
+    if (editable) box.value = text; else box.appendChild(document.createTextNode(text));
     r.box = box;
-    r.el.querySelector('.burn-chip-live').hidden = !editable;
+    var liveChip = r.el.querySelector('.burn-chip-live');
+    liveChip.hidden = !editable && !watching;
+    liveChip.querySelector('.burn-chip-t').textContent = watching ? 'Live — updates as they type' : 'Live — your edits are shared';
     // Footer: what will happen, honestly.
     var bits = [];
     if (r.burned) bits.push(cap > 1 ? '<b>You were the last who could open it:</b> the note was deleted from the server just now. Close this page and it’s gone.'
@@ -411,6 +334,7 @@
     else if (cap === 1) bits.push('<b>Just for you:</b> it works only in this browser now.');
     else if (cap > 1) bits.push('<b>Up to ' + cap + ' people</b> can open it; it keeps working in this browser.');
     if (editable) bits.push('You and the owner are editing the same note — changes appear on both sides as you type.');
+    if (watching) bits.push('You’re watching the owner’s note: their changes appear here as they type. You can’t edit it.');
     if (meta.expiresAt) bits.push(head.timer ? 'It self-destructs in <b class="burn-left">' + esc(C.fmtLeft(C.msLeft(meta, rvNow()))) + '</b>.' : 'It self-destructs when its time is up.');
     if (!copy && !editable) bits.push('The owner turned off saving a copy.');
     var acts = copy ? '<div class="burn-rv-acts"><button type="button" class="btn" data-act="copy">Copy text</button><button type="button" class="btn" data-act="save">Download .txt</button></div>' : '';
@@ -441,7 +365,7 @@
     // 'opened' tombstone doesn't: whoever is already reading a read-only
     // capped link keeps what they opened.
     var tombRef = r.node.child('tomb'), metaRef = r.node.child('meta');
-    var onTomb = function (s) { var t = s.val(); if (t && !(t.why === 'opened' && cap && !editable)) rvEnd(t.why || 'gone'); };
+    var onTomb = function (s) { var t = s.val(); if (t && !(t.why === 'opened' && cap && view === 'read')) rvEnd(t.why || 'gone'); };
     var onMeta = function (s) { if (s.val() === null) rvEnd('gone'); };
     tombRef.on('value', onTomb); metaRef.on('value', onMeta);
     r.offs.push(function () { tombRef.off('value', onTomb); metaRef.off('value', onMeta); });
@@ -449,7 +373,7 @@
     if (!r.burned) {
       var pres = r.node.child('presence/' + r.me);
       var ts = (window.firebase && firebase.database && firebase.database.ServerValue) ? firebase.database.ServerValue.TIMESTAMP : rvNow();
-      pres.set({ at: ts, ed: editable }).catch(function () {});
+      pres.set({ at: ts, ed: editable, lv: watching }).catch(function () {});
       try { pres.onDisconnect().remove(); } catch (e) {}
       r.offs.push(function () { try { pres.onDisconnect().cancel(); } catch (e) {} pres.remove().catch(function () {}); });
     }
@@ -473,6 +397,44 @@
       });
       box.addEventListener('input', function () { if (r.live) r.live.changed(); });
     }
+    if (watching) {
+      // Read only: each newer version replaces the text in place.
+      r.follow = C.Follow({
+        ref: r.node.child('doc'), id: r.id, key: r.key, ver: doc.ver,
+        show: function (t) { rvPatch(r, t); },
+        onGone: function () {
+          // Revoked / expired / burned elsewhere: say why when the tombstone tells.
+          var end = function (why) { if (R === r && !r.ended) rvEnd(why); };
+          once(r.node.child('tomb'), 5000).then(function (t) { end((t && t.why) || 'gone'); }, function () { end('gone'); });
+        }
+      });
+    }
+  }
+  // A live update of the read-only text: the smallest change to its one text
+  // node, so a selection survives; the reader's place is kept — text added
+  // above what they're reading doesn't push it down, and a reader at the
+  // bottom stays at the bottom.
+  function rvPatch(r, next) {
+    var box = r.box;
+    if (r !== R || r.ended || !box) return;
+    var node = box.firstChild;
+    if (!node || node.nodeType !== 3 || box.childNodes.length !== 1) { box.textContent = ''; box.appendChild(document.createTextNode(next)); return; }
+    var prev = node.data;
+    if (prev === next) return;
+    var d = C.minimalEdit(prev, next);
+    var st = box.scrollTop, h0 = box.scrollHeight, atEnd = st + box.clientHeight >= h0 - 8, above = false;
+    if (!atEnd && st > 0) {
+      try {
+        var rg = document.createRange(); rg.setStart(node, d.from); rg.collapse(true);
+        var rc = rg.getClientRects()[0] || rg.getBoundingClientRect();
+        if (rc && (rc.top || rc.height)) above = rc.top < box.getBoundingClientRect().top;
+      } catch (e) {}
+    }
+    node.replaceData(d.from, d.to - d.from, d.insert);
+    if (atEnd) box.scrollTop = box.scrollHeight;
+    else box.scrollTop = above ? st + (box.scrollHeight - h0) : st;
+    var chip = r.el.querySelector('.burn-chip-live');
+    if (chip) { chip.classList.add('burn-busy'); clearTimeout(r.pulseT); r.pulseT = setTimeout(function () { chip.classList.remove('burn-busy'); }, 700); }
   }
 
   // ---- tidy-up menu (the owner's chosen scripts, for a live link) ---------------------------------------
@@ -591,8 +553,9 @@
     rvFoot('');
   }
   function rvTeardown(r, keepSession) {
-    clearTimeout(r.tick); clearTimeout(r.doneT);
+    clearTimeout(r.tick); clearTimeout(r.doneT); clearTimeout(r.pulseT);
     if (r.live) { r.live.stop(); r.live = null; }
+    if (r.follow) { r.follow.stop(); r.follow = null; }
     r.offs.forEach(function (f) { try { f(); } catch (e) {} });
     r.offs = [];
     if (r.box) { r.shown = true; if ('value' in r.box) r.box.value = ''; r.box.textContent = ''; r.box = null; }
@@ -688,11 +651,12 @@
   }
   function saveBlob() { blob.set({ v: 1, shares: entries }); }
   function entryById(id) { for (var i = 0; i < entries.length; i++) if (entries[i].id === id) return entries[i]; return null; }
-  // The plain meta of a link (v1 links keep their v1 shape).
+  // The plain meta of a link (v1 links keep their v1 shape; "watch live" ones are v3).
   function metaOf(e) {
-    var cap = C.capOfEntry(e);
-    var m = { v: e.v === 2 ? 2 : 1, created: e.created, expiresAt: e.expiresAt, oneTime: cap === 1, editable: e.editable };
+    var cap = C.capOfEntry(e), md = C.modeOf(e);
+    var m = { v: e.v === 2 ? (md === 'live' ? 3 : 2) : 1, created: e.created, expiresAt: e.expiresAt, oneTime: cap === 1, editable: md === 'edit' };
     if (e.v === 2) m.maxOpens = cap;
+    if (md === 'live') m.live = true;
     return m;
   }
   function baseKey(id) { return 'cade-burn-base:' + id; }
@@ -751,8 +715,9 @@
   // Start / stop the live engines to match the list.
   function reconcileOwner() {
     var want = {};
-    entries.forEach(function (e) { if (e.editable && !e.ended && e.room && !(e.expiresAt && now() >= e.expiresAt)) want[e.id] = e; });
-    Object.keys(engines).forEach(function (id) { if (!want[id]) { engines[id].stop(); delete engines[id]; } });
+    entries.forEach(function (e) { if (C.staysLive(e) && !e.ended && e.room && !(e.expiresAt && now() >= e.expiresAt)) want[e.id] = e; });
+    // (an engine whose link changed mode is restarted as the new kind)
+    Object.keys(engines).forEach(function (id) { if (!want[id] || engines[id].mode !== C.modeOf(want[id])) { engines[id].stop(); delete engines[id]; } });
     Object.keys(want).forEach(function (id) { if (!engines[id]) startEngine(want[id]); });
     hookRooms(Object.keys(engines).length > 0);
     scheduleSweep();
@@ -764,16 +729,20 @@
     return api.read(name);
   }
   function startEngine(e) {
-    var holder = { stop: function () { holder.stopped = true; if (holder.live) holder.live.stop(); }, live: null, entry: e };
+    var mode = C.modeOf(e);
+    var holder = { stop: function () { holder.stopped = true; if (holder.live) holder.live.stop(); }, live: null, entry: e, mode: mode };
     engines[e.id] = holder;
     ownerRoot(e.db).then(function (root) {
       if (holder.stopped) return;
       holder.live = LiveDoc({
         node: nodeOf(root, e.id), id: e.id, key: e.key, me: 'o:' + ((Cade.cloud.device && Cade.cloud.device.id) || 'x'), now: now, adoptFirst: false,
         get: function () { return roomText(holder.entry.room); },
-        apply: function (merged, seen) {
+        // "Watch live": push only, and no way into the room at all — anyone
+        // holding the key can write a version, and none may become the owner's text.
+        pushOnly: mode === 'live',
+        apply: mode === 'edit' ? function (merged, seen) {
           return Cade.roomsApi.write(holder.entry.room, merged, { base: seen, reason: 'burn' });
-        },
+        } : null,
         loadBase: function () { return Cade.idbStore.get(baseKey(e.id)).then(function (s) { try { return s ? (typeof s === 'string' ? JSON.parse(s) : s) : null; } catch (x) { return null; } }); },
         saveBase: function (sh) { Cade.idbStore.set(baseKey(e.id), JSON.stringify({ ver: sh.ver, text: sh.text, ct: sh.ct })); },
         onGone: function () { var x = entryById(e.id); if (x && !x.ended) { x.ended = { why: 'gone', at: now() }; saveBlob(); } reconcileOwner(); renderList(); }
@@ -823,23 +792,24 @@
   }
   function linkFor(e) { return C.encodeLink(location.href.split('#')[0].split('?')[0], e); }
 
-  // opts: { expiry, custom, who, n, editable, copy, title, icon, timer, scripts }
+  // opts: { expiry, custom, who, n, mode: 'read'|'live'|'edit' (or v2 callers: editable), copy, title, icon, timer, scripts }
   function create(opts) {
     var api = Cade.roomsApi, room = (api && api.activeRoom()) || '';
-    if (!room && opts.editable) return Promise.reject(new Error('Live editing works on a room — open or add one first'));
+    var mode = opts.mode === 'live' || opts.mode === 'edit' ? opts.mode : opts.editable ? 'edit' : 'read';
+    if (!room && mode !== 'read') return Promise.reject(new Error((mode === 'edit' ? 'Live editing' : 'Watching live') + ' works on a room — open or add one first'));
     var text = Cade.editor.state.doc.toString();
     var db = Cade.store.get('cade-firebase-url') || '';
     var maxOpens = C.capFrom(opts.who, opts.n);
     var ttl = C.expiryFrom(opts.expiry, opts.custom, 0);     // a duration: anchored on the server's clock below
     C.checkOptions({ expiresAt: ttl, maxOpens: maxOpens, text: text });
     if (!C.validDb(db)) return Promise.reject(new Error('Set up Sync first'));
-    var head = C.makeHead({ title: opts.title || room || 'Shared note', copy: opts.copy, icon: opts.icon, timer: opts.timer, editable: opts.editable, scripts: opts.scripts });
+    var head = C.makeHead({ title: opts.title || room || 'Shared note', copy: opts.copy, icon: opts.icon, timer: opts.timer, editable: mode === 'edit', live: mode === 'live', scripts: opts.scripts });
     // The root first: for the sync database that also hooks the core's server-clock offset.
     return ownerRoot(db).then(function (root) {
       var t = now();
       var e = {
         v: 2, id: C.newId(), key: C.newKey(), db: db, room: room, title: head.title, created: t, ttl: ttl, expiresAt: ttl ? t + ttl : 0,
-        maxOpens: maxOpens, oneTime: maxOpens === 1, editable: !!opts.editable, copy: head.copy, ended: null
+        maxOpens: maxOpens, oneTime: maxOpens === 1, editable: mode === 'edit', live: mode === 'live', copy: head.copy, ended: null
       };
       return Promise.all([C.seal(e.key, e.id, 'head', head), C.seal(e.key, e.id, 'v1', { t: text })]).then(function (x) {
         // Listed first, so a write that lands late is still swept / revocable.
@@ -849,7 +819,7 @@
         var doc = { ver: 1, ct: x[1], by: 'o:create', base: 0, at: t };
         var l0 = Date.now();
         return withTimeout(node.set({ meta: meta, head: x[0], doc: doc }), 15000).then(function () {
-          if (e.editable) Cade.idbStore.set(baseKey(e.id), JSON.stringify({ ver: 1, text: text, ct: x[1] }));
+          if (mode !== 'read') Cade.idbStore.set(baseKey(e.id), JSON.stringify({ ver: 1, text: text, ct: x[1] }));
           // Anchor the timer on the moment the server stamped the link, and
           // learn this device's clock offset from it.
           return serverVal(node.child('meta/created')).then(function (sc) {
@@ -878,6 +848,18 @@
   function toggleRow(key, label, hint, on) {
     return '<label class="burn-tog" data-row="' + key + '"><span class="burn-tog-t"><span class="burn-tog-l">' + esc(label) + '</span><span class="burn-tog-h" data-hint="' + key + '">' + esc(hint) + '</span></span>' +
       '<input type="checkbox" role="switch" data-k="' + key + '"' + (on ? ' checked' : '') + '><span class="burn-sw" aria-hidden="true"></span></label>';
+  }
+  var MODES = [
+    { v: 'read', label: 'Read a snapshot', hint: 'The note as it is now. Your later changes stay with you.' },
+    { v: 'live', label: 'Watch my changes live', hint: 'They see your edits as you type, but can’t change anything.' },
+    { v: 'edit', label: 'Edit with me', hint: 'You both edit the same note — changes appear on both sides as you type.' }
+  ];
+  function modesHtml() {
+    return '<div class="burn-modes" role="radiogroup" aria-labelledby="burn-mode-l"><span class="burn-fl" id="burn-mode-l">What they can do</span>' +
+      MODES.map(function (m, i) {
+        return '<label class="burn-opt" data-mode="' + m.v + '"><input type="radio" name="burn-mode" value="' + m.v + '"' + (i ? '' : ' checked') + '>' +
+          '<span class="burn-opt-t"><span class="burn-opt-l">' + esc(m.label) + '</span><span class="burn-opt-h">' + esc(m.hint) + '</span></span></label>';
+      }).join('') + '</div>';
   }
   function toolsHtml() {
     var last = '';
@@ -911,7 +893,7 @@
                 '<div class="burn-custom burn-some" hidden><input class="form-input burn-max" type="number" inputmode="numeric" min="1" max="' + C.MAX_VIEWERS + '" step="1" value="3" aria-label="How many people"><span class="burn-unit">people</span></div>' +
                 '<p class="burn-hint" data-hint="who"></p>' +
               '</div>' +
-              toggleRow('editable', 'Allow editing', 'Their edits appear in your note as they type, and yours appear for them.', false) +
+              modesHtml() +
               '<details class="burn-more"><summary><span>More options</span><span class="burn-more-s"></span></summary><div class="burn-more-b">' +
                 '<label class="burn-stack"><span class="burn-fl">Name they see</span><input class="form-input burn-name" type="text" maxlength="' + C.MAX_NAME + '" autocomplete="off" placeholder="' + esc(room || 'Shared note') + '"><span class="burn-hint">The title at the top of their page. Encrypted like the note.</span></label>' +
                 '<div class="burn-stack"><span class="burn-fl" id="burn-icon-l">Icon</span><div class="burn-icons" role="group" aria-labelledby="burn-icon-l">' +
@@ -922,7 +904,7 @@
                 toggleRow('timer', 'Show the countdown', 'They see how long is left. The link expires on time either way.', true) +
                 toggleRow('copy', 'Allow saving a copy', 'Shows Copy and Download buttons. (Nothing can stop a screenshot.)', false) +
                 '<details class="burn-tools"><summary><span class="burn-fl">Tidy-up tools for them</span><span class="burn-tools-n">none</span></summary>' +
-                  '<p class="burn-hint burn-tools-off">Turn on <b>Allow editing</b> to give them tools.</p>' +
+                  '<p class="burn-hint burn-tools-off">Pick <b>Edit with me</b> to give them tools.</p>' +
                   '<div class="burn-tools-on"><p class="burn-hint">They get one “Tidy up” menu above the text with the tools you pick. Each works on what they select, or on the whole note.</p>' + toolsHtml() + '</div>' +
                 '</details>' +
               '</div></details>' +
@@ -971,25 +953,27 @@
   }
   function q(sel) { return D && D.el.querySelector(sel); }
   function val(k) { var i = q('input[data-k="' + k + '"]'); return !!(i && i.checked); }
+  function modeVal() { var i = q('input[name="burn-mode"]:checked'); return i ? i.value : 'read'; }
   function chosenScripts() { return D ? Array.prototype.map.call(D.el.querySelectorAll('input[data-script]:checked'), function (i) { return i.getAttribute('data-script'); }) : []; }
   function updateHints() {
     if (!D || !q('.burn-form')) return;
-    var ed = val('editable'), who = q('.burn-who').value, exp = q('.burn-exp').value;
+    var md = modeVal(), ed = md === 'edit', stays = md !== 'read', who = q('.burn-who').value, exp = q('.burn-exp').value;
     var n = Math.floor(Number(q('.burn-max').value)) || 0;
     q('.burn-cust').hidden = exp !== 'custom';
     q('.burn-some').hidden = who !== 'some';
     var them = who === 'some' ? (n > 0 ? 'the first ' + n + ' browsers' : 'the first few browsers') : '';
     var h = who === 'one'
-      ? (ed ? 'Only the first browser that opens it can use it. It stays live there until the timer ends or you revoke it.' : 'Deleted from the server as soon as it’s opened.')
+      ? (stays ? 'Only the first browser that opens it can use it. It stays live there until the timer ends or you revoke it.' : 'Deleted from the server as soon as it’s opened.')
       : who === 'some'
-        ? (ed ? 'Only ' + them + ' that open it can use it; each can come back to it.' : 'Only ' + them + ' that open it can read it — it’s deleted from the server once the last of them has.')
+        ? (stays ? 'Only ' + them + ' that open it can use it; each can come back to it.' : 'Only ' + them + ' that open it can read it — it’s deleted from the server once the last of them has.')
         : (exp === 'none' ? 'Anyone with the link — pick a time limit too, so it self-destructs.' : 'Anyone who has the link can open it until it expires.');
     q('[data-hint="who"]').textContent = h;
     var timer = q('[data-row="timer"]');
     timer.hidden = exp === 'none';
     q('.burn-tools-off').hidden = ed; q('.burn-tools-on').hidden = !ed;
     var picked = chosenScripts().length;
-    q('.burn-tools-n').textContent = !ed ? 'needs editing' : picked ? picked + ' chosen' : 'none';
+    q('.burn-tools-n').textContent = !ed ? 'for “Edit with me”' : picked ? picked + ' chosen' : 'none';
+    Array.prototype.forEach.call(D.el.querySelectorAll('.burn-opt'), function (l) { l.classList.toggle('burn-opt-on', l.getAttribute('data-mode') === md); });
     // A one-line summary on the closed "More options".
     var bits = [];
     if (q('.burn-name').value.trim()) bits.push('name');
@@ -1047,10 +1031,10 @@
   }
   function doCreate(btn) {
     showErr('');
-    var ed = val('editable');
+    var md = modeVal(), ed = md === 'edit';
     var opts = {
       expiry: q('.burn-exp').value, custom: { n: q('.burn-cn').value, unit: q('.burn-cu').value },
-      who: q('.burn-who').value, n: q('.burn-max').value, editable: ed, copy: val('copy'),
+      who: q('.burn-who').value, n: q('.burn-max').value, mode: md, copy: val('copy'),
       title: q('.burn-name').value, icon: D.icon, timer: val('timer'), scripts: ed ? chosenScripts() : []
     };
     btn.disabled = true; btn.textContent = 'Creating…';
@@ -1062,7 +1046,7 @@
       var cap = C.capOfEntry(e), tools = opts.scripts.length;
       var parts = [C.capLabel(cap),
         e.expiresAt ? 'expires in ' + C.fmtLeft(C.leftOf(e, now())) + (opts.timer ? '' : ' (countdown hidden)') : 'no time limit',
-        e.editable ? 'live editing' : 'read-only'];
+        e.editable ? 'live editing' : e.live ? 'they watch live' : 'read-only snapshot'];
       if (e.copy) parts.push('saving a copy allowed');
       if (tools) parts.push(tools + ' tidy-up tool' + (tools > 1 ? 's' : ''));
       q('.burn-sum').textContent = parts.join(' · ');
@@ -1101,7 +1085,7 @@
       var st = C.statusOf(e, plain && 'meta' in plain ? plain : undefined, t);
       if (!st.ended) listen(e); else if (D.listens[e.id]) D.listens[e.id]();
       var cap = st.cap;
-      var kind = [cap === 1 ? 'one person' : cap > 1 ? 'up to ' + cap : 'anyone', e.editable ? 'editable' : 'read-only'].join(' · ');
+      var kind = [cap === 1 ? 'one person' : cap > 1 ? 'up to ' + cap : 'anyone', C.modeWord(e)].join(' · ');
       var left = !st.ended && e.expiresAt ? C.fmtLeft(st.left) + ' left' : (!st.ended ? 'no timer' : '');
       var armed = D.armed === e.id;
       rows.push('<li class="burn-li burn-st-' + st.state + (st.ended ? ' burn-ended' : '') + '"><div class="burn-li-main"><div class="burn-li-t"><b>' + esc(e.title || e.room) + '</b><span class="burn-kind">' + esc(kind) + '</span></div>' +
