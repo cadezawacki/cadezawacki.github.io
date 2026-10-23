@@ -246,6 +246,66 @@
     var l = [a, b].map(function (v) { v = +v; return isFinite(v) && v > 0 ? Math.floor(v) : 0; }).filter(Boolean);
     return l.length ? Math.min.apply(null, l) : 0;
   }
+  // ---- model picker filters -------------------------------------------------------------------
+  // Cost tier from the output price per 1M tokens: local models and $0 are 'free'; ≤ $3 '$';
+  // ≤ $15 '$$'; above '$$$'; a cloud model with no known price is '' (unknown).
+  function costTier(m) {
+    if (!m) return '';
+    if (m.where !== 'cloud') return 'free';
+    var p = m.price;
+    if (!p || !isFinite(+p.out)) return '';
+    if (+p.out <= 0 && +p.in <= 0) return 'free';
+    return +p.out <= 3 ? '$' : +p.out <= 15 ? '$$' : '$$$';
+  }
+  var COST_RANK = { free: 0, '$': 1, '$$': 2, '$$$': 3 };
+  // Quality from the LMArena score, relative to the best score in the data: 'top' within 30
+  // points, 'strong' within 80, else 'ok'; '' when the model has no score.
+  function qualityTier(m, best) {
+    if (!m || !m.score || !isFinite(+m.score.r) || !(best > 0)) return '';
+    var d = best - m.score.r;
+    return d <= 30 ? 'top' : d <= 80 ? 'strong' : 'ok';
+  }
+  var PICKER_FILTERS = { where: '', ctx: 0, cost: '', quality: '', sort: '' };
+  function normFilters(f) {
+    f = f || {};
+    return {
+      where: f.where === 'local' || f.where === 'cloud' ? f.where : '',
+      ctx: [32000, 128000, 1000000].indexOf(+f.ctx) >= 0 ? +f.ctx : 0,
+      cost: ['free', '$', '$$'].indexOf(f.cost) >= 0 ? f.cost : '',
+      quality: f.quality === 'top' || f.quality === 'strong' ? f.quality : '',
+      sort: ['quality', 'price', 'ctx', 'name'].indexOf(f.sort) >= 0 ? f.sort : ''
+    };
+  }
+  function filtersActive(f) { f = normFilters(f); return !!(f.where || f.ctx || f.cost || f.quality); }
+  // Does model m pass filters f? Unknown data fails a filter that needs it.
+  function passes(m, f, best) {
+    f = normFilters(f);
+    if (f.where && (m.where === 'cloud' ? 'cloud' : 'local') !== f.where) return false;
+    if (f.ctx && !(+m.ctx >= f.ctx * 0.97)) return false;          // 131072 counts as 128K, 1048576 as 1M
+    if (f.cost) { var c = costTier(m); if (!c || COST_RANK[c] > COST_RANK[f.cost]) return false; }
+    if (f.quality) { var q = qualityTier(m, best); if (!q || (f.quality === 'top' ? q !== 'top' : q === 'ok')) return false; }
+    return true;
+  }
+  // Sort a model list (copy) by f.sort; models without the value go last, ties keep their order.
+  function sortModels(list, f) {
+    var by = normFilters(f).sort;
+    if (!by) return list.slice();
+    var key = function (m) {
+      if (by === 'quality') return m.score && isFinite(+m.score.r) ? -m.score.r : Infinity;
+      if (by === 'price') { var t = costTier(m); return t === 'free' ? 0 : m.price && isFinite(+m.price.out) ? +m.price.out : Infinity; }
+      if (by === 'ctx') return +m.ctx > 0 ? -m.ctx : Infinity;
+      return 0;
+    };
+    return list.map(function (m, i) { return { m: m, i: i, k: key(m) }; }).sort(function (a, b) {
+      if (by === 'name') { var c = String(a.m.name || a.m.id).localeCompare(String(b.m.name || b.m.id), undefined, { sensitivity: 'base', numeric: true }); return c || a.i - b.i; }
+      return a.k === b.k ? a.i - b.i : a.k < b.k ? -1 : 1;
+    }).map(function (x) { return x.m; });
+  }
+  function bestScore(scores) {
+    var best = 0, k = scores && scores.byKey;
+    if (k) for (var n in k) if (k[n] && k[n].r > best) best = k[n].r;
+    return best;
+  }
   // A streamed chat request → { url, init }.
   // o: { kind, provider, base, apiKey, headers, model, messages, temperature, maxTokens, numCtx, stream, fallbacks }
   function buildChat(o) {
@@ -1732,7 +1792,8 @@
     providerOf: providerOf, presetOf: presetOf, kindOf: kindOf, endpointProvider: endpointProvider, normBase: normBase, hostOf: hostOf, addressSpace: addressSpace, isHttp: isHttp,
     refKey: refKey, parseRef: parseRef, parsePrefModel: parsePrefModel,
     headersFor: headersFor, providerHeaders: providerHeaders, modelsRequest: modelsRequest, modelsUrl: modelsUrl, anthropicMessages: anthropicMessages,
-    buildChat: buildChat, tokenLimit: tokenLimit, anthropicMaxOut: anthropicMaxOut, parseModels: parseModels, chatModels: chatModels, pickModel: pickModel, readChunk: readChunk,
+    buildChat: buildChat, tokenLimit: tokenLimit, costTier: costTier, qualityTier: qualityTier, PICKER_FILTERS: PICKER_FILTERS, normFilters: normFilters,
+    filtersActive: filtersActive, passes: passes, sortModels: sortModels, bestScore: bestScore, anthropicMaxOut: anthropicMaxOut, parseModels: parseModels, chatModels: chatModels, pickModel: pickModel, readChunk: readChunk,
     ndjsonParser: ndjsonParser, sseParser: sseParser,
     AiError: AiError, errorMessage: errorMessage, classifyHttp: classifyHttp, refineNetwork: refineNetwork, isAbort: isAbort, explain: explain,
     listModels: listModels, chatStream: chatStream, probe: probe,

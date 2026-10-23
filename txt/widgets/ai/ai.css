@@ -468,3 +468,24 @@
   .ai-foot .ai-hubbtn, .ai-foot .ai-clear { min-height: 32px; }
 }
 .ai-hub:focus { outline: none; }
+
+/* ---- model picker filters: one row of chips (scrolls sideways on a phone) ---- */
+.ai-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.ai-pk-filters { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 12px 8px; }
+.ai-pk-filters::-webkit-scrollbar { display: none; }
+.ai-pk-fc { position: relative; flex: none; display: inline-flex; }
+.ai-pk-f {
+  appearance: none; -webkit-appearance: none; height: 28px; padding: 0 22px 0 10px; font: inherit; font-size: 12px; color: var(--text-muted); cursor: pointer;
+  background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.4' stroke-linecap='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 6px center / 11px;
+  border: 1px solid var(--border); border-radius: 14px; outline: none;
+}
+.ai-pk-f:focus-visible { border-color: var(--accent); }
+.ai-pk-fc.on .ai-pk-f { color: var(--accent); font-weight: 600; background-color: var(--accent-bg, rgba(15,149,152,0.08)); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.ai-pk-freset { flex: none; font-size: 12px; }
+.ai-pk-hidden { margin: 2px 0 6px; padding: 6px 8px; font-size: 12px; line-height: 1.45; color: var(--text-muted); background: var(--surface-2); border-radius: 8px; }
+@media (max-width: 560px), (pointer: coarse) {
+  /* one swipeable row on a phone; the fading right edge says there is more */
+  .ai-pk-filters { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); padding-right: 28px; }
+  .ai-pk-f { height: 36px; font-size: 14px; padding: 0 26px 0 12px; border-radius: 18px; }
+}

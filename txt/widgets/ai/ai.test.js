@@ -331,6 +331,38 @@ test('answer length: 0 = no limit everywhere — nothing sent to local/OpenAI-st
   var rq = C.validateRequest(C.makeRequest({ id: 'abc123def456', from: 'dev1-tab', name: 'iPhone', kind: 'phone', did: 'dev1', provider: 'ollama', model: 'm', messages: [{ role: 'user', content: 'hi' }], temperature: 0.5, maxTokens: 0 }));
   assert.ok(rq.ok); assert.strictEqual(rq.req.maxTokens, 0, 'no limit survives the relay (was clamped to 1)');
 });
+test('picker filters: cost/quality tiers, context, where, sorting; unknown data fails a filter that needs it', function () {
+  var M = [
+    { id: 'opus', where: 'cloud', price: { in: 4, out: 20 }, ctx: 1000000, score: { r: 1516 } },
+    { id: 'sonnet', where: 'cloud', price: { in: 2, out: 10 }, ctx: 1000000, score: { r: 1473 } },
+    { id: 'haiku', where: 'cloud', price: { in: 0.1, out: 0.5 }, ctx: 200000, score: { r: 1397 } },
+    { id: 'freebie', where: 'cloud', price: { in: 0, out: 0 }, ctx: 32768 },
+    { id: 'mystery', where: 'cloud' },
+    { id: 'llama', where: 'local', ctx: 131072 },
+    { id: 'tiny', where: 'local' }];
+  var ids = function (l) { return l.map(function (m) { return m.id; }); };
+  var pass = function (f) { return ids(M.filter(function (m) { return C.passes(m, f, 1516); })); };
+  assert.deepStrictEqual(M.map(C.costTier), ['$$$', '$$', '$', 'free', '', 'free', 'free']);
+  assert.deepStrictEqual(M.map(function (m) { return C.qualityTier(m, 1516); }), ['top', 'strong', 'ok', '', '', '', '']);
+  assert.deepStrictEqual(pass({}), ids(M));
+  assert.deepStrictEqual(pass({ where: 'local' }), ['llama', 'tiny']);
+  assert.deepStrictEqual(pass({ where: 'cloud' }), ['opus', 'sonnet', 'haiku', 'freebie', 'mystery']);
+  assert.deepStrictEqual(pass({ ctx: 128000 }), ['opus', 'sonnet', 'haiku', 'llama'], '131072 counts as 128K; unknown context fails');
+  assert.deepStrictEqual(pass({ ctx: 1000000 }), ['opus', 'sonnet']);
+  assert.deepStrictEqual(pass({ cost: 'free' }), ['freebie', 'llama', 'tiny']);
+  assert.deepStrictEqual(pass({ cost: '$' }), ['haiku', 'freebie', 'llama', 'tiny'], '"up to $" includes free; unknown price fails');
+  assert.deepStrictEqual(pass({ cost: '$$' }), ['sonnet', 'haiku', 'freebie', 'llama', 'tiny']);
+  assert.deepStrictEqual(pass({ quality: 'top' }), ['opus']);
+  assert.deepStrictEqual(pass({ quality: 'strong' }), ['opus', 'sonnet']);
+  assert.deepStrictEqual(pass({ where: 'cloud', cost: '$$', quality: 'strong', ctx: 1000000 }), ['sonnet'], 'filters combine');
+  assert.deepStrictEqual(ids(C.sortModels(M, { sort: 'quality' })), ['opus', 'sonnet', 'haiku', 'freebie', 'mystery', 'llama', 'tiny']);
+  assert.deepStrictEqual(ids(C.sortModels(M, { sort: 'price' })), ['freebie', 'llama', 'tiny', 'haiku', 'sonnet', 'opus', 'mystery']);
+  assert.deepStrictEqual(ids(C.sortModels(M, { sort: 'ctx' })), ['opus', 'sonnet', 'haiku', 'llama', 'freebie', 'mystery', 'tiny']);
+  assert.deepStrictEqual(ids(C.sortModels(M, { sort: '' })), ids(M), 'no sort keeps the service order');
+  assert.deepStrictEqual(C.normFilters({ where: 'mars', ctx: '128000', cost: '$$$', quality: 'meh', sort: 'x' }), { where: '', ctx: 128000, cost: '', quality: '', sort: '' });
+  assert.ok(!C.filtersActive({ sort: 'price' }) && C.filtersActive({ ctx: 32000 }));
+  assert.strictEqual(C.bestScore({ byKey: { a: { r: 1400 }, b: { r: 1520 } } }), 1520);
+});
 test('addresses: LM Studio’s own /api/v1 paths and a pasted /chat go to the OpenAI-compatible /v1 — locally only', function () {
   assert.strictEqual(C.normBase('openai', 'http://localhost:1234/api/v1/chat'), 'http://localhost:1234/v1');
   assert.strictEqual(C.normBase('openai', 'http://localhost:1234/api/v0/models'), 'http://localhost:1234/v1');

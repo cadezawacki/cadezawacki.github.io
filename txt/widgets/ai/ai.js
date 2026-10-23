@@ -192,6 +192,7 @@
     return '<details class="ai-legend"' + (coarse() ? '' : ' open') + '><summary>What the badges mean</summary><span class="ai-bdg ai-b-local">Local</span> runs on your hardware, free · <span class="ai-bdg ai-b-cloud">Cloud</span> billed to an API key · ' +
       '<span class="ai-bdg ai-b-price">$in · $out</span> price per million tokens (OpenRouter’s public list' + (dates.catalog ? ', ' + esc(dates.catalog) : '') + ') · ' +
       '<span class="ai-bdg ai-b-ctx">200K</span> context window · <span class="ai-bdg ai-b-score">★1450</span> LMArena text score, higher is better' +
+      ' · Filters: cost tiers by output price per million tokens — $ up to $3, $$ up to $15, $$$ above; quality Top = within 30 points of the best score, Strong = within 80' +
       (dates.scores ? ' (as of ' + esc(dates.scores) + ')' : '') + ' — lmarena.ai, CC BY 4.0. No badge = no reliable data.</details>';
   }
 
@@ -365,8 +366,31 @@
   }
 
   // ---- the model picker (chat: per note · default: setup · allow: what a service shares) ----------------
+  // Picker filters, remembered on this device.
+  var PK_FILTER_KEY = 'cade-ai-picker-filters';
+  function loadPkFilters() { try { return S.C.normFilters(JSON.parse(localStorage.getItem(PK_FILTER_KEY) || '{}')); } catch (e) { return S.C.normFilters({}); } }
+  function savePkFilters(f) { try { localStorage.setItem(PK_FILTER_KEY, JSON.stringify(f)); } catch (e) {} }
+  var PK_FILTER_KEYS = ['where', 'ctx', 'cost', 'quality', 'sort'];
+  function pkFilterBar(f, order) {
+    var sel = function (key, label, opts) {
+      var on = !!f[key];
+      return '<label class="ai-pk-fc' + (on ? ' on' : '') + '"><span class="ai-sr">' + label + '</span><select class="ai-pk-f" data-f="' + key + '" aria-label="' + label + '">' +
+        opts.map(function (o) { return '<option value="' + o[0] + '"' + (String(f[key]) === String(o[0]) || (!f[key] && !o[0]) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></label>';
+    };
+    var html = {
+      where: sel('where', 'Where it runs', [['', 'Local + cloud'], ['local', 'Local'], ['cloud', 'Cloud']]),
+      ctx: sel('ctx', 'Context window', [['0', 'Any context'], ['32000', '32K+'], ['128000', '128K+'], ['1000000', '1M+']]),
+      cost: sel('cost', 'Cost', [['', 'Any cost'], ['free', 'Free'], ['$', 'Up to $'], ['$$', 'Up to $$']]),
+      quality: sel('quality', 'Quality', [['', 'Any quality'], ['strong', 'Strong+'], ['top', 'Top']]),
+      sort: sel('sort', 'Sort', [['', 'By service'], ['quality', 'Best first'], ['price', 'Cheapest first'], ['ctx', 'Longest context'], ['name', 'A–Z']])
+    };
+    return '<div class="ai-pk-filters" role="group" aria-label="Filter models">' + (order || PK_FILTER_KEYS).map(function (k) { return html[k]; }).join('') +
+      (S.C.filtersActive(f) || f.sort ? '<button type="button" class="ai-link ai-pk-freset" data-act="pk-freset">Reset</button>' : '') + '</div>';
+  }
   function openPicker(mode, opts) {
-    S.pk = { mode: mode, opts: opts || {}, q: '', groups: null, loading: true, sel: null };
+    S.pk = { mode: mode, opts: opts || {}, q: '', groups: null, loading: true, sel: null, f: mode === 'allow' ? S.C.normFilters({}) : loadPkFilters() };
+    // filters already in use go first, so on a phone they're in view without swiping
+    S.pk.fOrder = PK_FILTER_KEYS.filter(function (k) { return S.pk.f[k]; }).concat(PK_FILTER_KEYS.filter(function (k) { return !S.pk.f[k]; }));
     if (mode === 'allow') {
       var ep = S.svc.endpoint(opts.ep);
       S.pk.sel = ep && ep.allow.length ? ep.allow.slice() : null;
@@ -421,13 +445,19 @@
     var role = S.svc.local().role, head, body = '', foot = '', q = pk.q.trim().toLowerCase(), cur = curRef(), shown = 0, total = 0, scoresDate = '', catDate = S.svc.catalogDate();
     var title = pk.mode === 'allow' ? 'Models ' + esc((S.svc.endpoint(pk.opts.ep) || {}).label || '') + ' shares' : pk.mode === 'default' ? 'Default model' : 'Choose a model';
     head = '<div class="ai-pk-head"><span class="ai-pk-title">' + title + '</span><button type="button" class="ai-pk-x" data-act="pk-close" aria-label="Close">×</button></div>' +
-      '<input class="ai-pk-q" type="search" placeholder="Search models, services, devices" aria-label="Search models" value="' + esc(pk.q) + '" autocomplete="off" spellcheck="false">';
+      '<input class="ai-pk-q" type="search" placeholder="Search models, services, devices" aria-label="Search models" value="' + esc(pk.q) + '" autocomplete="off" spellcheck="false">' +
+      (pk.mode === 'allow' ? '' : pkFilterBar(pk.f, pk.fOrder));
+    var hidden = 0, best = 0;
     if (pk.loading && !pk.groups) body = '<div class="ai-busyline"><span class="ai-spin"></span>Loading models…</div>';
     else {
-      var groups = pk.groups || [], match = function (g, m) {
+      var groups = pk.groups || [], fOn = pk.mode !== 'allow' && C.filtersActive(pk.f);
+      best = C.bestScore(S.svc.badges().scores);
+      groups.forEach(function (g) { g.models.forEach(function (m) { if (m.score && m.score.r > best) best = m.score.r; }); });
+      var textMatch = function (g, m) {
         if (!q) return true;
         return (m.name + ' ' + m.id + ' ' + g.label + ' ' + g.srcName + ' ' + (m.where || '')).toLowerCase().indexOf(q) >= 0;
       };
+      var match = function (g, m) { return textMatch(g, m) && (!fOn || C.passes(m, pk.f, best)); };
       if (pk.mode === 'allow') {
         var g0 = groups[0];
         body += '<label class="ai-switch ai-pk-all"><input type="checkbox" class="ai-pk-allcb"' + (!pk.sel ? ' checked' : '') + '><span class="ai-switch-ui" aria-hidden="true"></span><span><b>Share every model</b><small>Or pick the ones your other devices may use</small></span></label>';
@@ -452,15 +482,23 @@
           if (g.scoresDate) scoresDate = g.scoresDate;
           if (g.catalogDate) catDate = g.catalogDate;
           var rows = '';
-          g.models.forEach(function (m) { total++; if (match(g, m) && shown < PICKER_ROWS) { shown++; rows += pkRow(g, m, cur, pk.mode); } });
+          C.sortModels(g.models, pk.f).forEach(function (m) {
+            total++;
+            if (!g.ok) return;
+            if (!match(g, m)) { if (fOn && textMatch(g, m)) hidden++; return; }
+            if (shown < PICKER_ROWS) { shown++; rows += pkRow(g, m, cur, pk.mode); }
+          });
           var gh = '<div class="ai-pk-g"><span>' + esc(g.label) + '</span><span class="ai-pk-gs">' + (g.src === 'local' ? 'this device' : 'on ' + esc(g.srcName)) + ' · ' + (g.where === 'cloud' ? 'cloud' : 'local') + '</span></div>';
-          if (!g.ok) { if (!q) body += gh + '<div class="ai-pk-err">' + esc((g.error && g.error.info && g.error.info.title) || 'Not answering') + ' — <button type="button" class="ai-link" data-act="setup2">Fix</button></div>'; return; }
+          if (!g.ok) { if (!q && !fOn) body += gh + '<div class="ai-pk-err">' + esc((g.error && g.error.info && g.error.info.title) || 'Not answering') + ' — <button type="button" class="ai-link" data-act="setup2">Fix</button></div>'; return; }
           if (rows) body += gh + rows + (g.more && !q ? '<div class="ai-pk-more">+' + g.more + ' more not shared — choose them on ' + esc(g.srcName) + '</div>' : '');
         });
         if (!groups.length) body += '<div class="ai-pk-empty">' + (role === 'local' ? 'No services set up yet.' : 'None of your devices is sharing a model right now.') +
           ' <button type="button" class="ai-link" data-act="setup2">Open setup</button></div>';
       }
-      if (q && !shown) body += '<div class="ai-pk-empty">No model matches “' + esc(pk.q) + '”.</div>';
+      if (hidden) body = '<div class="ai-pk-hidden" title="Models without the data a filter needs (no price, score or context listed) count as not matching">' +
+        hidden + ' hidden by filters · <button type="button" class="ai-link" data-act="pk-freset">Show all</button></div>' + body;
+      if (q && !shown) body += '<div class="ai-pk-empty">No model matches “' + esc(pk.q) + '”' + (hidden ? ' with these filters' : '') + '.</div>';
+      else if (!shown && hidden) body += '<div class="ai-pk-empty">No model matches these filters.</div>';
       if (shown >= PICKER_ROWS && total > shown) body += '<div class="ai-pk-more">Showing ' + shown + ' of ' + total + ' — type to narrow it down.</div>';
       var sc = S.svc.badges().scores;
       if (!scoresDate && sc) scoresDate = sc.date;
@@ -480,10 +518,12 @@
     var y = 0, list = S.pkEl.querySelector('.ai-pk-list');
     if (list) y = list.scrollTop;
     var hadFocus = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('ai-pk-q');
+    var fFocus = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('ai-pk-f') ? document.activeElement.dataset.f : '';
     S.pkEl.innerHTML = head + '<div class="ai-pk-list" role="listbox">' + body + '</div><div class="ai-pk-foot">' + foot + '</div>';
     list = S.pkEl.querySelector('.ai-pk-list');
     if (list) list.scrollTop = y;
     if (hadFocus) { var qi = S.pkEl.querySelector('.ai-pk-q'); qi.focus(); try { qi.setSelectionRange(qi.value.length, qi.value.length); } catch (e) {} }
+    else if (fFocus) { var fs = S.pkEl.querySelector('.ai-pk-f[data-f="' + fFocus + '"]'); if (fs) fs.focus(); }
   }
   function pickerChoose(ref) {
     var pk = S.pk, C = S.C;
@@ -1317,6 +1357,7 @@
         else openPicker('chat');
         break;
       case 'pk-close': closePicker(); break;
+      case 'pk-freset': if (S.pk) { S.pk.f = S.C.normFilters({}); savePkFilters(S.pk.f); renderPicker(); } break;
       case 'codecopy': {
         var pre = t.closest('.ai-code') && t.closest('.ai-code').querySelector('pre'), lbl = t.querySelector('span');
         if (!pre) break;
@@ -1365,6 +1406,10 @@
   function onChange(e) {
     if (!S) return;
     var t = e.target;
+    if (t.classList.contains('ai-pk-f') && S.pk) {
+      var nf = Object.assign({}, S.pk.f); nf[t.dataset.f] = t.value;
+      S.pk.f = S.C.normFilters(nf); savePkFilters(S.pk.f); renderPicker(); return;
+    }
     if (t.classList.contains('ai-room-sel')) { S.ctxRoom = t.value; S.ctx = t.value ? 'room' : 'auto'; paintCtx(); return; }
     if (t.classList.contains('ai-lang')) {
       var lang = t.value;
