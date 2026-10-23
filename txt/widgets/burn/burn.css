@@ -1,0 +1,140 @@
+/* Self-destructing links — the owner's dialog (.burn-ov) and the recipient's
+ * full-page view (.burn-rv). Theme variables only; phone first. */
+
+/* ---- owner dialog ---------------------------------------------------------------------- */
+.burn-ov {
+  position: fixed; inset: 0; z-index: 7050;   /* above panels and the picker, below toasts (7100) */ display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.45); padding: 16px;
+}
+.burn-dlg {
+  width: 460px; max-width: 100%; max-height: min(86vh, calc(100dvh - 32px)); display: flex; flex-direction: column;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-lg);
+  outline: none; overflow: hidden; font-family: var(--font-body, inherit);
+}
+.burn-hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 10px 10px 18px; border-bottom: 1px solid var(--border); }
+.burn-h { font-weight: 700; font-size: 16px; }
+.burn-x {
+  width: 40px; height: 40px; flex: 0 0 auto; border: 0; border-radius: 10px; background: none; color: var(--text-muted);
+  font-size: 24px; line-height: 1; cursor: pointer;
+}
+.burn-x:hover { background: var(--surface-2); color: var(--text); }
+.burn-body { overflow-y: auto; overscroll-behavior: contain; padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 14px; -webkit-overflow-scrolling: touch; }
+.burn-body section { display: flex; flex-direction: column; gap: 10px; }
+.burn-body section[hidden] { display: none; }
+.burn-room, .burn-nosync p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--text-muted); }
+.burn-room b, .burn-nosync b { color: var(--text); }
+.burn-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
+.burn-fl { font-weight: 600; }
+.burn-exp { width: auto; min-width: 150px; min-height: 40px; }
+.burn-custom { display: flex; gap: 8px; justify-content: flex-end; }
+.burn-custom[hidden] { display: none; }
+.burn-cn { width: 90px; min-height: 40px; }
+.burn-cu { width: auto; min-height: 40px; }
+
+.burn-tog { display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; position: relative; }
+.burn-tog-t { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.burn-tog-l { font-size: 14px; font-weight: 600; }
+.burn-tog-h { font-size: 12px; line-height: 1.4; color: var(--text-faint); }
+.burn-tog-h:empty { display: none; }
+.burn-tog input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.burn-sw { flex: 0 0 auto; width: 44px; height: 26px; border-radius: 13px; background: var(--surface-2); border: 1px solid var(--border); position: relative; transition: background 0.15s; }
+.burn-sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: var(--text-faint); transition: transform 0.15s, background 0.15s; }
+.burn-tog input:checked + .burn-sw { background: var(--accent); border-color: var(--accent); }
+.burn-tog input:checked + .burn-sw::after { transform: translateX(18px); background: var(--surface); }
+.burn-tog input:focus-visible + .burn-sw { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.burn-err { font-size: 13px; color: var(--error, #dc2626); line-height: 1.4; }
+.burn-err[hidden] { display: none; }
+.burn-create { min-height: 44px; font-size: 15px; }
+.burn-ok { font-weight: 700; color: var(--success, #16a34a); font-size: 14px; }
+.burn-link { font-family: var(--font-mono); font-size: 16px; min-height: 44px; }
+@media (min-width: 700px) { .burn-link { font-size: 12px; } }
+.burn-sum { font-size: 12.5px; color: var(--text-muted); }
+.burn-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.burn-acts .btn { flex: 1 1 auto; min-height: 42px; }
+
+.burn-list { border-top: 1px solid var(--border); padding-top: 12px; }
+.burn-lh { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); }
+.burn-ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.burn-empty { margin: 0; font-size: 13px; color: var(--text-faint); }
+.burn-empty[hidden] { display: none; }
+.burn-li { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.burn-li-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.burn-li-t { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.burn-li-t b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.burn-kind { font-size: 11.5px; color: var(--text-faint); white-space: nowrap; }
+.burn-li-s { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.burn-left2::before { content: '·'; margin-right: 6px; color: var(--text-faint); }
+.burn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); flex: 0 0 auto; }
+.burn-st-waiting .burn-dot { background: var(--warning, #f59e0b); }
+.burn-st-live .burn-dot, .burn-st-viewing .burn-dot { background: var(--success, #16a34a); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success, #16a34a) 25%, transparent); }
+.burn-st-opened .burn-dot { background: var(--accent); }
+.burn-ended { opacity: 0.7; }
+.burn-ended .burn-dot { background: var(--text-faint); box-shadow: none; }
+.burn-ended .burn-li-t b { text-decoration: line-through; text-decoration-color: var(--text-faint); }
+.burn-li-a { display: flex; gap: 6px; flex: 0 0 auto; }
+.burn-sm { min-height: 40px; padding: 0 12px; font-size: 13px; }
+.burn-armed { color: var(--error, #dc2626); border-color: var(--error, #dc2626); }
+.burn-fine { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--text-faint); }
+
+@media (max-width: 560px) {
+  .burn-ov { align-items: flex-end; padding: 0; }
+  .burn-dlg { width: 100%; max-height: calc(100dvh - 24px); border-radius: 16px 16px 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom); }
+  .burn-li { flex-wrap: wrap; }
+  .burn-li-a { width: 100%; }
+  .burn-li-a .btn { flex: 1 1 0; }
+  .burn-exp { min-width: 0; font-size: 16px; }
+  .burn-cn, .burn-cu { font-size: 16px; }
+}
+
+/* ---- recipient view ------------------------------------------------------------------------ */
+.burn-rv {
+  position: fixed; inset: 0; z-index: 7060; display: flex; flex-direction: column;
+  background: var(--bg, var(--surface)); color: var(--text); font-family: var(--font-body, inherit);
+  height: 100vh; height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+.burn-rv-top { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface); flex: 0 0 auto; flex-wrap: wrap; }
+.burn-rv-brand { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
+.burn-rv-ic { font-size: 18px; }
+.burn-rv-title { font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.burn-rv-chips { display: flex; gap: 6px; align-items: center; order: 3; flex: 1 0 100%; }
+.burn-rv-chips:not(:has(.burn-chip:not([hidden]))) { display: none; }
+.burn-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 14px; font-size: 12.5px; font-weight: 600;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.burn-chip[hidden] { display: none; }
+.burn-chip-live { color: var(--success, #16a34a); }
+.burn-chip-live i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: burn-pulse 1.6s ease-in-out infinite; }
+.burn-chip-live.burn-busy i { animation-duration: 0.5s; }
+.burn-chip-clock b { color: var(--text); }
+.burn-chip-clock.burn-soon, .burn-chip-clock.burn-soon b { color: var(--error, #dc2626); border-color: var(--error, #dc2626); }
+@keyframes burn-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .burn-chip-live i { animation: none; } }
+@media (min-width: 700px) {
+  .burn-rv-chips { order: 0; flex: 0 0 auto; }
+}
+.burn-rv-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.burn-rv-text {
+  flex: 1 1 auto; min-height: 0; width: 100%; max-width: 820px; margin: 0 auto; box-sizing: border-box;
+  padding: 18px 18px 28px; font: inherit; font-size: 17px; line-height: 1.6; color: var(--text); background: transparent;
+  border: 0; outline: none; resize: none; white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+.burn-nocopy .burn-rv-read { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.burn-rv-edit { caret-color: var(--accent); }
+.burn-rv-wait { margin: auto; display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 15px; }
+.burn-spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: burn-spin 0.8s linear infinite; }
+@keyframes burn-spin { to { transform: rotate(360deg); } }
+.burn-rv-foot { flex: 0 0 auto; border-top: 1px solid var(--border); background: var(--surface); padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.burn-rv-foot[hidden] { display: none; }
+.burn-rv-foot p { margin: 0; flex: 1 1 260px; font-size: 12.5px; line-height: 1.45; color: var(--text-muted); }
+.burn-rv-foot p b { color: var(--text); }
+.burn-rv-acts { display: flex; gap: 8px; flex: 0 0 auto; }
+.burn-rv-acts .btn { min-height: 40px; }
+.burn-end { margin: auto; max-width: 420px; padding: 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.burn-end-ic { font-size: 44px; line-height: 1; filter: grayscale(0.2); }
+.burn-end h2 { margin: 4px 0 0; font-size: 21px; line-height: 1.3; }
+.burn-end p { margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--text-muted); }
+.burn-end .burn-end-wiped { font-size: 12.5px; color: var(--text-faint); }
+.burn-end-acts { display: flex; gap: 8px; margin-top: 10px; }
+.burn-end-acts .btn { min-height: 44px; min-width: 120px; }

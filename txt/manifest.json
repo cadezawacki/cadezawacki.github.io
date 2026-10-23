@@ -1223,7 +1223,7 @@
           "name": "Redact Selection",
           "description": "Black out the selected text with █ blocks (keeps spaces and line breaks)",
           "icon": "⬛",
-          "tags": "redact,censor,black out,blackout,hide,mask,obscure,privacy,secret,classified,block"
+          "tags": "redact,censor,black out,blackout,hide,hide text,hide this text,hide selection,hide words,mask,obscure,privacy,secret,classified,block"
         }
       ]
     },
@@ -2964,6 +2964,80 @@
       "tags": "binaural,binaural beats,beats,brainwave,brain waves,isochronic,monaural,delta,theta,alpha,beta,gamma,40 hz,sleep,focus,study,meditation,meditate,relax,calm,white noise,pink noise,brown noise,rain,ocean,solfeggio,432,528,schumann,ambient,audio,sound,headphones",
       "entry": "widgets/binaural/binaural.js",
       "css": "widgets/binaural/binaural.css"
+    },
+    {
+      "id": "stego",
+      "type": "widget",
+      "name": "Steganography",
+      "description": "Conceal a secret message in an image (invisible LSB, optional AES-GCM password) or in ordinary text — and analyse any image for concealed data",
+      "icon": "🕵",
+      "tags": "steganography,stego,hide message in image,hide in picture,hide in photo,hidden message,hidden data,secret message,conceal,image,photo,picture,lsb,least significant bit,encrypt,password,aes,zero-width,invisible,ctf,reveal,extract,decode,bit plane,exif,strings,watermark",
+      "entry": "widgets/stego/stego.js",
+      "css": "widgets/stego/stego.css",
+      "precache": [
+        "widgets/stego/stego-core.js"
+      ]
+    },
+    {
+      "id": "burn",
+      "type": "widget",
+      "name": "Self-destructing links",
+      "description": "Share a note by a link that self-destructs — after one open, or when a timer runs out — end-to-end encrypted, optionally live-editable; for people without Cade.txt",
+      "icon": "🔥",
+      "tags": "share,link,self-destruct,burn,burn after reading,one-time,expiring,expire,secret,private,encrypted,live,collaborate,guest,send",
+      "entry": "widgets/burn/burn.js",
+      "css": "widgets/burn/burn.css",
+      "precache": [
+        "widgets/burn/burn-core.js",
+        "widgets/merge/merge-core.js"
+      ]
+    },
+    {
+      "id": "fontmaker",
+      "type": "widget",
+      "name": "Font Maker",
+      "description": "Turn your handwriting into a real font — draw each letter with a finger or Apple Pencil, save it as an .otf, use it in the app and make pictures of text in it",
+      "icon": "✍️",
+      "tags": "font,font maker,handwriting,hand writing,typeface,otf,woff,opentype,glyph,letters,lettering,calligraphy,pencil,apple pencil,draw,image,png,card",
+      "entry": "widgets/fontmaker/fontmaker.js",
+      "css": "widgets/fontmaker/fontmaker.css",
+      "precache": [
+        "widgets/fontmaker/fontmaker-core.js",
+        "widgets/fontmaker/opentype.min.js"
+      ],
+      "prefs": {
+        "title": "Font Maker",
+        "fields": [
+          {
+            "key": "ghost",
+            "type": "toggle",
+            "label": "Show a faint letter to trace over",
+            "default": true
+          },
+          {
+            "key": "pencil",
+            "type": "toggle",
+            "label": "Pencil only once a pen is used",
+            "default": true,
+            "hint": "On an iPad: after the Apple Pencil touches the drawing square, fingers and palms no longer draw"
+          },
+          {
+            "key": "autoNext",
+            "type": "toggle",
+            "label": "Go to the next letter after a pause",
+            "default": false,
+            "hint": "1.5 s after you lift the pen"
+          },
+          {
+            "key": "preview",
+            "type": "text",
+            "label": "Preview word",
+            "default": "Hamburgefonts",
+            "placeholder": "Hamburgefonts",
+            "maxLength": 40
+          }
+        ]
+      }
     }
   ]
 }
