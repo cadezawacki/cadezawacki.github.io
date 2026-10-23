@@ -6,10 +6,11 @@
  * existing rules cover rooms/*). <id> is 128 random bits; the AES-GCM key is
  * 256 random bits. Both, plus the database URL, travel only in the link's
  * fragment (#burn=…), which browsers never send to a server. The node holds:
- *   meta     { v: 2, created (server time), expiresAt (ms, 0 = no timer),
- *              maxOpens (0 = anyone), oneTime (= maxOpens 1, for older code), editable }
+ *   meta     { v: 2 | 3, created (server time), expiresAt (ms, 0 = no timer),
+ *              maxOpens (0 = anyone), oneTime (= maxOpens 1, for older code), editable,
+ *              live (v3 only: "watch live" — editable stays false) }
  *            plain, non-secret: only what enforcement needs
- *   head     sealed { title, copy, icon, timer, scripts }                    (AAD …/head)
+ *   head     sealed { title, copy, icon, timer, scripts, live }              (AAD …/head)
  *            everything that describes the content: the name the reader sees,
  *            the icon, whether they see the countdown, the tidy-up tools
  *   doc      { ver, ct: sealed { t }, by, base, at }                         (AAD …/<ver>)
@@ -22,12 +23,22 @@
  * Everything here is client-enforced — there are no server functions — and
  * the UI copy says so.
  *
+ * Three modes (modeOf): 'read' — a snapshot; 'edit' — two-way live editing;
+ * 'live' — the reader watches the owner's changes but can't edit. 'live' and
+ * 'edit' keep their text on the server while the link is alive and take
+ * slots the same way. A v3 'live' meta keeps editable: false, so code from
+ * before v3 shows such a link as a snapshot (and treats it as read-only).
+ *
  * Live editing: every writer keeps `shared` = the last version it fully
  * incorporated. A push is a compare-and-swap transaction on doc (ver must
  * still be shared.ver); a newer version from someone else is three-way merged
  * (base = shared.text) into the local text with merge-core's merge3, and the
  * lines both sides changed are merged again word by word (mergeLive below),
- * so two people typing in the same paragraph keep both edits. */
+ * so two people typing in the same paragraph keep both edits.
+ *
+ * Watch live: the owner's devices run LiveDoc in push-only mode — they send
+ * the room's text and NEVER take anything in (anyone holding the key can
+ * write ciphertext to the node); the reader runs Follow, which only shows. */
 (function (root) {
   'use strict';
 
@@ -220,6 +231,15 @@
     if (meta.maxOpens != null) { var n = Math.floor(Number(meta.maxOpens)); return n > 0 ? n : 0; }
     return meta.oneTime ? 1 : 0;
   }
+  // What a link lets its reader do (a meta or an owner's entry): 'edit' (live
+  // two-way), 'live' (watch the owner's changes, read only) or 'read' (a
+  // snapshot). editable wins, so a link can't be both.
+  function modeOf(m) { return !m ? 'read' : m.editable ? 'edit' : m.live ? 'live' : 'read'; }
+  // Live links (edit / live) keep their text on the server while the link is
+  // alive, and a slot stays its browser's; a snapshot may burn after reading.
+  function staysLive(m) { return modeOf(m) !== 'read'; }
+  // The owner list's word for it.
+  function modeWord(m) { var md = modeOf(m); return md === 'edit' ? 'editable' : md === 'live' ? 'watch live' : 'read-only'; }
   // A v1 one-time link: a single `claim` node rather than `claims`.
   function isV1Claim(meta) { return !!meta && meta.maxOpens == null && !!meta.oneTime; }
 
@@ -253,7 +273,7 @@
     if (node.tomb) return { ok: false, why: node.tomb.why || 'gone' };
     if (!node.meta) return { ok: false, why: 'gone' };
     if (isExpired(node.meta, now)) return { ok: false, why: 'expired' };
-    var cap = capOf(node.meta), ed = !!node.meta.editable;
+    var cap = capOf(node.meta), ed = staysLive(node.meta);
     if (!cap) return { ok: true, needClaim: false };
     if (isV1Claim(node.meta)) {
       if (node.claim) {
@@ -269,7 +289,7 @@
   // A read-only capped link is deleted from the server once its last slot's
   // opener has read it (a v1 one-time link: by its only opener).
   function burnsAfterRead(meta, claims) {
-    if (!meta || meta.editable) return false;
+    if (!meta || staysLive(meta)) return false;
     var cap = capOf(meta);
     if (!cap) return false;
     return isV1Claim(meta) || count(claims) >= cap;
@@ -304,12 +324,13 @@
       var L = { opened: cap > 1 ? 'Opened by ' + cap + ' — deleted' : 'Opened — deleted', expired: 'Expired', revoked: 'Revoked', gone: 'Gone' };
       return { state: why, ended: true, viewers: 0, used: 0, cap: cap, left: 0, label: L[why] || 'Ended' };
     }
-    var viewers = node ? count(node.presence) : 0, used = cap ? usedOf(entry, node) : 0;
+    var viewers = node ? count(node.presence) : 0, used = cap ? usedOf(entry, node) : 0, md = modeOf(entry);
     var of = cap > 1 ? ' · ' + used + ' of ' + cap + ' opened' : '';
-    if (viewers) return { state: entry.editable ? 'live' : 'viewing', ended: false, viewers: viewers, used: used, cap: cap, left: left,
-      label: (entry.editable ? 'Live' : 'Open now') + ' · ' + viewers + ' viewer' + (viewers > 1 ? 's' : '') + of };
+    var who = md === 'live' ? viewers + ' watching' : viewers + ' viewer' + (viewers > 1 ? 's' : '');
+    if (viewers) return { state: md !== 'read' ? 'live' : 'viewing', ended: false, viewers: viewers, used: used, cap: cap, left: left,
+      label: (md !== 'read' ? 'Live' : 'Open now') + ' · ' + who + of };
     if (used) return { state: 'opened', ended: false, viewers: 0, used: used, cap: cap, left: left,
-      label: cap > 1 ? 'Opened by ' + used + ' of ' + cap : entry.editable ? 'Opened — not open now' : 'Opened' };
+      label: cap > 1 ? 'Opened by ' + used + ' of ' + cap : md !== 'read' ? 'Opened — not open now' : 'Opened' };
     return { state: 'waiting', ended: false, viewers: 0, used: 0, cap: cap, left: left, label: 'Waiting to be opened' };
   }
 
@@ -327,7 +348,7 @@
     // A read-only capped link whose last slot was taken but whose opener never
     // got to delete the text (closed mid-way): finish the job after a grace minute.
     var cap = capOfEntry(entry);
-    if (cap && !entry.editable && usedOf(entry, node) >= cap && now - lastClaimAt(entry, node) > MIN) return { act: 'tomb', why: 'opened' };
+    if (cap && !staysLive(entry) && usedOf(entry, node) >= cap && now - lastClaimAt(entry, node) > MIN) return { act: 'tomb', why: 'opened' };
     return { act: 'keep' };
   }
   // When the owner's device should next look (ms from now), or -1 for never.
@@ -350,7 +371,7 @@
       seen[e.id] = 1;
       var x = {
         id: e.id, key: e.key, db: e.db, room: String(e.room || ''), title: String(e.title || e.room || ''),
-        created: +e.created || 0, expiresAt: +e.expiresAt || 0, oneTime: !!e.oneTime, editable: !!e.editable, copy: !!e.copy,
+        created: +e.created || 0, expiresAt: +e.expiresAt || 0, oneTime: !!e.oneTime, editable: !!e.editable, live: !e.editable && !!e.live, copy: !!e.copy,
         ended: e.ended && e.ended.why ? { why: String(e.ended.why), at: +e.ended.at || 0 } : null
       };
       if (e.v === 2) { x.v = 2; x.maxOpens = capOfEntry(e); }
@@ -378,15 +399,24 @@
     (Array.isArray(list) ? list : []).forEach(function (id) { want[String(id)] = 1; });
     return SCRIPTS.filter(function (s) { return want[s.id]; }).map(function (s) { return s.id; });
   }
-  // What the owner seals. o: { title, copy, icon, timer, editable, scripts }
+  // What the owner seals. o: { title, copy, icon, timer, editable, live, scripts }
+  // Tidy-up tools only for 'edit'; `live` repeats the plain meta's flag.
   function makeHead(o) {
     return { title: cleanName(o.title) || 'Shared note', copy: !!o.copy, icon: cleanIcon(o.icon), timer: o.timer !== false,
-      scripts: o.editable ? cleanScripts(o.scripts) : [] };
+      scripts: o.editable ? cleanScripts(o.scripts) : [], live: modeOf(o) === 'live' };
   }
-  // A head as read; v1 links sealed only { title, copy }.
+  // A head as read; v1 links sealed only { title, copy }, v2 no `live`.
   function readHead(h) {
     h = h && typeof h === 'object' ? h : {};
-    return { title: cleanName(h.title), copy: !!h.copy, icon: cleanIcon(h.icon), timer: h.timer !== false, scripts: cleanScripts(h.scripts) };
+    return { title: cleanName(h.title), copy: !!h.copy, icon: cleanIcon(h.icon), timer: h.timer !== false, scripts: cleanScripts(h.scripts), live: h.live === true };
+  }
+  // How the reader's page shows a link. A "watch live" view needs both the
+  // plain meta and the sealed head to say so; anything else falls back to the
+  // snapshot (as code from before v3 does).
+  function viewOf(meta, head) {
+    var md = modeOf(meta);
+    if (md === 'live' && !(head && head.live)) return 'read';
+    return md;
   }
 
   // ---- tidy-up tools for the reader -----------------------------------------------------------------------
@@ -522,6 +552,178 @@
     return b - s;
   }
 
+  // ---- live documents ------------------------------------------------------------------------------------
+  function isVer(n) { return typeof n === 'number' && n >= 1 && n <= 9007199254740991 && Math.floor(n) === n; }
+  function textOf(x) { return String(x && x.t != null ? x.t : ''); }
+  // Firebase's transaction; applyLocally = false: no optimistic local events —
+  // a version counts only once the server took it.
+  function txn(ref, fn) { return ref.transaction(fn, undefined, false); }
+  // Whose version it claims to be. Not proof (it's a plain field) — only used
+  // to decide whether the owner puts the room's text straight back.
+  function ownerWrote(v) { return !!v && typeof v.by === 'string' && v.by.slice(0, 2) === 'o:'; }
+
+  // LiveDoc: one writer of a live link.
+  // o: { ref (the share's doc), id, key, me, now(), merge (merge-core), pushMs,
+  //      get() → text | Promise | null, apply(merged, seen) → Promise,
+  //      loadBase() → Promise<{ver,text}|null>, saveBase(shared), adoptFirst (bool),
+  //      onGone(), onSync(state), pushOnly (bool) }
+  //  - two-way ('edit'): someone else's newer version is merged into the local
+  //    text (apply), then pushed back if it changed.
+  //  - pushOnly (the owner of a "watch live" link): sends the local text, and
+  //    NEVER changes it — `apply` is dropped here, so nothing that arrives
+  //    (anyone with the key can write a version) can reach the room. What
+  //    arrives only numbers the next push; a version that doesn't look like
+  //    the owner's own (or doesn't open) is overwritten with the room's text.
+  //    The saved base is the last text this device and the link agreed on, so
+  //    a device that changed the room while the app was closed sends it at
+  //    start, and a device with a stale copy of the room stays quiet.
+  function LiveDoc(o) {
+    var docRef = o.ref, pushOnly = !!o.pushOnly, PUSH_MS = o.pushMs || 350;
+    var apply = pushOnly ? null : o.apply;          // the hard rule (see above)
+    var shared = null, latest = null, stopped = false, timer = 0, retry = 0, fails = 0, chain = Promise.resolve(), baseLoaded = null;
+    var top = 0, started = false;                   // pushOnly: the highest version seen; first version handled
+    function enqueue(fn) {
+      chain = chain.then(function () { if (!stopped) return fn(); }).catch(function (e) { if (typeof console !== 'undefined') console.warn('burn live:', e); });
+      return chain;
+    }
+    function state(s) { if (o.onSync) try { o.onSync(s); } catch (e) {} }
+    function base() {
+      if (!baseLoaded) baseLoaded = Promise.resolve(o.loadBase ? o.loadBase() : null).catch(function () { return null; });
+      return baseLoaded;
+    }
+    function onVal(s) { latest = s.val(); enqueue(pushOnly ? incomingPushOnly : incoming); }
+    docRef.on('value', onVal);
+
+    function incoming() {
+      var v = latest;
+      if (!v) { stop(); o.onGone(); return; }
+      if (shared && (v.ct === shared.ct || v.ver <= shared.ver)) return;
+      var theirsP = open(o.key, o.id, 'v' + v.ver, v.ct).then(textOf);
+      return Promise.all([theirsP, base()]).then(function (r) {
+        var theirs = r[0], b = shared || r[1];
+        if (stopped) return;
+        if (!b) {
+          // First sight with nothing to merge against: adopt it (the guest
+          // shows it; an owner device without a base leaves the room alone).
+          shared = { ver: v.ver, text: theirs, ct: v.ct };
+          if (o.saveBase) o.saveBase(shared);
+          if (o.adoptFirst) return Promise.resolve(apply(theirs, null)).then(function () { state('synced'); });
+          state('synced');
+          return;
+        }
+        if (b.ver >= v.ver) { shared = { ver: b.ver, text: b.text, ct: b.ct }; return; }
+        return Promise.resolve(o.get()).then(function (local) {
+          if (local == null) throw new Error('no local text');
+          var merged = mergeLive(o.merge, b.text, local, theirs);
+          var applied = merged === local ? null : apply(merged, local);
+          return Promise.resolve(applied).then(function () {
+            shared = { ver: v.ver, text: theirs, ct: v.ct };
+            if (o.saveBase) o.saveBase(shared);
+            fails = 0;
+            if (merged !== theirs) schedule(); else state('synced');
+          });
+        });
+      }).catch(function (e) {
+        // Couldn't apply it here right now (a busy / locked room…): try again soon from the newest version.
+        if (stopped) return;
+        state('retry');
+        clearTimeout(retry);
+        if (++fails <= 40) retry = setTimeout(function () { enqueue(incoming); }, Math.min(1500 * fails, 15000));
+        throw e;
+      });
+    }
+
+    // pushOnly: read what arrived, never take it in.
+    function incomingPushOnly() {
+      var v = latest;
+      if (!v) { stop(); o.onGone(); return; }
+      if (shared && v.ct === shared.ct && v.ver === shared.ver) return;
+      if (isVer(v.ver) && v.ver > top) top = v.ver;
+      var theirsP = isVer(v.ver) && typeof v.ct === 'string'
+        ? open(o.key, o.id, 'v' + v.ver, v.ct).then(textOf, function () { return null; })
+        : Promise.resolve(null);
+      var localP = Promise.resolve().then(function () { return o.get(); }).catch(function () { return null; });
+      return Promise.all([theirsP, base(), localP]).then(function (r) {
+        if (stopped) return;
+        var theirs = r[0], b = r[1], local = r[2], first = !started;
+        started = true;
+        shared = { ver: v.ver, text: theirs, ct: v.ct };
+        if (local == null) return;                                  // the room can't be read here right now
+        if (theirs === local) { if (o.saveBase) o.saveBase({ ver: v.ver, text: local, ct: v.ct }); state('synced'); return; }
+        if (theirs == null || !ownerWrote(v)) { schedule(); return; } // not the owner's: put the room's text back
+        if (first && b && b.text !== local) schedule();             // changed here since this device last pushed
+      });
+    }
+
+    function push() {
+      if (!shared) return;
+      return Promise.resolve(o.get()).then(function (local) {
+        if (stopped || local == null || local === shared.text) { state('synced'); return; }
+        var baseVer = shared.ver, baseCt = shared.ct, me = o.me;
+        // pushOnly: above every version seen, so readers (who skip older ones) take it.
+        var ver = pushOnly ? Math.max(top, isVer(baseVer) ? baseVer : 0) + 1 : baseVer + 1;
+        state('saving');
+        return seal(o.key, o.id, 'v' + ver, { t: local }).then(function (ct) {
+          if (stopped || shared.ver !== baseVer || (pushOnly && shared.ct !== baseCt)) return;      // someone else's version came in meanwhile
+          return txn(docRef, function (cur) {
+            if (cur === null) return null;                       // gone (or not cached yet: the server reruns us)
+            if (pushOnly ? JSON.stringify([cur.ver, cur.ct]) !== JSON.stringify([baseVer, baseCt]) : cur.ver !== baseVer) return undefined;   // lost the race
+            return { ver: ver, ct: ct, by: me, base: baseVer, at: o.now() };
+          }).then(function (r) {
+            var val = r && r.snapshot ? r.snapshot.val() : null;
+            if (r && r.committed && !val) { stop(); o.onGone(); return; }
+            if (r && r.committed && val && val.ct === ct) {
+              if (pushOnly) top = Math.max(top, ver);
+              if (!shared || (pushOnly ? shared.ct !== ct : shared.ver < ver)) { shared = { ver: ver, text: local, ct: ct }; if (o.saveBase) o.saveBase(shared); }
+            }
+            // Typed on while it was in flight, or lost the race (the value listener merges first): go again.
+            return Promise.resolve(o.get()).then(function (now) { if (now != null && shared && now !== shared.text) schedule(); else state('synced'); });
+          });
+        });
+      });
+    }
+    function schedule() {
+      if (stopped || timer) return;
+      state('pending');
+      timer = setTimeout(function () { timer = 0; enqueue(push); }, PUSH_MS);
+    }
+    function flush() { clearTimeout(timer); timer = 0; return enqueue(push); }
+    function stop() {
+      if (stopped) return;
+      stopped = true;
+      clearTimeout(timer); clearTimeout(retry);
+      try { docRef.off('value', onVal); } catch (e) {}
+    }
+    return { changed: schedule, flush: flush, stop: stop, get shared() { return shared; }, pushOnly: pushOnly };
+  }
+
+  // Follow: the reader of a "watch live" link. Shows each newer version as it
+  // arrives; never writes. A version that doesn't open with the link's key is
+  // skipped; one older than what's shown never replaces it.
+  // o: { ref (the share's doc), id, key, ver (the version shown), show(text, ver), onGone() }
+  function Follow(o) {
+    var docRef = o.ref, shown = isVer(o.ver) ? o.ver : 0, seen = shown, stopped = false;
+    function onVal(s) {
+      if (stopped) return;
+      var v = s.val();
+      if (!v) { stop(); o.onGone(); return; }
+      if (!isVer(v.ver) || v.ver <= seen || typeof v.ct !== 'string') return;
+      var ver = seen = v.ver;
+      open(o.key, o.id, 'v' + ver, v.ct).then(function (x) {
+        if (stopped || ver <= shown) return;
+        shown = ver;
+        o.show(textOf(x), ver);
+      }, function () {});
+    }
+    function stop() {
+      if (stopped) return;
+      stopped = true;
+      try { docRef.off('value', onVal); } catch (e) {}
+    }
+    docRef.on('value', onVal);
+    return { stop: stop, get shown() { return shown; } };
+  }
+
   var api = {
     PRESETS: PRESETS, MAX_MS: MAX_MS, MAX_TEXT: MAX_TEXT, KEEP_ENDED_MS: KEEP_ENDED_MS,
     b64u: b64u, unb64u: unb64u, newId: newId, newKey: newKey, newViewer: newViewer,
@@ -534,7 +736,8 @@
     statusOf: statusOf, sweepAction: sweepAction, nextSweepIn: nextSweepIn, normBlob: normBlob, hasActive: hasActive,
     cleanName: cleanName, cleanIcon: cleanIcon, cleanScripts: cleanScripts, makeHead: makeHead, readHead: readHead,
     SCRIPTS: SCRIPTS, scriptById: scriptById, packsFor: packsFor, parsePack: parsePack, runScript: runScript, minimalEdit: minimalEdit,
-    mergeLive: mergeLive, mergeWords: mergeWords, mapPos: mapPos
+    mergeLive: mergeLive, mergeWords: mergeWords, mapPos: mapPos,
+    modeOf: modeOf, staysLive: staysLive, modeWord: modeWord, viewOf: viewOf, LiveDoc: LiveDoc, Follow: Follow, isVer: isVer
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.__cadeBurnCore = api;

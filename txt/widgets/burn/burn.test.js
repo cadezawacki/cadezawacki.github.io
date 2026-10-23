@@ -2,8 +2,9 @@
  * expiry, the one-time claim and viewer caps, the owner's time left, the
  * sealed options, the tidy-up tools (allow-list + sandboxed runner), the owner's status / sweep decisions, the
  * live merge of concurrent edits (including a simulated compare-and-swap
- * session between two writers), and that the widget's metadata matches its
- * manifest entry. Not loaded by the app. Run: node txt/widgets/burn/burn.test.js */
+ * session between two writers), "watch live" links (modes, meta / head, slots,
+ * older clients, the owner never taking anything from the share, the reader's
+ * follower), and that the widget's metadata matches its manifest entry. Not loaded by the app. Run: node txt/widgets/burn/burn.test.js */
 'use strict';
 var assert = require('assert');
 var fs = require('fs'), path = require('path');
@@ -385,17 +386,17 @@ test('time left: a 1-minute link never shows more than 1 minute (the 27-min bug)
 test('sealed head: name, icon, countdown, tools round trip; nothing in the clear', function () {
   var k = C.newKey(), id = C.newId();
   var h = C.makeHead({ title: '  Trip\nplans  ', copy: true, icon: ' 🎉 ', timer: false, editable: true, scripts: ['title', 'sort', 'nope', 'sort', 'fetchAll'] });
-  assert.deepStrictEqual(h, { title: 'Trip plans', copy: true, icon: '🎉', timer: false, scripts: ['sort', 'title'] });
+  assert.deepStrictEqual(h, { title: 'Trip plans', copy: true, icon: '🎉', timer: false, scripts: ['sort', 'title'], live: false });
   return C.seal(k, id, 'head', h).then(function (ct) {
     ['Trip', '🎉', 'sort', 'title', 'timer'].forEach(function (s) { assert(ct.indexOf(s) < 0, s + ' in the clear'); });
     return C.open(k, id, 'head', ct);
   }).then(function (o) {
     assert.deepStrictEqual(C.readHead(o), h);
     // read-only links never carry tools; defaults
-    assert.deepStrictEqual(C.makeHead({ title: '', scripts: ['sort'] }), { title: 'Shared note', copy: false, icon: '', timer: true, scripts: [] });
+    assert.deepStrictEqual(C.makeHead({ title: '', scripts: ['sort'] }), { title: 'Shared note', copy: false, icon: '', timer: true, scripts: [], live: false });
     // v1 heads ({ title, copy }) read with the defaults: no icon, countdown on, no tools
-    assert.deepStrictEqual(C.readHead({ title: 'plan', copy: false }), { title: 'plan', copy: false, icon: '', timer: true, scripts: [] });
-    assert.deepStrictEqual(C.readHead(null), { title: '', copy: false, icon: '', timer: true, scripts: [] });
+    assert.deepStrictEqual(C.readHead({ title: 'plan', copy: false }), { title: 'plan', copy: false, icon: '', timer: true, scripts: [], live: false });
+    assert.deepStrictEqual(C.readHead(null), { title: '', copy: false, icon: '', timer: true, scripts: [], live: false });
     assert.strictEqual(C.cleanIcon('👨‍👩‍👧 family'), '👨‍👩‍👧 ', 'a grapheme cluster counts as one');
     assert.strictEqual(C.cleanIcon('★'), '★');
     assert.strictEqual(C.cleanIcon('abc'), 'ab');
@@ -463,6 +464,235 @@ test('runScript sandbox: no page, network, storage or dialogs; async refused', f
   // a pack loaded this way registers nothing anywhere else
   var seen = C.parsePack('(function(){ if (typeof window.Cade === "undefined") return; window.Cade.registerScript("/**\\n{\\"name\\":\\"X\\"}\\n**/\\nfunction main(ctx){}"); })();');
   assert.deepStrictEqual(Object.keys(seen), ['X']);
+});
+
+// ---- watch live ----------------------------------------------------------------------------------------------
+function settle(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+// A share's doc node: value listeners and transactions, like Firebase's (async).
+function fakeDoc(init) {
+  var val = init == null ? null : init, ls = [], d = { txns: 0, commits: 0 };
+  var clone = function (v) { return v == null ? null : JSON.parse(JSON.stringify(v)); };
+  var snap = function (v) { var c = clone(v); return { val: function () { return clone(c); } }; };
+  var emit = function () { ls.slice().forEach(function (fn) { fn(snap(val)); }); };
+  d.ref = {
+    on: function (ev, fn) { ls.push(fn); setTimeout(function () { if (ls.indexOf(fn) >= 0) fn(snap(val)); }, 0); },
+    off: function (ev, fn) { ls = ls.filter(function (f) { return f !== fn; }); },
+    transaction: function (fn) {
+      d.txns++;
+      return new Promise(function (res) {
+        setTimeout(function () {
+          var nv = fn(clone(val));
+          if (nv === undefined) return res({ committed: false, snapshot: snap(val) });
+          val = clone(nv); d.commits++; emit();
+          res({ committed: true, snapshot: snap(val) });
+        }, 1);
+      });
+    }
+  };
+  d.set = function (v) { val = clone(v); emit(); };
+  d.get = function () { return clone(val); };
+  d.listeners = function () { return ls.length; };
+  return d;
+}
+var liveMeta = function (o) { return Object.assign({ v: 3, created: 0, expiresAt: 0, maxOpens: 1, oneTime: true, editable: false, live: true }, o); };
+
+test('modes: read / live / edit from a meta or an entry; editable wins', function () {
+  assert.strictEqual(C.modeOf(null), 'read');
+  assert.strictEqual(C.modeOf({ editable: false }), 'read');
+  assert.strictEqual(C.modeOf({ live: true }), 'live');
+  assert.strictEqual(C.modeOf({ editable: true, live: true }), 'edit');
+  assert.strictEqual(C.staysLive({ live: true }), true);
+  assert.strictEqual(C.staysLive({}), false);
+  assert.deepStrictEqual([{}, { live: true }, { editable: true }].map(C.modeWord), ['read-only', 'watch live', 'editable']);
+});
+test('watch live: meta + sealed head round trip; the view needs both to say live', function () {
+  var k = C.newKey(), id = C.newId();
+  var h = C.makeHead({ title: 'Live plan', live: true, scripts: ['sort'], copy: true });
+  assert.deepStrictEqual(h, { title: 'Live plan', copy: true, icon: '', timer: true, scripts: [], live: true }, 'no tidy-up tools for a live view');
+  assert.strictEqual(C.makeHead({ editable: true, live: true }).live, false, 'edit is not live view');
+  return C.seal(k, id, 'head', h).then(function (ct) {
+    assert(ct.indexOf('live') < 0);
+    return C.open(k, id, 'head', ct);
+  }).then(function (o) {
+    var head = C.readHead(o);
+    assert.deepStrictEqual(head, h);
+    assert.strictEqual(C.viewOf(liveMeta(), head), 'live');
+    assert.strictEqual(C.viewOf(liveMeta(), C.readHead({ title: 'x' })), 'read', 'a head without live (tampered / mismatched): the snapshot');
+    assert.strictEqual(C.viewOf(liveMeta({ live: false }), head), 'read');
+    assert.strictEqual(C.viewOf(liveMeta({ editable: true }), head), 'edit');
+    assert.strictEqual(C.viewOf({ v: 2, maxOpens: 1, editable: false }, C.readHead({ title: 'x' })), 'read');
+    assert.strictEqual(C.readHead({ live: 'yes' }).live, false, 'only a real true');
+    // the owner's synced list keeps the mode (and never both)
+    var b = C.normBlob({ shares: [entry({ v: 2, maxOpens: 1, live: true }), entry({ v: 2, maxOpens: 1, live: true, editable: true }), entry({})] }).shares;
+    assert.deepStrictEqual(b.map(C.modeOf), ['live', 'edit', 'read']);
+    assert.strictEqual(b[0].live, true); assert.strictEqual(b[1].live, false);
+  });
+});
+test('watch live: slots and lifetime exactly like editable (claims, reopen, never burned after reading)', function () {
+  var now = 5000;
+  // one person: the first browser holds it, comes back to it; a second is refused as "claimed"
+  assert.deepStrictEqual(C.gate({ meta: liveMeta(), claims: null }, now, 'me'), { ok: true, needClaim: true });
+  assert.deepStrictEqual(C.gate({ meta: liveMeta(), claims: { me: 1 } }, now, 'me'), { ok: true, needClaim: false });
+  assert.deepStrictEqual(C.gate({ meta: liveMeta(), claims: { other: 1 } }, now, 'me'), { ok: false, why: 'claimed' });
+  assert.deepStrictEqual(C.gate({ meta: liveMeta({ editable: true, live: false }), claims: { other: 1 } }, now, 'me'), { ok: false, why: 'claimed' }, 'same as editable');
+  assert.deepStrictEqual(C.gate({ meta: liveMeta({ maxOpens: 3, oneTime: false }), claims: { a: 1, b: 1, c: 1 } }, now, 'me'), { ok: false, why: 'claimed' });
+  assert.deepStrictEqual(C.gate({ meta: liveMeta({ expiresAt: 5000 }) }, now, 'me'), { ok: false, why: 'expired' });
+  assert.deepStrictEqual(C.gate({ meta: liveMeta(), tomb: { why: 'revoked' } }, now, 'me'), { ok: false, why: 'revoked' });
+  // the text stays on the server while the link is alive
+  assert.strictEqual(C.burnsAfterRead(liveMeta(), { a: 1 }), false);
+  assert.strictEqual(C.burnsAfterRead(liveMeta({ maxOpens: 2, oneTime: false }), { a: 1, b: 1 }), false);
+  var srv = fakeServer(null);
+  var claim = function (me) { var r = srv.transact(function (cur) { return C.claimsUpdate(cur, me, 1, 1); }, null); return C.holdsSlot(r.val, me); };
+  assert.deepStrictEqual([claim('a'), claim('b'), claim('a')], [true, false, true]);
+  // the owner's sweep keeps a full live link (only the timer, revoke or the server ending it end it)
+  var e = entry({ v: 2, maxOpens: 1, live: true, expiresAt: 600000 });
+  assert.deepStrictEqual(C.sweepAction(e, { meta: liveMeta(), claims: { a: 1 } }, 1e5), { act: 'keep' });
+  assert.deepStrictEqual(C.sweepAction(e, { meta: liveMeta(), claims: { a: 1 } }, 600000), { act: 'tomb', why: 'expired' });
+  assert.deepStrictEqual(C.sweepAction(e, { meta: liveMeta(), tomb: { why: 'revoked' } }, 10), { act: 'end', why: 'revoked' });
+  // status: who's watching
+  assert.strictEqual(C.statusOf(e, { meta: {}, claims: { a: 1 }, presence: { a: {} } }, 0).label, 'Live · 1 watching');
+  assert.strictEqual(C.statusOf(e, { meta: {}, claims: { a: 1 }, presence: { a: {} } }, 0).state, 'live');
+  assert.strictEqual(C.statusOf(entry({ v: 2, maxOpens: 3, live: true }), { meta: {}, claims: { a: 1, b: 1 }, presence: { a: {}, b: {} } }, 0).label, 'Live · 2 watching · 2 of 3 opened');
+  assert.strictEqual(C.statusOf(e, { meta: {}, claims: { a: 1 } }, 0).label, 'Opened — not open now');
+});
+test('watch live: older clients (v2 code) see a snapshot and don\'t crash', function () {
+  // The previous release's burn-core, from git history (skipped where the history isn't there).
+  var src;
+  try { src = require('child_process').execSync('git show 65d0c45:txt/widgets/burn/burn-core.js', { cwd: __dirname, stdio: ['ignore', 'pipe', 'ignore'] }).toString(); }
+  catch (e) { console.log('  (skipped the v2-client check: no git history)'); return; }
+  var mod = { exports: {} };
+  new Function('module', 'window', src)(mod, undefined);
+  var Old = mod.exports;
+  assert(Old.gate && !Old.modeOf, 'loaded the v2 core');
+  var k = C.newKey(), id = C.newId(), meta = liveMeta();
+  // what a v3 owner writes for a live link: everything v2 code reads is there, editable stays false
+  assert.strictEqual(meta.editable, false); assert.strictEqual(Old.capOf(meta), 1);
+  assert.deepStrictEqual(Old.gate({ meta: meta, claims: null }, 1, 'me'), { ok: true, needClaim: true });
+  return C.seal(k, id, 'head', C.makeHead({ title: 'Live plan', live: true })).then(function (ct) { return Old.open(k, id, 'head', ct); }).then(function (o) {
+    var h = Old.readHead(o);
+    assert.strictEqual(h.title, 'Live plan'); assert.deepStrictEqual(h.scripts, []);
+    // v2 code shows it read-only (no textarea, no tools) — and new code reading a v2 link is unchanged
+    assert.strictEqual(!!meta.editable, false);
+    assert.strictEqual(C.viewOf({ v: 2, maxOpens: 1, oneTime: true, editable: false }, C.readHead(o)), 'read');
+    assert.strictEqual(C.viewOf({ v: 2, maxOpens: 1, oneTime: true, editable: true }, C.readHead({})), 'edit');
+  });
+});
+test('watch live: the owner NEVER takes a version from the share into the room (forged writes)', function () {
+  var k = C.newKey(), id = C.newId(), room = 'Owner text v1', applied = 0, saved = null, gone = 0, d, live;
+  var write = function (ver, t, by) { return C.seal(k, id, 'v' + ver, { t: t }).then(function (ct) { d.set({ ver: ver, ct: ct, by: by, base: ver - 1, at: 1 }); return ct; }); };
+  var shown = function () { var v = d.get(); return C.open(k, id, 'v' + v.ver, v.ct).then(function (x) { return x.t; }); };
+  return C.seal(k, id, 'v1', { t: room }).then(function (ct1) {
+    d = fakeDoc({ ver: 1, ct: ct1, by: 'o:create', base: 0, at: 1 });
+    live = C.LiveDoc({
+      ref: d.ref, id: id, key: k, me: 'o:dev1', now: function () { return 5; }, merge: M, pushMs: 5, pushOnly: true,
+      get: function () { return room; },
+      apply: function () { applied++; room = 'TAKEN FROM THE SHARE'; return Promise.resolve(); },     // must never run
+      loadBase: function () { return Promise.resolve({ ver: 1, text: 'Owner text v1' }); },
+      saveBase: function (sh) { saved = sh; }, onGone: function () { gone++; }
+    });
+    assert.strictEqual(live.pushOnly, true);
+    return settle(40);
+  }).then(function () {
+    assert.strictEqual(d.get().ver, 1, 'in step: nothing to push');
+    // 1. someone with the key writes their own version: never applied; the room's text goes back on top
+    return write(2, 'EVIL — merge me', 'g:intruder').then(function () { return settle(80); });
+  }).then(function () {
+    assert.strictEqual(applied, 0); assert.strictEqual(room, 'Owner text v1');
+    assert.strictEqual(d.get().ver, 3); assert.strictEqual(d.get().by, 'o:dev1');
+    return shown();
+  }).then(function (t) {
+    assert.strictEqual(t, 'Owner text v1', 'the owner\'s text is back');
+    // 2. a forger posing as an owner device: still never applied; the owner's next edit lands on top
+    return write(4, 'EVIL 2', 'o:spoofed').then(function () { return settle(60); });
+  }).then(function () {
+    assert.strictEqual(applied, 0); assert.strictEqual(room, 'Owner text v1'); assert.strictEqual(d.get().ver, 4);
+    room = 'Owner text v2'; live.changed();
+    return settle(60);
+  }).then(function () {
+    assert.strictEqual(d.get().ver, 5); assert.strictEqual(d.get().by, 'o:dev1');
+    return shown();
+  }).then(function (t) {
+    assert.strictEqual(t, 'Owner text v2');
+    // 3. garbage ciphertext: not applied, replaced
+    d.set({ ver: 6, ct: '1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', by: 'o:x' });
+    return settle(80);
+  }).then(function () {
+    assert.strictEqual(d.get().ver, 7); assert.strictEqual(applied, 0);
+    // 4. an older version number (a replay of v2's ciphertext): the next push still goes above everything seen
+    return C.seal(k, id, 'v2', { t: 'EVIL replay' }).then(function (ct) { d.set({ ver: 2, ct: ct, by: 'o:x' }); return settle(40); });
+  }).then(function () {
+    assert.strictEqual(applied, 0); assert.strictEqual(room, 'Owner text v2');
+    room = 'Owner text v3'; live.changed();
+    return settle(60);
+  }).then(function () {
+    assert.strictEqual(d.get().ver, 8, 'above the highest version seen (7)');
+    // 5. a version number that isn't one: not applied, no endless retries
+    var before = d.txns;
+    d.set({ ver: { x: 1 }, ct: 42, by: 'g:x' });
+    return settle(150).then(function () {
+      assert(d.txns - before <= 3, 'bounded: ' + (d.txns - before));
+      assert.strictEqual(d.get().ver, 9); assert.strictEqual(applied, 0); assert.strictEqual(room, 'Owner text v3');
+      assert(saved && saved.text === 'Owner text v3', 'base = last agreed text');
+      // revoke (doc gone) stops it
+      d.set(null);
+      return settle(20);
+    });
+  }).then(function () {
+    assert.strictEqual(gone, 1); assert.strictEqual(d.listeners(), 0);
+    assert.strictEqual(applied, 0);
+  });
+});
+test('watch live: an owner device starts quiet when its copy is stale, pushes what it changed while closed', function () {
+  var k = C.newKey(), id = C.newId();
+  function run(base, local, server) {
+    return C.seal(k, id, 'v5', { t: server }).then(function (ct) {
+      var d = fakeDoc({ ver: 5, ct: ct, by: 'o:other', base: 4, at: 1 });
+      var l = C.LiveDoc({ ref: d.ref, id: id, key: k, me: 'o:me', now: function () { return 1; }, merge: M, pushMs: 5, pushOnly: true,
+        get: function () { return local; }, loadBase: function () { return Promise.resolve(base); }, saveBase: function () {}, onGone: function () {} });
+      return settle(50).then(function () { l.stop(); return d.get(); });
+    });
+  }
+  return Promise.all([
+    run({ ver: 3, text: 'old' }, 'old', 'newer from my other device'),        // stale copy here: stay quiet
+    run({ ver: 3, text: 'old' }, 'edited here', 'old'),                       // changed while closed: send it
+    run(null, 'something', 'other')                                           // never in step: leave it
+  ]).then(function (r) {
+    assert.strictEqual(r[0].ver, 5); assert.strictEqual(r[1].ver, 6); assert.strictEqual(r[1].by, 'o:me'); assert.strictEqual(r[2].ver, 5);
+  });
+});
+test('two-way editing still merges a remote version (the control for the rule above)', function () {
+  var k = C.newKey(), id = C.newId(), local = 'one\ntwo', got = [];
+  return C.seal(k, id, 'v1', { t: 'one\ntwo' }).then(function (ct1) {
+    var d = fakeDoc({ ver: 1, ct: ct1, by: 'o:create' });
+    var l = C.LiveDoc({ ref: d.ref, id: id, key: k, me: 'o:me', now: function () { return 1; }, merge: M, pushMs: 5,
+      get: function () { return local; }, apply: function (m) { got.push(m); local = m; return Promise.resolve(); },
+      loadBase: function () { return Promise.resolve({ ver: 1, text: 'one\ntwo' }); }, saveBase: function () {}, onGone: function () {} });
+    return settle(20).then(function () { return C.seal(k, id, 'v2', { t: 'one\ntwo\nthree' }); })
+      .then(function (ct) { d.set({ ver: 2, ct: ct, by: 'g:guest' }); return settle(40); })
+      .then(function () { l.stop(); assert.deepStrictEqual(got, ['one\ntwo\nthree']); });
+  });
+});
+test('watch live: the reader follows newer versions only, skips ones that don\'t open, ends when the doc goes', function () {
+  var k = C.newKey(), id = C.newId(), shown = [], gone = 0, d, f;
+  var put = function (ver, t) { return C.seal(k, id, 'v' + ver, { t: t }).then(function (ct) { d.set({ ver: ver, ct: ct, by: 'o:x' }); }); };
+  return C.seal(k, id, 'v3', { t: 'three' }).then(function (ct) {
+    d = fakeDoc({ ver: 3, ct: ct, by: 'o:x' });
+    f = C.Follow({ ref: d.ref, id: id, key: k, ver: 3, show: function (t, v) { shown.push(v + ':' + t); }, onGone: function () { gone++; } });
+    return settle(20);
+  }).then(function () {
+    assert.deepStrictEqual(shown, [], 'the version already shown');
+    return put(4, 'four').then(function () { return settle(20); });
+  }).then(function () {
+    d.set({ ver: 5, ct: '1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', by: 'g:x' });
+    return put(2, 'two (older)').then(function () { return settle(20); });
+  }).then(function () {
+    return put(6, 'six').then(function () { return settle(20); });
+  }).then(function () {
+    assert.deepStrictEqual(shown, ['4:four', '6:six']);
+    assert.strictEqual(f.shown, 6);
+    d.set(null);
+    return settle(10);
+  }).then(function () { assert.strictEqual(gone, 1); assert.strictEqual(d.listeners(), 0); });
 });
 
 // ---- widget / manifest ------------------------------------------------------------------------------------------

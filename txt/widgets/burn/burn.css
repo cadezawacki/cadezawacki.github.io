@@ -45,6 +45,21 @@
 .burn-tog input:checked + .burn-sw::after { transform: translateX(18px); background: var(--surface); }
 .burn-tog input:focus-visible + .burn-sw { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* "What they can do": three plain-language choices as cards */
+.burn-modes { display: flex; flex-direction: column; gap: 6px; }
+.burn-modes > .burn-fl { font-size: 14px; margin-bottom: 2px; }
+.burn-opt {
+  display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 10px 12px; box-sizing: border-box; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); transition: border-color 0.15s, background 0.15s;
+}
+.burn-opt input { width: 20px; height: 20px; margin: 1px 0 0; flex: 0 0 auto; accent-color: var(--accent); }
+.burn-opt-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.burn-opt-l { font-size: 14px; font-weight: 600; }
+.burn-opt-h { font-size: 12px; line-height: 1.4; color: var(--text-faint); }
+.burn-opt-on, .burn-opt:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); }
+.burn-opt-on .burn-opt-h, .burn-opt:has(input:checked) .burn-opt-h { color: var(--text-muted); }
+.burn-opt:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .burn-err { font-size: 13px; color: var(--error, #dc2626); line-height: 1.4; }
 .burn-err[hidden] { display: none; }
 .burn-create { min-height: 44px; font-size: 15px; }
