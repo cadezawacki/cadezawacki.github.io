@@ -6,10 +6,15 @@
  * existing rules cover rooms/*). <id> is 128 random bits; the AES-GCM key is
  * 256 random bits. Both, plus the database URL, travel only in the link's
  * fragment (#burn=…), which browsers never send to a server. The node holds:
- *   meta     { v, created, expiresAt (ms, 0 = no timer), oneTime, editable }   plain, non-secret
- *   head     sealed { title, copy }                                          (AAD …/head)
+ *   meta     { v: 2, created (server time), expiresAt (ms, 0 = no timer),
+ *              maxOpens (0 = anyone), oneTime (= maxOpens 1, for older code), editable }
+ *            plain, non-secret: only what enforcement needs
+ *   head     sealed { title, copy, icon, timer, scripts }                    (AAD …/head)
+ *            everything that describes the content: the name the reader sees,
+ *            the icon, whether they see the countdown, the tidy-up tools
  *   doc      { ver, ct: sealed { t }, by, base, at }                         (AAD …/<ver>)
- *   claim    { by, at }       one-time links: the first opener, set by a transaction
+ *   claims   { <viewer>: at }   capped links: one slot per browser, taken by a transaction
+ *   claim    { by, at }         v1 one-time links (meta without maxOpens): the first opener
  *   presence { <viewer>: { at } }   open viewers (removed on disconnect)
  *   tomb     { why: 'opened' | 'expired' | 'revoked', at }   once it destructs;
  *            the ciphertext is gone then and only meta + tomb remain, so a
@@ -30,6 +35,8 @@
   var MAX_MS = 30 * DAY;                 // longest timer
   var MAX_TEXT = 900000;                 // chars a share may carry (Firebase node writes stay small)
   var KEEP_ENDED_MS = 7 * DAY;           // ended links keep their tombstone this long ("already opened")
+  var MAX_VIEWERS = 50;                  // "up to N people"
+  var MAX_NAME = 80;
   var PRESETS = [
     { v: '10m', ms: 10 * MIN, label: '10 minutes' },
     { v: '1h', ms: HOUR, label: '1 hour' },
@@ -138,11 +145,23 @@
     return now + ms;
   }
   // The options a link is created with; throws a user-facing message.
+  // o: { expiresAt, maxOpens (0 = anyone with the link; v1 callers pass oneTime), text }
   function checkOptions(o) {
-    if (!o.expiresAt && !o.oneTime) throw new Error('Pick a time limit, or make it one-time — otherwise the link never self-destructs');
+    var cap = o.maxOpens != null ? Number(o.maxOpens) : (o.oneTime ? 1 : 0);
+    if (!(cap >= 0) || cap !== Math.floor(cap) || cap > MAX_VIEWERS) throw new Error('Pick how many people can open it (1 to ' + MAX_VIEWERS + ')');
+    if (!o.expiresAt && !cap) throw new Error('Pick a time limit, or limit who can open it — otherwise the link never self-destructs');
     if (typeof o.text !== 'string') throw new Error('Nothing to share');
     if (o.text.length > MAX_TEXT) throw new Error('This note is too long for a link (' + Math.round(MAX_TEXT / 1000) + ' k characters max)');
     return true;
+  }
+  // "Who can open it": 'one' | 'some' (+ n) | 'any' → maxOpens, or throws.
+  function capFrom(choice, n) {
+    if (choice === 'any') return 0;
+    if (choice === 'one') return 1;
+    var k = Number(n);
+    if (!(k >= 1) || k !== Math.floor(k)) throw new Error('Enter how many people can open it');
+    if (k > MAX_VIEWERS) throw new Error('At most ' + MAX_VIEWERS + ' people — or pick “Anyone with the link”');
+    return k;
   }
   function isExpired(meta, now) { return !!(meta && meta.expiresAt && now >= meta.expiresAt); }
   function msLeft(meta, now) { return meta && meta.expiresAt ? Math.max(0, meta.expiresAt - now) : Infinity; }
@@ -169,14 +188,64 @@
     return (h ? h + ':' + p(m) : String(m)) + ':' + p(ss);
   }
 
-  // ---- claim (one-time links) -----------------------------------------------------------------------
-  // The transaction's update function: claim an unclaimed link; leave any
-  // existing claim alone (undefined aborts — the result tells whether it's ours).
+  // ---- clocks ------------------------------------------------------------------------------------------
+  // Every time here is server time. A device only knows its own clock, so the
+  // owner measures the difference with one server-stamped write: the server
+  // stamped `serverTs` somewhere between the device times l0 (before the write)
+  // and l1 (once read back). → server − device (ms), or null.
+  function clockOffset(serverTs, l0, l1) {
+    if (!(serverTs > 0) || !(l0 > 0) || !(l1 >= l0)) return null;
+    return Math.round(serverTs - (l0 + l1) / 2);
+  }
+  // A link's whole duration (0 = no timer).
+  function ttlOf(e) {
+    if (!e || !e.expiresAt) return 0;
+    if (e.ttl > 0) return e.ttl;
+    return e.created > 0 ? Math.max(0, e.expiresAt - e.created) : 0;
+  }
+  // Time left on a link as the owner's list shows it. Never more than the
+  // link's whole duration: a device clock (or server-offset estimate) that's
+  // off can't make a 1-minute link read "27 min left".
+  function leftOf(e, now) {
+    if (!e || !e.expiresAt) return Infinity;
+    var left = Math.max(0, e.expiresAt - now), ttl = ttlOf(e);
+    return ttl > 0 ? Math.min(left, ttl) : left;
+  }
+
+  // ---- who may open it ---------------------------------------------------------------------------------
+  function count(o) { var n = 0; if (o && typeof o === 'object') for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) n++; return n; }
+  // How many browsers may open it (0 = anyone with the link). v1 metas only had oneTime.
+  function capOf(meta) {
+    if (!meta) return 0;
+    if (meta.maxOpens != null) { var n = Math.floor(Number(meta.maxOpens)); return n > 0 ? n : 0; }
+    return meta.oneTime ? 1 : 0;
+  }
+  // A v1 one-time link: a single `claim` node rather than `claims`.
+  function isV1Claim(meta) { return !!meta && meta.maxOpens == null && !!meta.oneTime; }
+
+  // v1 one-time links — the transaction's update function: claim an unclaimed
+  // link; leave any existing claim alone (undefined aborts — the result tells
+  // whether it's ours).
   function claimUpdate(cur, me, now) {
     if (cur == null) return { by: me, at: now };
     return undefined;
   }
   function claimIsMine(val, me) { return !!(val && val.by && val.by === me); }
+
+  // Capped links: `claims` is { <viewer>: at }, one slot per browser. Take a
+  // slot when this browser has none and one is free; anything else aborts
+  // (undefined) and the committed snapshot tells whether we hold one. Firebase
+  // may first call this with a stale null; the server then reruns it.
+  function claimsUpdate(cur, me, now, cap) {
+    var c = cur && typeof cur === 'object' ? cur : {};
+    if (c[me]) return undefined;
+    if (count(c) >= cap) return undefined;
+    var out = {};
+    for (var k in c) if (Object.prototype.hasOwnProperty.call(c, k)) out[k] = c[k];
+    out[me] = now;
+    return out;
+  }
+  function holdsSlot(claims, me) { return !!(me && claims && typeof claims === 'object' && claims[me]); }
 
   // What a recipient may do with a link, from the node's plain parts.
   // → { ok: true, needClaim } or { ok: false, why: 'opened'|'expired'|'revoked'|'gone'|'claimed' }
@@ -184,20 +253,47 @@
     if (node.tomb) return { ok: false, why: node.tomb.why || 'gone' };
     if (!node.meta) return { ok: false, why: 'gone' };
     if (isExpired(node.meta, now)) return { ok: false, why: 'expired' };
-    if (!node.meta.oneTime) return { ok: true, needClaim: false };
-    if (node.claim) {
-      if (node.meta.editable && claimIsMine(node.claim, me)) return { ok: true, needClaim: false };
-      return { ok: false, why: node.meta.editable ? 'claimed' : 'opened' };
+    var cap = capOf(node.meta), ed = !!node.meta.editable;
+    if (!cap) return { ok: true, needClaim: false };
+    if (isV1Claim(node.meta)) {
+      if (node.claim) {
+        if (ed && claimIsMine(node.claim, me)) return { ok: true, needClaim: false };
+        return { ok: false, why: ed ? 'claimed' : 'opened' };
+      }
+      return { ok: true, needClaim: true };
     }
+    if (holdsSlot(node.claims, me)) return { ok: true, needClaim: false };     // this browser again
+    if (count(node.claims) >= cap) return { ok: false, why: ed ? 'claimed' : 'opened' };
     return { ok: true, needClaim: true };
+  }
+  // A read-only capped link is deleted from the server once its last slot's
+  // opener has read it (a v1 one-time link: by its only opener).
+  function burnsAfterRead(meta, claims) {
+    if (!meta || meta.editable) return false;
+    var cap = capOf(meta);
+    if (!cap) return false;
+    return isV1Claim(meta) || count(claims) >= cap;
   }
 
   // ---- owner side: status + sweep -------------------------------------------------------------------
-  function count(o) { var n = 0; if (o && typeof o === 'object') for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) n++; return n; }
-  // entry: the owner's record; node: { meta, claim, tomb, presence } (undefined = not read yet).
-  // → { state: 'waiting'|'opened'|'live'|'viewing'|'expired'|'revoked'|'gone'|'claimed', ended, viewers, left, label }
+  function capOfEntry(e) { return e.maxOpens != null ? (+e.maxOpens > 0 ? Math.floor(+e.maxOpens) : 0) : (e.oneTime ? 1 : 0); }
+  function usedOf(e, node) {
+    if (!node) return 0;
+    if ((e.v || 1) < 2) return node.claim ? 1 : 0;
+    return count(node.claims);
+  }
+  function lastClaimAt(e, node) {
+    if ((e.v || 1) < 2) return (node.claim && node.claim.at) || 0;
+    var t = 0, c = node.claims || {};
+    for (var k in c) if (Object.prototype.hasOwnProperty.call(c, k) && +c[k] > t) t = +c[k];
+    return t;
+  }
+  // "Just one person" / "Up to 3 people" / "Anyone with the link"
+  function capLabel(cap) { return cap === 1 ? 'Just one person' : cap > 1 ? 'Up to ' + cap + ' people' : 'Anyone with the link'; }
+  // entry: the owner's record; node: { meta, claim, claims, tomb, presence } (undefined = not read yet).
+  // → { state: 'waiting'|'opened'|'live'|'viewing'|'expired'|'revoked'|'gone', ended, viewers, used, cap, left, label }
   function statusOf(entry, node, now) {
-    var left = entry.expiresAt ? Math.max(0, entry.expiresAt - now) : Infinity;
+    var left = leftOf(entry, now), cap = capOfEntry(entry);
     var why = entry.ended && entry.ended.why;
     if (!why && node) {
       if (node.tomb) why = node.tomb.why || 'gone';
@@ -205,14 +301,16 @@
     }
     if (!why && entry.expiresAt && now >= entry.expiresAt) why = 'expired';
     if (why) {
-      var L = { opened: 'Opened — deleted', expired: 'Expired', revoked: 'Revoked', gone: 'Gone' };
-      return { state: why, ended: true, viewers: 0, left: 0, label: L[why] || 'Ended' };
+      var L = { opened: cap > 1 ? 'Opened by ' + cap + ' — deleted' : 'Opened — deleted', expired: 'Expired', revoked: 'Revoked', gone: 'Gone' };
+      return { state: why, ended: true, viewers: 0, used: 0, cap: cap, left: 0, label: L[why] || 'Ended' };
     }
-    var viewers = node ? count(node.presence) : 0;
-    if (viewers) return { state: entry.editable ? 'live' : 'viewing', ended: false, viewers: viewers, left: left,
-      label: (entry.editable ? 'Live' : 'Open now') + ' · ' + viewers + ' viewer' + (viewers > 1 ? 's' : '') };
-    if (node && node.claim) return { state: 'opened', ended: false, viewers: 0, left: left, label: entry.editable ? 'Opened — not open now' : 'Opened' };
-    return { state: 'waiting', ended: false, viewers: 0, left: left, label: 'Waiting to be opened' };
+    var viewers = node ? count(node.presence) : 0, used = cap ? usedOf(entry, node) : 0;
+    var of = cap > 1 ? ' · ' + used + ' of ' + cap + ' opened' : '';
+    if (viewers) return { state: entry.editable ? 'live' : 'viewing', ended: false, viewers: viewers, used: used, cap: cap, left: left,
+      label: (entry.editable ? 'Live' : 'Open now') + ' · ' + viewers + ' viewer' + (viewers > 1 ? 's' : '') + of };
+    if (used) return { state: 'opened', ended: false, viewers: 0, used: used, cap: cap, left: left,
+      label: cap > 1 ? 'Opened by ' + used + ' of ' + cap : entry.editable ? 'Opened — not open now' : 'Opened' };
+    return { state: 'waiting', ended: false, viewers: 0, used: 0, cap: cap, left: left, label: 'Waiting to be opened' };
   }
 
   // What the owner's sweep does with one share. → { act, why? }
@@ -226,9 +324,10 @@
     if (node.tomb) return { act: 'end', why: node.tomb.why || 'gone' };
     if (node.meta === null) return { act: 'end', why: 'gone' };
     if (entry.expiresAt && now >= entry.expiresAt) return { act: 'tomb', why: 'expired' };
-    // A one-time read-only link whose viewer claimed it but never got to
-    // delete the text (closed mid-way): finish the job after a grace minute.
-    if (entry.oneTime && !entry.editable && node.claim && now - (node.claim.at || 0) > MIN) return { act: 'tomb', why: 'opened' };
+    // A read-only capped link whose last slot was taken but whose opener never
+    // got to delete the text (closed mid-way): finish the job after a grace minute.
+    var cap = capOfEntry(entry);
+    if (cap && !entry.editable && usedOf(entry, node) >= cap && now - lastClaimAt(entry, node) > MIN) return { act: 'tomb', why: 'opened' };
     return { act: 'keep' };
   }
   // When the owner's device should next look (ms from now), or -1 for never.
@@ -249,15 +348,128 @@
     list.forEach(function (e) {
       if (!e || !validId(e.id) || !validKey(e.key) || !validDb(e.db) || seen[e.id]) return;
       seen[e.id] = 1;
-      out.shares.push({
+      var x = {
         id: e.id, key: e.key, db: e.db, room: String(e.room || ''), title: String(e.title || e.room || ''),
         created: +e.created || 0, expiresAt: +e.expiresAt || 0, oneTime: !!e.oneTime, editable: !!e.editable, copy: !!e.copy,
         ended: e.ended && e.ended.why ? { why: String(e.ended.why), at: +e.ended.at || 0 } : null
-      });
+      };
+      if (e.v === 2) { x.v = 2; x.maxOpens = capOfEntry(e); }
+      if (+e.ttl > 0) x.ttl = +e.ttl;
+      out.shares.push(x);
     });
     return out;
   }
   function hasActive(d) { return normBlob(d).shares.some(function (e) { return !e.ended; }); }
+
+  // ---- the sealed head: what the reader is told about the note ------------------------------------------
+  function cleanName(s) { return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f\s]+/g, ' ').trim().slice(0, MAX_NAME); }
+  // One emoji or a short symbol (at most two characters as people count them).
+  function cleanIcon(s) {
+    s = String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f]/g, '').trim();
+    if (!s) return '';
+    var parts;
+    try { parts = Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(s), function (x) { return x.segment; }); }
+    catch (e) { parts = Array.from(s); }
+    return parts.slice(0, 2).join('').slice(0, 16);
+  }
+  // Script ids → the allow-listed ones, once each, in menu order.
+  function cleanScripts(list) {
+    var want = {};
+    (Array.isArray(list) ? list : []).forEach(function (id) { want[String(id)] = 1; });
+    return SCRIPTS.filter(function (s) { return want[s.id]; }).map(function (s) { return s.id; });
+  }
+  // What the owner seals. o: { title, copy, icon, timer, editable, scripts }
+  function makeHead(o) {
+    return { title: cleanName(o.title) || 'Shared note', copy: !!o.copy, icon: cleanIcon(o.icon), timer: o.timer !== false,
+      scripts: o.editable ? cleanScripts(o.scripts) : [] };
+  }
+  // A head as read; v1 links sealed only { title, copy }.
+  function readHead(h) {
+    h = h && typeof h === 'object' ? h : {};
+    return { title: cleanName(h.title), copy: !!h.copy, icon: cleanIcon(h.icon), timer: h.timer !== false, scripts: cleanScripts(h.scripts) };
+  }
+
+  // ---- tidy-up tools for the reader -----------------------------------------------------------------------
+  // The app's own text scripts (txt/scripts/<pack>/), but only an allow-list of
+  // pure text transforms: no prompts, no network, no files, no app UI.
+  // burn.test.js checks each one still exists in its pack and stays pure.
+  var SCRIPTS = [
+    { id: 'sort', pack: 'pack-lines', script: 'Sort List', group: 'Lines', label: 'Sort lines A → Z', hint: 'Puts the lines in alphabetical order (2 comes before 10).' },
+    { id: 'dedupe', pack: 'pack-lines', script: 'Unique Lines', group: 'Lines', label: 'Remove duplicate lines', hint: 'Keeps the first copy of every line.' },
+    { id: 'blank', pack: 'pack-lines', script: 'Delete Blank Lines', group: 'Lines', label: 'Remove empty lines', hint: 'Deletes lines that are blank.' },
+    { id: 'reverse', pack: 'pack-lines', script: 'Reverse List', group: 'Lines', label: 'Reverse the order', hint: 'Last line first, first line last.' },
+    { id: 'number', pack: 'pack-lines', script: 'Number Lines', group: 'Lines', label: 'Number the lines', hint: 'Adds 1. 2. 3. in front of each line.' },
+    { id: 'bullets', pack: 'pack-lines', script: 'Bullet List', group: 'Lines', label: 'Bullet points on / off', hint: 'Adds “- ” in front of each line, or takes it away.' },
+    { id: 'checklist', pack: 'pack-tools', script: 'Convert Todo', group: 'Lines', label: 'Turn into a checklist', hint: 'Puts [ ] boxes in front of the lines (again: back to bullets).' },
+    { id: 'join', pack: 'pack-lines', script: 'Flatten', group: 'Lines', label: 'Join into one line', hint: 'Puts all the lines together, separated by spaces.' },
+    { id: 'tidy', pack: 'pack-tools', script: 'Trim / Clean', group: 'Clean up', label: 'Tidy spaces and gaps', hint: 'Trims spaces at the ends of lines and squeezes runs of blank lines.' },
+    { id: 'quotes', pack: 'pack-clean', script: 'Straighten Quotes', group: 'Clean up', label: 'Plain quotes and dashes', hint: 'Turns “curly” quotes, long dashes and … into plain keyboard ones.' },
+    { id: 'renumber', pack: 'pack-clean', script: 'Renumber Lists', group: 'Clean up', label: 'Fix list numbering', hint: 'Makes numbered lists count 1, 2, 3 again.' },
+    { id: 'upper', pack: 'pack-case', script: 'Upper Case', group: 'Capitals', label: 'ALL CAPITALS', hint: 'Every letter as a capital.' },
+    { id: 'lower', pack: 'pack-case', script: 'Lower Case', group: 'Capitals', label: 'all small letters', hint: 'No capitals at all.' },
+    { id: 'title', pack: 'pack-case', script: 'Title Case', group: 'Capitals', label: 'Title Case', hint: 'A Capital At The Start Of Each Word (not “a”, “the”, “of”…).' },
+    { id: 'sentence', pack: 'pack-clean', script: 'Sentence case', group: 'Capitals', label: 'Sentence case', hint: 'Small letters, with a capital at the start of each sentence.' },
+    { id: 'json', pack: 'pack-data', script: 'JSON Format', group: 'Formats', label: 'Format JSON neatly', hint: 'Indents JSON data so it’s easy to read.' },
+    { id: 'table', pack: 'pack-data', script: 'Format Table', group: 'Formats', label: 'Line up a table', hint: 'Aligns the columns of a | pipe | table.' },
+    { id: 'csv', pack: 'pack-clean', script: 'CSV → Markdown Table', group: 'Formats', label: 'Commas → table', hint: 'Turns comma-separated lines into a | pipe | table.' }
+  ];
+  function scriptById(id) { for (var i = 0; i < SCRIPTS.length; i++) if (SCRIPTS[i].id === id) return SCRIPTS[i]; return null; }
+  function packsFor(ids) {
+    var seen = {}, out = [];
+    cleanScripts(ids).forEach(function (id) { var p = scriptById(id).pack; if (!seen[p]) { seen[p] = 1; out.push(p); } });
+    return out;
+  }
+  // A pack file's source → { <script name>: code }. The file runs against a
+  // stand-in `window` whose only Cade method is registerScript, so loading a
+  // pack this way registers nothing in the app and touches nothing else.
+  function splitScript(s) {
+    s = String(s);
+    var m = s.match(/\/\*\*\s*([\s\S]*?)\s*\*\*\//);
+    if (!m) return null;
+    try { var meta = JSON.parse(m[1]); return meta && meta.name ? { name: String(meta.name), code: s.slice(m.index + m[0].length).trim() } : null; } catch (e) { return null; }
+  }
+  function parsePack(src) {
+    var out = {};
+    var stub = { Cade: { registerScript: function (s) { var p = splitScript(s); if (p) out[p.name] = p.code; }, asset: function (x) { return x; }, baseURL: function () { return ''; }, loadCSS: function () {} } };
+    new Function('window', String(src))(stub);
+    return out;
+  }
+  // Inside a script these (and `this`) are undefined, so one that reaches for
+  // the page, the network, storage or a dialog fails instead of acting. Not a
+  // security boundary — the tools are the app's own allow-listed code — just a
+  // guard against a tool that needs app UI.
+  var SHADOW = ['window', 'document', 'self', 'globalThis', 'top', 'parent', 'frames', 'prompt', 'confirm', 'alert', 'fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource',
+    'navigator', 'location', 'localStorage', 'sessionStorage', 'indexedDB', 'caches', 'Worker', 'importScripts', 'Cade', 'editor', 'firebase'];
+  // The smallest replacement turning a into b. → { from, to, insert }
+  function minimalEdit(a, b) {
+    var n = Math.min(a.length, b.length), p = 0, s = 0;
+    while (p < n && a.charCodeAt(p) === b.charCodeAt(p)) p++;
+    while (s < n - p && a.charCodeAt(a.length - 1 - s) === b.charCodeAt(b.length - 1 - s)) s++;
+    return { from: p, to: a.length - s, insert: b.slice(p, b.length - s) };
+  }
+  // Runs a script's source on `text` the way the editor runs it: on the
+  // selection [from, to) when there is one, else on the whole text.
+  // → { from, to, insert, messages } — insert null when nothing changed;
+  // throws on a script error (or an async script, which can't run here).
+  function runScript(code, text, from, to) {
+    text = String(text == null ? '' : text);
+    from = Math.max(0, Math.min(text.length, from | 0)); to = Math.max(from, Math.min(text.length, to | 0));
+    var hasSel = from < to, full = text, edit = hasSel ? text.slice(from, to) : '', fullCh = false, editCh = false, messages = [];
+    var ctx = {
+      get fullText() { return full; },
+      set fullText(v) { full = String(v); fullCh = true; },
+      get selection() { return hasSel ? edit : ''; },
+      set selection(v) { if (hasSel) { edit = String(v); editCh = true; } else { full = String(v); fullCh = true; } },
+      get text() { return hasSel ? edit : full; }
+    };
+    var toast = function (m, kind) { messages.push({ text: String(m), kind: kind || 'info' }); };
+    var fn = new Function(['ctx', 'showToast'].concat(SHADOW).join(','), String(code) + '\n;return main.call(this, ctx);');
+    var r = fn.call({}, ctx, toast);
+    if (r && typeof r.then === 'function') throw new Error('This tool can’t run here');
+    if (hasSel && editCh) return edit === text.slice(from, to) ? { from: from, to: to, insert: null, messages: messages } : { from: from, to: to, insert: edit, messages: messages };
+    if (fullCh && full !== text) { var d = minimalEdit(text, full); d.messages = messages; return d; }
+    return { from: from, to: to, insert: null, messages: messages };
+  }
 
   // ---- merging concurrent edits -------------------------------------------------------------------------
   // Words / spaces / single other characters; newlines are tokens too.
@@ -316,8 +528,12 @@
     validId: validId, validKey: validKey, validDb: validDb, nodePath: nodePath,
     encodeLink: encodeLink, decodeLink: decodeLink, seal: seal, open: open,
     expiryFrom: expiryFrom, checkOptions: checkOptions, isExpired: isExpired, msLeft: msLeft, fmtLeft: fmtLeft, fmtClock: fmtClock,
-    claimUpdate: claimUpdate, claimIsMine: claimIsMine, gate: gate,
+    capFrom: capFrom, clockOffset: clockOffset, ttlOf: ttlOf, leftOf: leftOf, MAX_VIEWERS: MAX_VIEWERS, MAX_NAME: MAX_NAME,
+    capOf: capOf, isV1Claim: isV1Claim, claimUpdate: claimUpdate, claimIsMine: claimIsMine, claimsUpdate: claimsUpdate, holdsSlot: holdsSlot,
+    gate: gate, burnsAfterRead: burnsAfterRead, capOfEntry: capOfEntry, capLabel: capLabel, count: count,
     statusOf: statusOf, sweepAction: sweepAction, nextSweepIn: nextSweepIn, normBlob: normBlob, hasActive: hasActive,
+    cleanName: cleanName, cleanIcon: cleanIcon, cleanScripts: cleanScripts, makeHead: makeHead, readHead: readHead,
+    SCRIPTS: SCRIPTS, scriptById: scriptById, packsFor: packsFor, parsePack: parsePack, runScript: runScript, minimalEdit: minimalEdit,
     mergeLive: mergeLive, mergeWords: mergeWords, mapPos: mapPos
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

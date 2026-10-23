@@ -25,8 +25,10 @@
 .burn-room b, .burn-nosync b { color: var(--text); }
 .burn-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
 .burn-fl { font-weight: 600; }
-.burn-exp { width: auto; min-width: 150px; min-height: 40px; }
-.burn-custom { display: flex; gap: 8px; justify-content: flex-end; }
+.burn-exp, .burn-who { width: auto; min-width: 150px; min-height: 40px; }
+.burn-custom { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+.burn-unit { font-size: 14px; color: var(--text-muted); }
+.burn-max { width: 90px; min-height: 40px; }
 .burn-custom[hidden] { display: none; }
 .burn-cn { width: 90px; min-height: 40px; }
 .burn-cu { width: auto; min-height: 40px; }
@@ -69,9 +71,9 @@
 .burn-st-waiting .burn-dot { background: var(--warning, #f59e0b); }
 .burn-st-live .burn-dot, .burn-st-viewing .burn-dot { background: var(--success, #16a34a); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success, #16a34a) 25%, transparent); }
 .burn-st-opened .burn-dot { background: var(--accent); }
-.burn-ended { opacity: 0.7; }
-.burn-ended .burn-dot { background: var(--text-faint); box-shadow: none; }
-.burn-ended .burn-li-t b { text-decoration: line-through; text-decoration-color: var(--text-faint); }
+.burn-li.burn-ended { opacity: 0.7; }
+.burn-li.burn-ended .burn-dot { background: var(--text-faint); box-shadow: none; }
+.burn-li.burn-ended .burn-li-t b { text-decoration: line-through; text-decoration-color: var(--text-faint); }
 .burn-li-a { display: flex; gap: 6px; flex: 0 0 auto; }
 .burn-sm { min-height: 40px; padding: 0 12px; font-size: 13px; }
 .burn-armed { color: var(--error, #dc2626); border-color: var(--error, #dc2626); }
@@ -83,20 +85,21 @@
   .burn-li { flex-wrap: wrap; }
   .burn-li-a { width: 100%; }
   .burn-li-a .btn { flex: 1 1 0; }
-  .burn-exp { min-width: 0; font-size: 16px; }
-  .burn-cn, .burn-cu { font-size: 16px; }
+  .burn-exp, .burn-who { min-width: 0; max-width: 58%; font-size: 16px; }
+  .burn-cn, .burn-cu, .burn-max, .burn-name, .burn-ico-own { font-size: 16px; }
 }
 
 /* ---- recipient view ------------------------------------------------------------------------ */
 .burn-rv {
-  position: fixed; inset: 0; z-index: 7060; display: flex; flex-direction: column;
+  position: fixed; inset: 0; z-index: 7060; display: flex; flex-direction: column; opacity: 1; isolation: isolate;
   background: var(--bg, var(--surface)); color: var(--text); font-family: var(--font-body, inherit);
   height: 100vh; height: 100dvh;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
 }
-.burn-rv-top { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface); flex: 0 0 auto; flex-wrap: wrap; }
+.burn-rv-top { position: relative; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 16px; min-height: 56px; box-sizing: border-box; border-bottom: 1px solid var(--border); background: var(--surface); flex: 0 0 auto; flex-wrap: wrap; }
 .burn-rv-brand { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
-.burn-rv-ic { font-size: 18px; }
+.burn-rv-ic { font-size: 20px; line-height: 1; flex: 0 0 auto; }
+.burn-rv-ic[hidden] { display: none; }
 .burn-rv-title { font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .burn-rv-chips { display: flex; gap: 6px; align-items: center; order: 3; flex: 1 0 100%; }
 .burn-rv-chips:not(:has(.burn-chip:not([hidden]))) { display: none; }
@@ -137,3 +140,83 @@
 .burn-end .burn-end-wiped { font-size: 12.5px; color: var(--text-faint); }
 .burn-end-acts { display: flex; gap: 8px; margin-top: 10px; }
 .burn-end-acts .btn { min-height: 44px; min-width: 120px; }
+
+/* ---- owner dialog: more options ------------------------------------------------------------------ */
+.burn-fieldset { display: flex; flex-direction: column; gap: 8px; }
+.burn-hint { margin: 0; font-size: 12px; line-height: 1.4; color: var(--text-faint); }
+.burn-hint:empty { display: none; }
+.burn-hint[hidden] { display: none; }
+.burn-hint b { color: var(--text-muted); }
+.burn-more { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.burn-more > summary, .burn-tools > summary {
+  list-style: none; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 14px; cursor: pointer;
+  font-size: 14px; font-weight: 600; -webkit-user-select: none; user-select: none;
+}
+.burn-more > summary::-webkit-details-marker, .burn-tools > summary::-webkit-details-marker { display: none; }
+.burn-more > summary::before, .burn-tools > summary::before {
+  content: ''; width: 7px; height: 7px; border-right: 2px solid var(--text-muted); border-bottom: 2px solid var(--text-muted);
+  transform: rotate(-45deg); transition: transform 0.15s; flex: 0 0 auto; margin-right: 2px;
+}
+.burn-more[open] > summary::before, .burn-tools[open] > summary::before { transform: rotate(45deg); }
+.burn-more-s, .burn-tools-n { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.burn-more-b { display: flex; flex-direction: column; gap: 14px; padding: 4px 14px 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.burn-stack { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.burn-name { min-height: 42px; }
+.burn-icons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.burn-ico {
+  min-width: 42px; height: 42px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--text); font-size: 20px; line-height: 1; cursor: pointer; font-family: inherit;
+}
+.burn-ico-none { font-size: 13px; font-weight: 600; color: var(--text-muted); padding: 0 12px; }
+.burn-ico[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--text); }
+.burn-ico:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.burn-ico-own { width: 84px; min-height: 42px; text-align: center; font-size: 15px; }
+.burn-ico-own.burn-ico-on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.burn-tog[hidden] { display: none; }
+.burn-tools { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.burn-tools > summary { padding: 0 12px; }
+.burn-tools > :not(summary) { margin: 0 12px; }
+.burn-tools-off { padding-bottom: 12px; }
+.burn-tools-on { display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; }
+.burn-tools-on[hidden] { display: none; }
+.burn-tools-on > .burn-hint { margin-bottom: 6px; }
+.burn-tools-g { margin: 8px 0 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); }
+.burn-chk { display: flex; align-items: flex-start; gap: 10px; min-height: 40px; padding: 6px 2px; cursor: pointer; }
+.burn-chk input { width: 20px; height: 20px; margin: 1px 0 0; flex: 0 0 auto; accent-color: var(--accent); }
+.burn-chk-t { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.burn-chk-l { font-size: 14px; font-weight: 600; }
+.burn-chk-h { font-size: 12px; line-height: 1.35; color: var(--text-faint); }
+
+/* ---- recipient: tidy-up menu ---------------------------------------------------------------------- */
+.burn-tidy-w { flex: 0 0 auto; order: 2; }
+.burn-tidy-w[hidden] { display: none; }
+.burn-tidy { min-height: 40px; padding: 0 14px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.burn-tidy span { font-size: 11px; margin-left: 2px; opacity: 0.7; }
+.burn-tidy[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.burn-menu {
+  position: absolute; top: calc(100% - 4px); right: 8px; width: min(360px, calc(100vw - 16px)); max-height: min(70vh, 540px);
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; box-sizing: border-box;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-lg);
+  padding: 6px; display: flex; flex-direction: column; animation: burn-pop 0.14s ease-out;
+}
+.burn-menu[hidden] { display: none; }
+@keyframes burn-pop { from { opacity: 0; transform: translateY(-4px); } }
+.burn-menu-h { padding: 8px 10px 6px; font-size: 12.5px; line-height: 1.4; color: var(--text-muted); }
+.burn-menu-g { padding: 10px 10px 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); }
+.burn-mi {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; min-height: 44px; padding: 8px 10px; box-sizing: border-box;
+  border: 0; border-radius: 10px; background: none; color: var(--text); text-align: left; cursor: pointer; font: inherit;
+}
+.burn-mi:hover, .burn-mi:focus-visible { background: var(--surface-2); outline: none; }
+.burn-mi-l { font-size: 15px; font-weight: 600; }
+.burn-mi-h { font-size: 12.5px; line-height: 1.35; color: var(--text-faint); }
+.burn-rv-main { position: relative; }
+.burn-done {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
+  max-width: calc(100% - 32px); box-sizing: border-box; padding: 6px 6px 6px 14px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg); font-size: 14px; font-weight: 600; color: var(--text);
+  animation: burn-pop 0.14s ease-out;
+}
+.burn-done[hidden] { display: none; }
+.burn-done span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.burn-rv-over .burn-rv-main { background: var(--bg, var(--surface)); }
