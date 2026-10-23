@@ -1697,9 +1697,9 @@
       "id": "ai",
       "type": "widget",
       "name": "AI",
-      "description": "Your own AI — local models (Ollama, LM Studio…) or cloud APIs with your keys (OpenAI, Anthropic, Gemini, OpenRouter…) — with your note as context: summarise, rewrite, continue, explain code, checklists, translate. Use it from your phone too: it asks your computer, end-to-end encrypted through Sync",
+      "description": "Your own AI — local models (Ollama, LM Studio, Unsloth Studio…) or cloud APIs with your keys (OpenAI, Anthropic, Gemini, OpenRouter…) — with your note as context: summarise, rewrite, continue, explain code, checklists, translate. Use it from your phone too: it asks your computer, end-to-end encrypted through Sync",
       "icon": "✨",
-      "tags": "ai,assistant,chat,llm,local llm,local ai,private ai,ollama,lm studio,llama,llama.cpp,mistral,gemma,qwen,deepseek,phi,openai,openai compatible,gpt,chatgpt,anthropic,claude,gemini,openrouter,groq,grok,together,summarise,summarize,rewrite,continue writing,explain code,checklist,translate,ask,prompt,model",
+      "tags": "ai,assistant,chat,llm,local llm,local ai,private ai,ollama,lm studio,unsloth,unsloth studio,llama,llama.cpp,mistral,gemma,qwen,deepseek,phi,openai,openai compatible,gpt,chatgpt,anthropic,claude,gemini,openrouter,groq,grok,together,summarise,summarize,rewrite,continue writing,explain code,checklist,translate,ask,prompt,model",
       "entry": "widgets/ai/ai.js",
       "css": "widgets/ai/ai.css",
       "precache": [
