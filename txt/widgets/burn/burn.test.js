@@ -1,5 +1,6 @@
 /* Checks for self-destructing links: the link format, the AES-GCM round trip,
- * expiry and the one-time claim, the owner's status / sweep decisions, the
+ * expiry, the one-time claim and viewer caps, the owner's time left, the
+ * sealed options, the tidy-up tools (allow-list + sandboxed runner), the owner's status / sweep decisions, the
  * live merge of concurrent edits (including a simulated compare-and-swap
  * session between two writers), and that the widget's metadata matches its
  * manifest entry. Not loaded by the app. Run: node txt/widgets/burn/burn.test.js */
@@ -240,6 +241,228 @@ test('two writers with compare-and-swap pushes converge and keep every edit', fu
   assert.strictEqual(A.local, B.local);
   assert.strictEqual(A.local, server.text);
   ['line ONE', 'line 3', 'A added', 'B added', 'two (a)', 'b: line two'].forEach(function (s) { assert(server.text.indexOf(s) >= 0, s + ' in ' + JSON.stringify(server.text)); });
+});
+
+// ---- viewer caps ------------------------------------------------------------------------------------------
+// A fake server running a transaction's update function the way Firebase does:
+// the client's first guess may be stale (e.g. null — not cached); the server
+// reruns it with the real value when the guess was wrong.
+function fakeServer(init) {
+  var srv = { val: init === undefined ? null : init };
+  srv.transact = function (fn, guess) {
+    var cur = guess, v;
+    for (var i = 0; i < 10; i++) {
+      v = fn(cur == null ? null : JSON.parse(JSON.stringify(cur)));
+      if (v === undefined) return { committed: false, val: srv.val };
+      if (JSON.stringify(cur) === JSON.stringify(srv.val)) { srv.val = v; return { committed: true, val: srv.val }; }
+      cur = srv.val;
+    }
+    throw new Error('loop');
+  };
+  return srv;
+}
+test('capFrom / checkOptions: once, up to N, anyone', function () {
+  assert.strictEqual(C.capFrom('one'), 1);
+  assert.strictEqual(C.capFrom('any'), 0);
+  assert.strictEqual(C.capFrom('some', '3'), 3);
+  assert.strictEqual(C.capFrom('some', 1), 1);
+  assert.throws(function () { C.capFrom('some', ''); }, /how many/);
+  assert.throws(function () { C.capFrom('some', 2.5); }, /how many/);
+  assert.throws(function () { C.capFrom('some', C.MAX_VIEWERS + 1); }, /At most/);
+  assert(C.checkOptions({ expiresAt: 0, maxOpens: 3, text: 'x' }));
+  assert(C.checkOptions({ expiresAt: 60000, maxOpens: 0, text: 'x' }));
+  assert.throws(function () { C.checkOptions({ expiresAt: 0, maxOpens: 0, text: 'x' }); }, /never self-destructs/);
+  assert.throws(function () { C.checkOptions({ expiresAt: 5, maxOpens: 99, text: 'x' }); }, /how many/);
+});
+test('claims: up to N browsers, one slot each; racers never exceed the cap', function () {
+  var srv = fakeServer(null), cap = 2;
+  var claim = function (me, guess) { var r = srv.transact(function (cur) { return C.claimsUpdate(cur, me, 1, cap); }, guess); return C.holdsSlot(r.val, me); };
+  // three browsers race with stale (null) guesses: exactly two get in
+  var got = ['a', 'b', 'c'].map(function (me) { return claim(me, null); });
+  assert.deepStrictEqual(got, [true, true, false]);
+  assert.strictEqual(C.count(srv.val), 2);
+  // a reopen in a browser that holds a slot doesn't use another one
+  assert.strictEqual(claim('a', null), true);
+  assert.strictEqual(C.count(srv.val), 2);
+  assert.strictEqual(C.claimsUpdate({ a: 1 }, 'a', 2, 2), undefined, 'already mine: abort, keep the slot');
+  assert.strictEqual(C.claimsUpdate({ a: 1, b: 1 }, 'c', 2, 2), undefined, 'full: abort');
+  assert.deepStrictEqual(C.claimsUpdate(null, 'z', 7, 1), { z: 7 });
+  // many racers on a single slot: one winner
+  var one = fakeServer(null), winners = 0;
+  for (var i = 0; i < 20; i++) { var r = one.transact(function (cur) { return C.claimsUpdate(cur, 'p' + i, 1, 1); }, null); if (C.holdsSlot(r.val, 'p' + i)) winners++; }
+  assert.strictEqual(winners, 1);
+});
+test('gate: capped links, same-browser reopen, v1 one-time links unchanged', function () {
+  var now = 5000;
+  var m2 = function (o) { return Object.assign({ v: 2, created: 0, expiresAt: 0, maxOpens: 3, oneTime: false, editable: false }, o); };
+  assert.deepStrictEqual(C.gate({ meta: m2({}), claims: null }, now, 'me'), { ok: true, needClaim: true });
+  assert.deepStrictEqual(C.gate({ meta: m2({}), claims: { x: 1, y: 1 } }, now, 'me'), { ok: true, needClaim: true });
+  assert.deepStrictEqual(C.gate({ meta: m2({}), claims: { x: 1, y: 1, z: 1 } }, now, 'me'), { ok: false, why: 'opened' });
+  assert.deepStrictEqual(C.gate({ meta: m2({ editable: true }), claims: { x: 1, y: 1, z: 1 } }, now, 'me'), { ok: false, why: 'claimed' });
+  assert.deepStrictEqual(C.gate({ meta: m2({}), claims: { x: 1, me: 1, z: 1 } }, now, 'me'), { ok: true, needClaim: false }, 'same browser, no new slot');
+  assert.deepStrictEqual(C.gate({ meta: m2({ maxOpens: 0, expiresAt: 9000 }), claims: null }, now, 'me'), { ok: true, needClaim: false }, 'anyone');
+  assert.deepStrictEqual(C.gate({ meta: m2({ maxOpens: 0, expiresAt: 5000 }) }, now, 'me'), { ok: false, why: 'expired' });
+  // v2 one-person link with oneTime kept for older code: still the claims path
+  assert.strictEqual(C.isV1Claim(m2({ maxOpens: 1, oneTime: true })), false);
+  assert.deepStrictEqual(C.gate({ meta: m2({ maxOpens: 1, oneTime: true }), claim: { by: 'old' }, claims: null }, now, 'me'), { ok: true, needClaim: true });
+  // links made before caps existed (meta { v: 1, oneTime }) keep the single-claim path
+  var v1 = { v: 1, created: 0, expiresAt: 0, oneTime: true, editable: false };
+  assert.strictEqual(C.capOf(v1), 1); assert(C.isV1Claim(v1));
+  assert.deepStrictEqual(C.gate({ meta: v1, claim: null, claims: { a: 1 } }, now, 'me'), { ok: true, needClaim: true }, 'v1 ignores claims');
+  assert.deepStrictEqual(C.gate({ meta: v1, claim: { by: 'x' } }, now, 'me'), { ok: false, why: 'opened' });
+  assert.strictEqual(C.capOf({ v: 1, oneTime: false }), 0);
+  // read-only: deleted once the last slot's opener has read it
+  assert.strictEqual(C.burnsAfterRead(m2({}), { a: 1, b: 1 }), false);
+  assert.strictEqual(C.burnsAfterRead(m2({}), { a: 1, b: 1, c: 1 }), true);
+  assert.strictEqual(C.burnsAfterRead(m2({ maxOpens: 1 }), { a: 1 }), true);
+  assert.strictEqual(C.burnsAfterRead(m2({ editable: true, maxOpens: 1 }), { a: 1 }), false);
+  assert.strictEqual(C.burnsAfterRead(m2({ maxOpens: 0 }), null), false);
+  assert.strictEqual(C.burnsAfterRead(v1, null), true);
+});
+test('owner status and sweep for capped links; v1 entries unchanged', function () {
+  var e = entry({ v: 2, maxOpens: 3, oneTime: false, expiresAt: 600000 });
+  assert.strictEqual(C.normBlob({ shares: [e] }).shares[0].maxOpens, 3);
+  assert.strictEqual(C.statusOf(e, { meta: {}, claims: { a: 1 } }, 0).label, 'Opened by 1 of 3');
+  assert.strictEqual(C.statusOf(e, { meta: {}, claims: { a: 1, b: 2 }, presence: { a: {} } }, 0).label, 'Open now · 1 viewer · 2 of 3 opened');
+  assert.strictEqual(C.statusOf(e, { meta: {}, claims: null }, 0).label, 'Waiting to be opened');
+  assert.strictEqual(C.statusOf(e, { meta: {}, tomb: { why: 'opened' } }, 0).label, 'Opened by 3 — deleted');
+  assert.strictEqual(C.statusOf(entry({ v: 2, maxOpens: 0, oneTime: false }), { meta: {}, claims: { a: 1 } }, 0).state, 'waiting', 'anyone: no slots');
+  // read-only, full, the last opener never deleted it: finish after a minute
+  var ro = entry({ v: 2, maxOpens: 2, oneTime: false });
+  assert.deepStrictEqual(C.sweepAction(ro, { meta: {}, claims: { a: 100 } }, 1e6), { act: 'keep' });
+  assert.deepStrictEqual(C.sweepAction(ro, { meta: {}, claims: { a: 100, b: 200 } }, 30000), { act: 'keep' });
+  assert.deepStrictEqual(C.sweepAction(ro, { meta: {}, claims: { a: 100, b: 200 } }, 70000), { act: 'tomb', why: 'opened' });
+  assert.deepStrictEqual(C.sweepAction(entry({ v: 2, maxOpens: 2, editable: true }), { meta: {}, claims: { a: 1, b: 1 } }, 1e9), { act: 'keep' });
+  // a v1 entry (synced from older code) keeps reading `claim`
+  var old = C.normBlob({ shares: [entry({ oneTime: true })] }).shares[0];
+  assert.strictEqual(old.v, undefined); assert.strictEqual(C.capOfEntry(old), 1);
+  assert.strictEqual(C.statusOf(old, { meta: {}, claim: { by: 'x' }, claims: { a: 1, b: 1 } }, 0).label, 'Opened');
+  assert.strictEqual(C.capLabel(1), 'Just one person'); assert.strictEqual(C.capLabel(4), 'Up to 4 people'); assert.strictEqual(C.capLabel(0), 'Anyone with the link');
+});
+
+// ---- the owner's "27 min left" for a 1-minute link ------------------------------------------------------
+test('time left: a 1-minute link never shows more than 1 minute (the 27-min bug)', function () {
+  // The owner's clock was Cade.cloud.serverNow() = device clock + the sync
+  // connection's serverTimeOffset. create() stamped expiresAt BEFORE that
+  // offset was hooked (offset 0 = raw device time); the list then subtracted
+  // the offset-corrected time. With an offset 26 minutes off (a stale
+  // handshake — iOS froze the tab mid-connect — or a device clock off by that
+  // much) the list said "27 min left" while the reader saw ~1 minute.
+  var MIN = 60000, device = 1.7e12, cloudOffset = 0;
+  var serverNow = function () { return device + cloudOffset; };
+  var created = serverNow();                         // offset not hooked yet
+  var e = entry({ created: created, expiresAt: created + MIN });
+  cloudOffset = -26 * MIN;                           // hooked now, and wrong
+  device += 2000;
+  var oldLeft = e.expiresAt - serverNow();           // what statusOf used to compute
+  assert.strictEqual(C.fmtLeft(oldLeft), '27 min', 'reproduces the report');
+  // Fix 1: time left can never exceed the link's whole duration.
+  assert(C.statusOf(e, undefined, serverNow()).left <= MIN);
+  assert.strictEqual(C.fmtLeft(C.statusOf(e, undefined, serverNow()).left), '1 min');
+  // Fix 2: the owner measures its own offset from the server-stamped
+  // meta.created and anchors expiresAt there, so the list counts down in step
+  // with the reader.
+  var trueServer = function (dev) { return dev - 5 * 1000; };   // device clock 5 s fast
+  var l0 = 1.7e12, l1 = l0 + 300, stamped = trueServer(l0 + 120);
+  var off = C.clockOffset(stamped, l0, l1);
+  assert(Math.abs(off - (-5000)) <= 300, 'offset ' + off);
+  var e2 = entry({ created: stamped, ttl: MIN, expiresAt: stamped + MIN });
+  var ownerNow = function (dev) { return dev + off; };
+  var readerNow = function (dev) { return trueServer(dev); };
+  [0, 15000, 45000].forEach(function (dt) {
+    var dev = l1 + dt, a = C.statusOf(e2, undefined, ownerNow(dev)).left, b = C.msLeft(e2, readerNow(dev));
+    assert(Math.abs(a - b) <= 300, 'owner ' + a + ' vs reader ' + b + ' at +' + dt);
+  });
+  assert.strictEqual(C.statusOf(e2, undefined, ownerNow(l1 + MIN + 1000)).state, 'expired');
+  assert.strictEqual(C.clockOffset(0, 1, 2), null);
+  assert.strictEqual(C.clockOffset(5, 3, 2), null);
+  assert.strictEqual(C.ttlOf(entry({ created: 100, expiresAt: 60100 })), 60000);
+  assert.strictEqual(C.ttlOf(entry({ expiresAt: 0 })), 0);
+  assert.strictEqual(C.leftOf(entry({ expiresAt: 0 }), 5), Infinity);
+});
+
+// ---- sealed options -------------------------------------------------------------------------------------
+test('sealed head: name, icon, countdown, tools round trip; nothing in the clear', function () {
+  var k = C.newKey(), id = C.newId();
+  var h = C.makeHead({ title: '  Trip\nplans  ', copy: true, icon: ' 🎉 ', timer: false, editable: true, scripts: ['title', 'sort', 'nope', 'sort', 'fetchAll'] });
+  assert.deepStrictEqual(h, { title: 'Trip plans', copy: true, icon: '🎉', timer: false, scripts: ['sort', 'title'] });
+  return C.seal(k, id, 'head', h).then(function (ct) {
+    ['Trip', '🎉', 'sort', 'title', 'timer'].forEach(function (s) { assert(ct.indexOf(s) < 0, s + ' in the clear'); });
+    return C.open(k, id, 'head', ct);
+  }).then(function (o) {
+    assert.deepStrictEqual(C.readHead(o), h);
+    // read-only links never carry tools; defaults
+    assert.deepStrictEqual(C.makeHead({ title: '', scripts: ['sort'] }), { title: 'Shared note', copy: false, icon: '', timer: true, scripts: [] });
+    // v1 heads ({ title, copy }) read with the defaults: no icon, countdown on, no tools
+    assert.deepStrictEqual(C.readHead({ title: 'plan', copy: false }), { title: 'plan', copy: false, icon: '', timer: true, scripts: [] });
+    assert.deepStrictEqual(C.readHead(null), { title: '', copy: false, icon: '', timer: true, scripts: [] });
+    assert.strictEqual(C.cleanIcon('👨‍👩‍👧 family'), '👨‍👩‍👧 ', 'a grapheme cluster counts as one');
+    assert.strictEqual(C.cleanIcon('★'), '★');
+    assert.strictEqual(C.cleanIcon('abc'), 'ab');
+    assert.strictEqual(C.cleanIcon('\u0007'), '');
+    assert.strictEqual(C.cleanName(new Array(200).join('x')).length, C.MAX_NAME);
+  });
+});
+
+// ---- tidy-up tools ---------------------------------------------------------------------------------------
+var packs = {};
+function packCode(s) {
+  if (!packs[s.pack]) packs[s.pack] = C.parsePack(fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', s.pack, s.pack + '.js'), 'utf8'));
+  return packs[s.pack][s.script];
+}
+function tidy(id, text, from, to) {
+  var s = C.scriptById(id), r = C.runScript(packCode(s), text, from || 0, to || 0);
+  return r.insert == null ? text : text.slice(0, r.from) + r.insert + text.slice(r.to);
+}
+test('tidy-up allow-list: every tool exists in its pack and is a pure text transform', function () {
+  var ids = {};
+  C.SCRIPTS.forEach(function (s) {
+    assert(!ids[s.id], 'dup ' + s.id); ids[s.id] = 1;
+    assert(/^[a-z]+$/.test(s.id) && s.label && s.hint && s.group, s.id);
+    var code = packCode(s);
+    assert(code, s.pack + ' has no "' + s.script + '"');
+    assert(!/async\s+function\s+main/.test(code), s.id + ' is async');
+    ['prompt', 'confirm', 'alert', 'fetch', 'XMLHttpRequest', 'document', 'window', 'navigator', 'localStorage', 'Cade', 'editor', 'Math.random', 'Date'].forEach(function (w) {
+      assert(!new RegExp('\\b' + w.replace('.', '\\.') + '\\b').test(code), s.id + ' uses ' + w);
+    });
+  });
+  assert.deepStrictEqual(C.packsFor(['sort', 'dedupe', 'title', 'zzz']), ['pack-lines', 'pack-case']);
+});
+test('tidy-up tools transform the whole text, or just the selection', function () {
+  assert.strictEqual(tidy('sort', 'pear\napple\nitem 10\nitem 2'), 'apple\nitem 2\nitem 10\npear');
+  assert.strictEqual(tidy('dedupe', 'a\nb\na\nc\nb'), 'a\nb\nc');
+  assert.strictEqual(tidy('blank', 'a\n\n  \nb'), 'a\nb');
+  assert.strictEqual(tidy('title', 'the lord of the rings'), 'The Lord of the Rings');
+  assert.strictEqual(tidy('upper', 'shout'), 'SHOUT');
+  assert.strictEqual(tidy('json', '{"a":1,"b":[1,2]}'), '{\n  "a": 1,\n  "b": [\n    1,\n    2\n  ]\n}');
+  assert.strictEqual(tidy('checklist', 'milk\n- eggs'), '[ ] milk\n[ ] eggs');
+  assert.strictEqual(tidy('quotes', '“hi” — it’s…'), '"hi" - it\'s...');
+  assert.strictEqual(tidy('csv', 'a,b\n1,2'), '| a | b |\n| --- | --- |\n| 1 | 2 |');
+  // only the selection changes
+  var t = 'keep me\nzebra\napple\nkeep too', from = t.indexOf('zebra'), to = t.indexOf('\nkeep too');
+  assert.strictEqual(tidy('sort', t, from, to), 'keep me\napple\nzebra\nkeep too');
+  var r = C.runScript(packCode(C.scriptById('upper')), t, 0, 4);
+  assert.deepStrictEqual([r.from, r.to, r.insert], [0, 4, 'KEEP']);
+  // whole-text changes come back as the smallest edit
+  r = C.runScript(packCode(C.scriptById('dedupe')), 'x\ny\ny', 0, 0);
+  assert.strictEqual('x\ny\ny'.slice(0, r.from) + r.insert + 'x\ny\ny'.slice(r.to), 'x\ny');
+  assert(r.to - r.from < 5);
+  // nothing to change → insert null
+  assert.strictEqual(C.runScript(packCode(C.scriptById('sort')), 'a\nb', 0, 0).insert, null);
+  // invalid JSON throws (the view says so and changes nothing)
+  assert.throws(function () { C.runScript(packCode(C.scriptById('json')), '{oops', 0, 0); }, /Invalid JSON/);
+});
+test('runScript sandbox: no page, network, storage or dialogs; async refused', function () {
+  ['fetch("/x")', 'prompt("?")', 'document.title', 'window.location', 'localStorage.getItem("k")', 'Cade.editor', 'navigator.clipboard', 'globalThis.fetch("/x")', 'this.fetch("/x")'].forEach(function (expr) {
+    assert.throws(function () { C.runScript('function main(ctx) { ctx.fullText = String(' + expr + '); }', 'x', 0, 0); }, TypeError, expr);
+  });
+  assert.throws(function () { C.runScript('async function main(ctx) { ctx.fullText = "y"; }', 'x', 0, 0); }, /can’t run here/);
+  var r = C.runScript('function main(ctx) { showToast("Nothing found", "error"); }', 'x', 0, 0);
+  assert.deepStrictEqual(r.messages, [{ text: 'Nothing found', kind: 'error' }]);
+  assert.strictEqual(r.insert, null);
+  // a pack loaded this way registers nothing anywhere else
+  var seen = C.parsePack('(function(){ if (typeof window.Cade === "undefined") return; window.Cade.registerScript("/**\\n{\\"name\\":\\"X\\"}\\n**/\\nfunction main(ctx){}"); })();');
+  assert.deepStrictEqual(Object.keys(seen), ['X']);
 });
 
 // ---- widget / manifest ------------------------------------------------------------------------------------------

@@ -1,22 +1,25 @@
 /* Self-destructing links — share a note with someone who has no Cade.txt
- * account: a link that works once, or until a timer runs out (or both), read
- * only or live-editable, end-to-end encrypted. burn-core.js holds the pure
+ * account: a link that works for one person, up to N people, or anyone until
+ * a timer runs out, read only or live-editable, end-to-end encrypted. burn-core.js holds the pure
  * logic and the storage layout (see its header); this file is the UI and the
  * Firebase wiring for both sides:
  *
  *  - OWNER (Share → "Self-destructing link…", or Ctrl+K "Self-destructing
- *    links"): a dialog to create a link (expiry, one-time, editing, saving a
- *    copy) and the list of links with their status, time left and Revoke.
+ *    links"): a dialog to create a link — expiry, who can open it, editing
+ *    up top; under "More options" the name and icon the reader sees, the
+ *    countdown, saving a copy and the tidy-up tools (an allow-list of the
+ *    app's own text scripts, run on the reader's text) — and the list of
+ *    links with their status, time left and Revoke.
  *    The list lives in Cade.syncedBlob('burn') — encrypted with the sync key,
  *    so every device of the owner can show and revoke the links, and keep
  *    editable ones live. The core loads this module at boot only while that
  *    blob lists links that haven't ended (ownerBoot): it sweeps them (expired
  *    / opened ones are destructed) and runs the live merge for editable ones.
- *  - RECIPIENT (the core sees #burn= on load and calls openLink): a full-page
- *    screen over the app with its own named Firebase app, so their own sync,
- *    rooms and Firebase connection are never touched and nothing is imported
- *    into their rooms. When the link ends, the text is wiped from the page
- *    and from storage.
+ *  - RECIPIENT (the core sees #burn= on load and calls openLink): a full-page,
+ *    opaque screen over the app with its own named Firebase app, so their own
+ *    sync, rooms and Firebase connection are never touched and nothing is
+ *    imported into their rooms. It has no way out to the app. When the link
+ *    ends, the text is wiped from the page and from storage.
  *
  * Live editing: both sides run a LiveDoc — throttled (~350 ms) encrypted
  * pushes as compare-and-swap transactions on the share's doc, and a three-way
@@ -113,8 +116,8 @@
   }
   // The plain parts of a node (never the ciphertext).
   function readPlain(node, ms) {
-    return Promise.all(['meta', 'tomb', 'claim'].map(function (k) { return once(node.child(k), ms); }))
-      .then(function (v) { return { meta: v[0], tomb: v[1], claim: v[2] }; });
+    return Promise.all(['meta', 'tomb', 'claim', 'claims'].map(function (k) { return once(node.child(k), ms); }))
+      .then(function (v) { return { meta: v[0], tomb: v[1], claim: v[2], claims: v[3] }; });
   }
   function tombOf(meta, why, at) { return { meta: meta || null, tomb: { why: why, at: at } }; }
   function txn(ref, fn) {
@@ -215,49 +218,77 @@
     return { changed: schedule, flush: flush, stop: stop, get shared() { return shared; } };
   }
 
+
   // =====================================================================================================
   // RECIPIENT
   // =====================================================================================================
   var R = null;    // the open recipient view
 
-  var ENDED = {
-    opened: ['🔥', 'This link has already been opened', 'It was a one-time link. Its note was deleted from the server when it was first opened.'],
-    claimed: ['🔒', 'This link is open in another browser', 'It was a one-time live link — only the first browser that opened it can use it.'],
-    expired: ['⌛', 'This link has expired', 'Its time ran out. The note was deleted and can no longer be read.'],
-    revoked: ['🚫', 'The owner ended this link', 'The note was deleted from the server.'],
-    gone: ['🔥', 'This link is no longer available', 'It was opened, expired, or ended by its owner.'],
-    bad: ['🔗', 'This link is incomplete', 'Part of it is missing. Ask for the whole link — including everything after the #.'],
-    key: ['🔑', 'This link can’t be read', 'Its key doesn’t match the note — the link may have been changed or cut short.'],
-    offline: ['📡', 'Can’t reach the server', 'Check your connection and try again. The link hasn’t been used up.']
-  };
+  // Why a link can't be shown (or stopped being shown): [icon, heading, text].
+  function endCopy(why, meta) {
+    var cap = C ? C.capOf(meta) : 0;
+    var E = {
+      opened: cap > 1
+        ? ['📭', 'This link has been used up', 'Up to ' + cap + ' people could open it, and they all have. Its note was deleted from the server.']
+        : ['📭', 'This link has already been opened', 'It could be opened only once. Its note was deleted from the server when it was first opened.'],
+      claimed: cap > 1
+        ? ['🔒', 'This link is full', 'Up to ' + cap + ' people could open it, and they already have — it works only in their browsers.']
+        : ['🔒', 'This link is open in another browser', 'Only the first browser that opened it can use it.'],
+      expired: ['⌛', 'This link has expired', 'Its time ran out. The note was deleted and can no longer be read.'],
+      revoked: ['🚫', 'The owner ended this link', 'The note was deleted from the server.'],
+      gone: ['📭', 'This link is no longer available', 'It was opened, expired, or ended by its owner.'],
+      bad: ['🔗', 'This link is incomplete', 'Part of it is missing. Ask for the whole link — including everything after the #.'],
+      key: ['🔑', 'This link can’t be read', 'Its key doesn’t match the note — the link may have been changed or cut short.'],
+      offline: ['📡', 'Can’t reach the server', 'Check your connection and try again. The link hasn’t been used up.']
+    };
+    return E[why] || E.gone;
+  }
 
   function rvShell() {
     var el = document.createElement('div');
     el.className = 'burn-rv';
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-modal', 'true');
-    el.setAttribute('aria-label', 'Self-destructing note');
+    el.setAttribute('aria-label', 'Shared note');
+    // No way back to the app from here: the reader came for this note only.
     el.innerHTML =
       '<header class="burn-rv-top">' +
-        '<div class="burn-rv-brand"><span class="burn-rv-ic" aria-hidden="true">🔥</span><span class="burn-rv-title">Self-destructing note</span></div>' +
+        '<div class="burn-rv-brand"><span class="burn-rv-ic" aria-hidden="true" hidden></span><span class="burn-rv-title">Shared note</span></div>' +
         '<div class="burn-rv-chips">' +
           '<span class="burn-chip burn-chip-live" hidden><i></i><span>Live — your edits are shared</span></span>' +
           '<span class="burn-chip burn-chip-clock" hidden title="Time left"><span class="burn-clock-ic" aria-hidden="true">⏱</span><b>–</b></span>' +
         '</div>' +
-        '<button type="button" class="burn-x" data-act="close" aria-label="Close">×</button>' +
+        '<div class="burn-tidy-w" hidden><button type="button" class="btn burn-tidy" data-act="tidy" aria-haspopup="menu" aria-expanded="false">Tidy up <span aria-hidden="true">▾</span></button></div>' +
       '</header>' +
       '<main class="burn-rv-main"><div class="burn-rv-wait"><span class="burn-spin" aria-hidden="true"></span><span>Opening…</span></div></main>' +
       '<footer class="burn-rv-foot" hidden></footer>';
     // The app's own shortcuts mustn't act on keys typed here.
-    el.addEventListener('keydown', function (e) { if (e.key !== 'Escape') e.stopPropagation(); });
+    el.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+      if (!R || !R.menu || R.menu.hidden) return;
+      if (e.key === 'Escape') { e.preventDefault(); tidyMenu(false); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        var items = Array.prototype.slice.call(R.menu.querySelectorAll('.burn-mi')), i = items.indexOf(document.activeElement);
+        var next = items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1) + (i < 0 && e.key === 'ArrowUp' ? 1 : 0)) % items.length];
+        if (next) { e.preventDefault(); next.focus(); }
+      }
+    });
+    // Remember the reader's selection before a tap on "Tidy up" can blur it.
+    el.addEventListener('pointerdown', function (e) {
+      if (R && R.box && e.target.closest('.burn-tidy, .burn-menu')) R.sel = { from: R.box.selectionStart, to: R.box.selectionEnd, len: R.box.value.length };
+    }, true);
+    el.addEventListener('mousedown', function (e) { if (e.target.closest('.burn-tidy, .burn-menu')) e.preventDefault(); });
     el.addEventListener('click', function (e) {
       var b = e.target.closest('[data-act]');
+      if (R && R.menu && !R.menu.hidden && !e.target.closest('.burn-menu') && !(b && b.getAttribute('data-act') === 'tidy')) tidyMenu(false);
       if (!b) return;
       var a = b.getAttribute('data-act');
-      if (a === 'close') rvClose();
-      else if (a === 'retry') { var p = R && R.payload; rvClose(true); openLink(p); }
+      if (a === 'retry') { var p = R && R.payload; rvClose(true); openLink(p); }
       else if (a === 'copy') rvCopy();
       else if (a === 'save') rvSave();
+      else if (a === 'tidy') tidyMenu(R && R.menu ? R.menu.hidden : true);
+      else if (a === 'tidy-run') rvTidy(b.getAttribute('data-id'));
+      else if (a === 'tidy-undo') rvUndo();
     });
     document.body.appendChild(el);
     return el;
@@ -267,6 +298,13 @@
     var f = R && R.el.querySelector('.burn-rv-foot');
     if (!f) return;
     f.hidden = !html; f.innerHTML = html || '';
+  }
+  function rvBrand(title, icon) {
+    var r = R; if (!r) return;
+    r.el.querySelector('.burn-rv-title').textContent = title;
+    var ic = r.el.querySelector('.burn-rv-ic');
+    ic.textContent = icon || ''; ic.hidden = !icon;
+    r.el.setAttribute('aria-label', title);
   }
   function setSession(p) { try { if (p) sessionStorage.setItem(SESSION_KEY, p); else sessionStorage.removeItem(SESSION_KEY); } catch (e) {} }
 
@@ -308,31 +346,45 @@
     r.me = Cade.store.get(meKey(r.id)) || C.newViewer();
     return readPlain(node, 15000).then(function (plain) {
       if (r !== R) return;
-      r.meta = plain.meta;
+      var meta = r.meta = plain.meta;
       var g = C.gate(plain, rvNow(), r.me);
       if (!g.ok) {
-        if (g.why === 'expired' && !plain.tomb) node.set(tombOf(plain.meta, 'expired', rvNow())).catch(function () {});
+        if (g.why === 'expired' && !plain.tomb) node.set(tombOf(meta, 'expired', rvNow())).catch(function () {});
         return rvEnd(g.why);
       }
-      var claim = !g.needClaim ? Promise.resolve(true) : txn(node.child('claim'), function (cur) { return C.claimUpdate(cur, r.me, rvNow()); })
-        .then(function (res) { return C.claimIsMine(res && res.snapshot && res.snapshot.val(), r.me); });
-      return withTimeout(claim, 15000).then(function (mine) {
+      var cap = C.capOf(meta), v1 = C.isV1Claim(meta), claim;
+      // One slot per browser, taken by a transaction: of N simultaneous
+      // openers of the last slot, exactly one wins.
+      if (!g.needClaim) claim = Promise.resolve({ mine: true, claims: plain.claims });
+      else if (v1) {
+        claim = txn(node.child('claim'), function (cur) { return C.claimUpdate(cur, r.me, rvNow()); })
+          .then(function (res) { return { mine: C.claimIsMine(res && res.snapshot && res.snapshot.val(), r.me), claims: null }; });
+      } else {
+        claim = txn(node.child('claims'), function (cur) { return C.claimsUpdate(cur, r.me, rvNow(), cap); })
+          .then(function (res) { var v = res && res.snapshot && res.snapshot.val(); return { mine: C.holdsSlot(v, r.me), claims: v }; });
+      }
+      return withTimeout(claim, 15000).then(function (c) {
         if (r !== R) return;
-        if (!mine) return rvEnd(plain.meta.editable ? 'claimed' : 'opened');
-        if (plain.meta.oneTime && plain.meta.editable) Cade.store.set(meKey(r.id), r.me);   // this browser may come back
+        if (!c.mine) return rvEnd(meta.editable ? 'claimed' : 'opened');
+        // This browser may come back (a reload, or later) without using up another slot.
+        if (cap && (!v1 || meta.editable)) Cade.store.set(meKey(r.id), r.me);
+        var burn = C.burnsAfterRead(meta, c.claims);
         return Promise.all([once(node.child('head')), once(node.child('doc'))]).then(function (v) {
           if (r !== R) return;
           var head = v[0], doc = v[1];
           if (!doc || !head) return rvEnd('gone');
           return Promise.all([C.open(r.key, r.id, 'head', head), C.open(r.key, r.id, 'v' + doc.ver, doc.ct)]).then(function (x) {
             if (r !== R) return;
-            r.head = x[0] || {};
+            r.head = C.readHead(x[0]);
             var text = String(x[1] && x[1].t != null ? x[1].t : '');
-            if (plain.meta.oneTime && !plain.meta.editable) {
-              // Read once: delete the ciphertext now (meta + tombstone stay, so a second open can say why).
-              node.set(tombOf(plain.meta, 'opened', rvNow())).catch(function () {});
+            if (burn) {
+              // The last one who may read it: delete the ciphertext now (meta +
+              // tombstone stay, so a later open can say why).
+              node.set(tombOf(meta, 'opened', rvNow())).catch(function () {});
               setSession(null);
+              Cade.store.remove(meKey(r.id));
             }
+            r.burned = burn;
             rvShow(r, text, doc);
           }, function () { return rvEnd('key'); });
         });
@@ -341,9 +393,8 @@
   }
 
   function rvShow(r, text, doc) {
-    var meta = r.meta, editable = !!meta.editable, copy = !!(r.head && r.head.copy);
-    var title = String((r.head && r.head.title) || '').trim();
-    r.el.querySelector('.burn-rv-title').textContent = title || 'Shared note';
+    var meta = r.meta, head = r.head, editable = !!meta.editable, copy = head.copy, cap = C.capOf(meta);
+    rvBrand(head.title || 'Shared note', head.icon);
     r.el.classList.toggle('burn-nocopy', !copy && !editable);
     var main = rvMain();
     main.innerHTML = editable
@@ -355,38 +406,47 @@
     r.el.querySelector('.burn-chip-live').hidden = !editable;
     // Footer: what will happen, honestly.
     var bits = [];
-    if (meta.oneTime && !editable) bits.push('<b>One-time link:</b> the note was deleted from the server when you opened it. Close this page and it’s gone.');
-    else if (meta.oneTime) bits.push('<b>One-time link:</b> it works only in this browser now.');
+    if (r.burned) bits.push(cap > 1 ? '<b>You were the last who could open it:</b> the note was deleted from the server just now. Close this page and it’s gone.'
+      : '<b>One-time link:</b> the note was deleted from the server when you opened it. Close this page and it’s gone.');
+    else if (cap === 1) bits.push('<b>Just for you:</b> it works only in this browser now.');
+    else if (cap > 1) bits.push('<b>Up to ' + cap + ' people</b> can open it; it keeps working in this browser.');
     if (editable) bits.push('You and the owner are editing the same note — changes appear on both sides as you type.');
-    if (meta.expiresAt) bits.push('It self-destructs in <b class="burn-left">' + esc(C.fmtLeft(C.msLeft(meta, rvNow()))) + '</b>.');
+    if (meta.expiresAt) bits.push(head.timer ? 'It self-destructs in <b class="burn-left">' + esc(C.fmtLeft(C.msLeft(meta, rvNow()))) + '</b>.' : 'It self-destructs when its time is up.');
     if (!copy && !editable) bits.push('The owner turned off saving a copy.');
     var acts = copy ? '<div class="burn-rv-acts"><button type="button" class="btn" data-act="copy">Copy text</button><button type="button" class="btn" data-act="save">Download .txt</button></div>' : '';
     rvFoot('<p>' + bits.join(' ') + '</p>' + acts);
-    // Countdown.
+    // Tidy-up tools the owner chose (live links only).
+    if (editable && head.scripts.length) tidySetup(r, head.scripts);
+    // Countdown — the timer runs (and ends the link) whether or not it's shown.
     if (meta.expiresAt) {
-      r.el.querySelector('.burn-chip-clock').hidden = false;
+      var chip = r.el.querySelector('.burn-chip-clock');
+      chip.hidden = !head.timer;
       var tick = function () {
         if (r !== R || r.ended) return;
         var left = C.msLeft(meta, rvNow());
-        var b = r.el.querySelector('.burn-chip-clock b'); if (b) b.textContent = C.fmtClock(left);
-        var f = r.el.querySelector('.burn-left'); if (f) f.textContent = C.fmtLeft(left);
-        r.el.querySelector('.burn-chip-clock').classList.toggle('burn-soon', left < 60000);
+        if (head.timer) {
+          var b = chip.querySelector('b'); if (b) b.textContent = C.fmtClock(left);
+          var f = r.el.querySelector('.burn-left'); if (f) f.textContent = C.fmtLeft(left);
+          chip.classList.toggle('burn-soon', left < 60000);
+        }
         if (left <= 0) {
           r.node.set(tombOf(meta, 'expired', rvNow())).catch(function () {});
           return rvEnd('expired');
         }
-        r.tick = setTimeout(tick, left > 3600000 ? 30000 : 1000 - (rvNow() % 1000) + 5);
+        r.tick = setTimeout(tick, left > 3600000 ? 30000 : !head.timer ? Math.min(left + 5, 30000) : 1000 - (rvNow() % 1000) + 5);
       };
       tick();
     }
-    // The owner ending it (or a timer elsewhere) ends it here too.
+    // The owner ending it (or a timer elsewhere) ends it here too. An
+    // 'opened' tombstone doesn't: whoever is already reading a read-only
+    // capped link keeps what they opened.
     var tombRef = r.node.child('tomb'), metaRef = r.node.child('meta');
-    var onTomb = function (s) { var t = s.val(); if (t && !(t.why === 'opened' && meta.oneTime && !editable)) rvEnd(t.why || 'gone'); };
+    var onTomb = function (s) { var t = s.val(); if (t && !(t.why === 'opened' && cap && !editable)) rvEnd(t.why || 'gone'); };
     var onMeta = function (s) { if (s.val() === null) rvEnd('gone'); };
     tombRef.on('value', onTomb); metaRef.on('value', onMeta);
     r.offs.push(function () { tombRef.off('value', onTomb); metaRef.off('value', onMeta); });
-    // Presence (the owner's list shows "N viewers"); not for a burned one-time read.
-    if (!(meta.oneTime && !editable)) {
+    // Presence (the owner's list shows "N viewers"); not once the note is burned.
+    if (!r.burned) {
       var pres = r.node.child('presence/' + r.me);
       var ts = (window.firebase && firebase.database && firebase.database.ServerValue) ? firebase.database.ServerValue.TIMESTAMP : rvNow();
       pres.set({ at: ts, ed: editable }).catch(function () {});
@@ -415,30 +475,128 @@
     }
   }
 
+  // ---- tidy-up menu (the owner's chosen scripts, for a live link) ---------------------------------------
+  var packCache = {};
+  // A script pack's code, fetched and parsed without registering anything in the app.
+  function loadPack(name) {
+    if (!packCache[name]) {
+      packCache[name] = fetch(new URL(BASE + '../../scripts/' + name + '/' + name + '.js', location.href).href)
+        .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.text(); })
+        .then(function (src) { return C.parsePack(src); })
+        .catch(function (e) { delete packCache[name]; console.warn('burn tidy:', e); throw new Error('Couldn’t load this tool — check your connection'); });
+    }
+    return packCache[name];
+  }
+  function tidySetup(r, ids) {
+    var groups = [], by = {};
+    ids.forEach(function (id) {
+      var s = C.scriptById(id); if (!s) return;
+      if (!by[s.group]) { by[s.group] = []; groups.push(s.group); }
+      by[s.group].push(s);
+    });
+    var html = '<div class="burn-menu" role="menu" aria-label="Tidy up" hidden>' +
+      '<div class="burn-menu-h">Works on the text you’ve selected — or on the whole note if nothing is selected.</div>' +
+      groups.map(function (g) {
+        return (groups.length > 1 ? '<div class="burn-menu-g">' + esc(g) + '</div>' : '') + by[g].map(function (s) {
+          return '<button type="button" role="menuitem" class="burn-mi" data-act="tidy-run" data-id="' + s.id + '"><span class="burn-mi-l">' + esc(s.label) + '</span><span class="burn-mi-h">' + esc(s.hint) + '</span></button>';
+        }).join('');
+      }).join('') + '</div>';
+    var w = r.el.querySelector('.burn-tidy-w');
+    w.insertAdjacentHTML('beforeend', html);
+    w.hidden = false;
+    r.menu = w.querySelector('.burn-menu');
+    r.tidyIds = ids;
+  }
+  function tidyMenu(open) {
+    var r = R;
+    if (!r || !r.menu) return;
+    if (open && (r.ended || !r.box)) open = false;
+    var b = r.el.querySelector('.burn-tidy');
+    if (!open && r.menu.contains(document.activeElement) && b) b.focus({ preventScroll: true });
+    r.menu.hidden = !open;
+    if (b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+      // Fetch the packs now, so a pick runs at once.
+      C.packsFor(r.tidyIds).forEach(function (p) { loadPack(p).catch(function () {}); });
+      var first = r.menu.querySelector('.burn-mi'); if (first && !('ontouchstart' in window)) first.focus({ preventScroll: true });
+    }
+  }
+  // The selection to work on: the live one, or the one remembered before a tap moved focus.
+  function rvSelection(r) {
+    var ta = r.box, s = r.sel;
+    r.sel = null;
+    if (s && s.len === ta.value.length && document.activeElement !== ta) return s;
+    return { from: ta.selectionStart, to: ta.selectionEnd };
+  }
+  function rvTidy(id) {
+    var r = R, s = C && C.scriptById(id);
+    if (!r || !r.box || r.ended || !s || r.tidyIds.indexOf(id) < 0) return;
+    var sel = rvSelection(r);
+    tidyMenu(false);
+    loadPack(s.pack).then(function (codes) {
+      if (r !== R || !r.box) return;
+      var code = codes[s.script];
+      if (!code) throw new Error('This tool isn’t available any more');
+      var ta = r.box, before = ta.value, res;
+      try { res = C.runScript(code, before, sel.from, sel.to); }
+      catch (e) { throw new Error(/JSON/.test(String(e && e.message)) ? 'That isn’t valid JSON — nothing was changed' : 'Couldn’t ' + s.label.toLowerCase() + ' here — nothing was changed'); }
+      if (res.insert == null) { Cade.showToast((res.messages[0] && res.messages[0].text) || 'Nothing to change', 'info', 2200); return; }
+      ta.setRangeText(res.insert, res.from, res.to, sel.from < sel.to ? 'select' : 'preserve');
+      if (!('ontouchstart' in window)) ta.focus({ preventScroll: true });     // (a phone keeps its keyboard down)
+      r.undo = { before: before, after: ta.value };
+      if (r.live) r.live.changed();
+      rvDone(s.label);
+    }).catch(function (e) { Cade.showToast((e && e.message) || 'Couldn’t run that', 'error', 3000); });
+  }
+  // "✓ Done · Undo" for a few seconds after a tidy-up.
+  function rvDone(label) {
+    var r = R; if (!r) return;
+    var n = r.el.querySelector('.burn-done');
+    if (!n) { n = document.createElement('div'); n.className = 'burn-done'; n.setAttribute('role', 'status'); rvMain().appendChild(n); }
+    n.innerHTML = '<span>✓ ' + esc(label) + '</span><button type="button" class="btn burn-sm" data-act="tidy-undo">Undo</button>';
+    n.hidden = false;
+    clearTimeout(r.doneT);
+    r.doneT = setTimeout(function () { if (n) n.hidden = true; }, 8000);
+  }
+  function rvUndo() {
+    var r = R; if (!r || !r.box || !r.undo) return;
+    var ta = r.box, u = r.undo;
+    r.undo = null;
+    var n = r.el.querySelector('.burn-done'); if (n) n.hidden = true;
+    if (ta.value !== u.after) { Cade.showToast('The note changed since — undo with your keyboard instead', 'info', 3000); return; }
+    var d = C.minimalEdit(u.after, u.before);
+    ta.setRangeText(d.insert, d.from, d.to, 'select');
+    if (r.live) r.live.changed();
+  }
+
   // Ends the view: wipes the text from the page and from storage, says why.
+  // Fully opaque, and no way out to the app — just the reason.
   function rvEnd(why, keepSession) {
     var r = R;
     if (!r || r.ended) return;
     r.ended = true;
     rvTeardown(r, keepSession);
-    var e = ENDED[why] || ENDED.gone;
+    var e = endCopy(why, r.meta);
     var main = rvMain();
     r.el.querySelector('.burn-chip-live').hidden = true;
     r.el.querySelector('.burn-chip-clock').hidden = true;
-    r.el.querySelector('.burn-rv-title').textContent = 'Self-destructing note';
-    r.el.classList.add('burn-ended');
+    var tw = r.el.querySelector('.burn-tidy-w'), menu = tw.querySelector('.burn-menu');
+    tw.hidden = true; if (menu) menu.parentNode.removeChild(menu);
+    r.menu = null;
+    rvBrand('Shared note', '');
+    r.el.classList.add('burn-rv-over');
     main.innerHTML = '<div class="burn-end" role="status"><div class="burn-end-ic" aria-hidden="true">' + e[0] + '</div><h2>' + esc(e[1]) + '</h2><p>' + esc(e[2]) + '</p>' +
       (r.shown ? '<p class="burn-end-wiped">The text has been removed from this page.</p>' : '') +
-      '<div class="burn-end-acts">' + (why === 'offline' ? '<button type="button" class="btn btn-primary" data-act="retry">Try again</button>' : '') +
-      '<button type="button" class="btn" data-act="close">Close</button></div></div>';
+      (why === 'offline' ? '<div class="burn-end-acts"><button type="button" class="btn btn-primary" data-act="retry">Try again</button></div>' : '') + '</div>';
     rvFoot('');
   }
   function rvTeardown(r, keepSession) {
-    clearTimeout(r.tick);
+    clearTimeout(r.tick); clearTimeout(r.doneT);
     if (r.live) { r.live.stop(); r.live = null; }
     r.offs.forEach(function (f) { try { f(); } catch (e) {} });
     r.offs = [];
     if (r.box) { r.shown = true; if ('value' in r.box) r.box.value = ''; r.box.textContent = ''; r.box = null; }
+    r.undo = null; r.sel = null;
     var app = r.app; r.app = null; r.db = null;
     // Let the presence removal reach the server before the app goes.
     if (app) setTimeout(function () { try { app.delete().catch(function () {}); } catch (e) {} }, 1200);
@@ -448,6 +606,7 @@
     }
     r.head = null;
   }
+  // Not offered to the reader; used to reopen (retry / another link) and by tests.
   function rvClose(silent) {
     var r = R;
     if (!r) return;
@@ -477,14 +636,65 @@
   var blob = null, entries = [], engines = {}, sweepTimer = 0, sweeping = null, booted = false, roomOff = null, visHooked = false;
   var editorHook = null;
 
-  function now() { return Cade.cloud.serverNow ? Cade.cloud.serverNow() : Date.now(); }
+  // ---- the owner's clock --------------------------------------------------------------------------------
+  // Links are timed in server time. The core's Cade.cloud.serverNow() is this
+  // device's clock plus the sync connection's .info/serverTimeOffset — hooked
+  // only on the first Cade.cloud.ref() call and taken from that connection's
+  // handshake, so it can be missing (0) or stale (a tab iOS froze mid-connect).
+  // The owner therefore measures the offset itself from a server-stamped write
+  // (each link's meta.created, or a probe when the dialog opens) and keeps it.
+  var CLOCK_KEY = 'cade-burn-clock', CLOCK_FRESH = 12 * 3600000;
+  var clockOff = null;
+  function measuredOffset() {
+    if (clockOff != null) return clockOff;
+    try {
+      var c = JSON.parse(Cade.store.get(CLOCK_KEY) || 'null');
+      if (c && typeof c.off === 'number' && Math.abs(Date.now() - c.at) < CLOCK_FRESH) return (clockOff = c.off);
+    } catch (e) {}
+    return null;
+  }
+  function setClock(off) {
+    if (off == null || !isFinite(off)) return;
+    clockOff = off;
+    Cade.store.set(CLOCK_KEY, JSON.stringify({ off: off, at: Date.now() }));
+  }
+  function now() {
+    var off = measuredOffset();
+    if (off != null) return Date.now() + off;
+    return Cade.cloud.serverNow ? Cade.cloud.serverNow() : Date.now();
+  }
+  // A value straight from the server (not the local cache's estimate).
+  function serverVal(ref, ms) {
+    var p = typeof ref.get === 'function' ? ref.get().then(function (s) { return s.val(); }) : ref.once('value').then(function (s) { return s.val(); });
+    return withTimeout(p, ms || 8000);
+  }
+  var probing = null;
+  function measureClock() {
+    if (probing || measuredOffset() != null || !Cade.cloud.configured()) return probing;
+    probing = Cade.cloud.ref('burn', 'clock').then(function (ref) {
+      if (!ref) return;
+      var l0 = Date.now();
+      return withTimeout(ref.set({ at: Cade.cloud.TIMESTAMP }), 8000).then(function () { return serverVal(ref.child('at')); }).then(function (at) {
+        setClock(C.clockOffset(at, l0, Date.now()));
+        return ref.remove();
+      });
+    }).catch(function () {}).then(function () { probing = null; renderList(); });
+    return probing;
+  }
+
   function loadBlob() {
     if (!blob) blob = Cade.syncedBlob('burn', { onChange: function (d) { entries = C.normBlob(d).shares; reconcileOwner(); renderList(); } });
     entries = C.normBlob(blob.get()).shares;
   }
   function saveBlob() { blob.set({ v: 1, shares: entries }); }
   function entryById(id) { for (var i = 0; i < entries.length; i++) if (entries[i].id === id) return entries[i]; return null; }
-  function metaOf(e) { return { v: 1, created: e.created, expiresAt: e.expiresAt, oneTime: e.oneTime, editable: e.editable }; }
+  // The plain meta of a link (v1 links keep their v1 shape).
+  function metaOf(e) {
+    var cap = C.capOfEntry(e);
+    var m = { v: e.v === 2 ? 2 : 1, created: e.created, expiresAt: e.expiresAt, oneTime: cap === 1, editable: e.editable };
+    if (e.v === 2) m.maxOpens = cap;
+    return m;
+  }
   function baseKey(id) { return 'cade-burn-base:' + id; }
 
   // Called by the core at boot when the synced list has live links, and whenever the dialog opens.
@@ -613,39 +823,69 @@
   }
   function linkFor(e) { return C.encodeLink(location.href.split('#')[0].split('?')[0], e); }
 
+  // opts: { expiry, custom, who, n, editable, copy, title, icon, timer, scripts }
   function create(opts) {
     var api = Cade.roomsApi, room = (api && api.activeRoom()) || '';
     if (!room && opts.editable) return Promise.reject(new Error('Live editing works on a room — open or add one first'));
     var text = Cade.editor.state.doc.toString();
-    var t = now();
-    var e = {
-      id: C.newId(), key: C.newKey(), db: Cade.store.get('cade-firebase-url') || '', room: room, title: room || 'Shared note', created: t,
-      expiresAt: C.expiryFrom(opts.expiry, opts.custom, t), oneTime: !!opts.oneTime, editable: !!opts.editable, copy: !!opts.copy, ended: null
-    };
-    C.checkOptions({ expiresAt: e.expiresAt, oneTime: e.oneTime, text: text });
-    if (!C.validDb(e.db)) return Promise.reject(new Error('Set up Sync first'));
-    return Promise.all([C.seal(e.key, e.id, 'head', { title: e.title, copy: e.copy }), C.seal(e.key, e.id, 'v1', { t: text }), ownerRoot(e.db)]).then(function (x) {
-      // Listed first, so a write that lands late is still swept / revocable.
-      entries.unshift(e); saveBlob();
-      var node = nodeOf(x[2], e.id);
-      var doc = { ver: 1, ct: x[1], by: 'o:create', base: 0, at: t };
-      return withTimeout(node.set({ meta: metaOf(e), head: x[0], doc: doc }), 15000).then(function () {
-        if (e.editable) Cade.idbStore.set(baseKey(e.id), JSON.stringify({ ver: 1, text: text, ct: x[1] }));
-        reconcileOwner();
-        return e;
-      }, function (err) {
-        entries = entries.filter(function (y) { return y.id !== e.id; }); saveBlob();
-        node.remove().catch(function () {});
-        throw new Error(/offline/.test(err && err.message) ? 'No connection to your database — try again when you’re online' : (err && err.message) || 'Could not create the link');
+    var db = Cade.store.get('cade-firebase-url') || '';
+    var maxOpens = C.capFrom(opts.who, opts.n);
+    var ttl = C.expiryFrom(opts.expiry, opts.custom, 0);     // a duration: anchored on the server's clock below
+    C.checkOptions({ expiresAt: ttl, maxOpens: maxOpens, text: text });
+    if (!C.validDb(db)) return Promise.reject(new Error('Set up Sync first'));
+    var head = C.makeHead({ title: opts.title || room || 'Shared note', copy: opts.copy, icon: opts.icon, timer: opts.timer, editable: opts.editable, scripts: opts.scripts });
+    // The root first: for the sync database that also hooks the core's server-clock offset.
+    return ownerRoot(db).then(function (root) {
+      var t = now();
+      var e = {
+        v: 2, id: C.newId(), key: C.newKey(), db: db, room: room, title: head.title, created: t, ttl: ttl, expiresAt: ttl ? t + ttl : 0,
+        maxOpens: maxOpens, oneTime: maxOpens === 1, editable: !!opts.editable, copy: head.copy, ended: null
+      };
+      return Promise.all([C.seal(e.key, e.id, 'head', head), C.seal(e.key, e.id, 'v1', { t: text })]).then(function (x) {
+        // Listed first, so a write that lands late is still swept / revocable.
+        entries.unshift(e); saveBlob();
+        var node = nodeOf(root, e.id);
+        var meta = metaOf(e); meta.created = Cade.cloud.TIMESTAMP;
+        var doc = { ver: 1, ct: x[1], by: 'o:create', base: 0, at: t };
+        var l0 = Date.now();
+        return withTimeout(node.set({ meta: meta, head: x[0], doc: doc }), 15000).then(function () {
+          if (e.editable) Cade.idbStore.set(baseKey(e.id), JSON.stringify({ ver: 1, text: text, ct: x[1] }));
+          // Anchor the timer on the moment the server stamped the link, and
+          // learn this device's clock offset from it.
+          return serverVal(node.child('meta/created')).then(function (sc) {
+            var off = C.clockOffset(sc, l0, Date.now());
+            if (off == null) return;
+            setClock(off);
+            e.created = sc;
+            if (e.ttl && e.expiresAt !== sc + e.ttl) { e.expiresAt = sc + e.ttl; return withTimeout(node.child('meta/expiresAt').set(e.expiresAt), 8000); }
+          }).catch(function () {}).then(function () {
+            saveBlob();
+            reconcileOwner();
+            return e;
+          });
+        }, function (err) {
+          entries = entries.filter(function (y) { return y.id !== e.id; }); saveBlob();
+          node.remove().catch(function () {});
+          throw new Error(/offline/.test(err && err.message) ? 'No connection to your database — try again when you’re online' : (err && err.message) || 'Could not create the link');
+        });
       });
     });
   }
 
   // ---- owner dialog ---------------------------------------------------------------------------------
-  var D = null;     // { el, tick, listens: { id: off } , nodes: { id: plain } }
+  var D = null;     // { el, tick, listens: { id: off }, nodes: { id: plain }, armed, icon }
+  var ICONS = ['🔥', '🔒', '📝', '✉️', '🤫', '⭐', '🎁', '👋'];
   function toggleRow(key, label, hint, on) {
-    return '<label class="burn-tog"><span class="burn-tog-t"><span class="burn-tog-l">' + esc(label) + '</span><span class="burn-tog-h" data-hint="' + key + '">' + esc(hint) + '</span></span>' +
+    return '<label class="burn-tog" data-row="' + key + '"><span class="burn-tog-t"><span class="burn-tog-l">' + esc(label) + '</span><span class="burn-tog-h" data-hint="' + key + '">' + esc(hint) + '</span></span>' +
       '<input type="checkbox" role="switch" data-k="' + key + '"' + (on ? ' checked' : '') + '><span class="burn-sw" aria-hidden="true"></span></label>';
+  }
+  function toolsHtml() {
+    var last = '';
+    return C.SCRIPTS.map(function (s) {
+      var g = s.group !== last ? '<div class="burn-tools-g">' + esc(s.group) + '</div>' : '';
+      last = s.group;
+      return g + '<label class="burn-chk"><input type="checkbox" data-script="' + s.id + '"><span class="burn-chk-t"><span class="burn-chk-l">' + esc(s.label) + '</span><span class="burn-chk-h">' + esc(s.hint) + '</span></span></label>';
+    }).join('');
   }
   function openOwner() {
     if (D) { D.el.querySelector('.burn-dlg').focus(); return Promise.resolve(); }
@@ -659,16 +899,33 @@
       var opts = C.PRESETS.map(function (p) { return '<option value="' + p.v + '"' + (p.v === '1h' ? ' selected' : '') + '>' + esc(p.label) + '</option>'; }).join('');
       el.innerHTML =
         '<div class="burn-dlg" role="dialog" aria-modal="true" aria-label="Self-destructing link" tabindex="-1">' +
-          '<div class="burn-hd"><div class="burn-h"><span aria-hidden="true">🔥</span> Self-destructing link</div><button type="button" class="burn-x" data-act="close" aria-label="Close">×</button></div>' +
+          '<div class="burn-hd"><div class="burn-h">Self-destructing link</div><button type="button" class="burn-x" data-act="close" aria-label="Close">×</button></div>' +
           '<div class="burn-body">' +
           (configured ?
             '<section class="burn-form">' +
               '<p class="burn-room">Shares ' + (room ? '<b>' + esc(room) + '</b>' : '<b>this note</b>') + ' with someone who doesn’t need Cade.txt. End-to-end encrypted: the key is only in the link.</p>' +
               '<label class="burn-field"><span class="burn-fl">Expires after</span><select class="form-input burn-exp">' + opts + '</select></label>' +
-              '<div class="burn-custom" hidden><input class="form-input burn-cn" type="number" inputmode="decimal" min="1" step="1" value="2" aria-label="How long"><select class="form-input burn-cu" aria-label="Unit"><option value="min">minutes</option><option value="h" selected>hours</option><option value="d">days</option></select></div>' +
-              toggleRow('oneTime', 'One-time', '', true) +
+              '<div class="burn-custom burn-cust" hidden><input class="form-input burn-cn" type="number" inputmode="decimal" min="1" step="1" value="2" aria-label="How long"><select class="form-input burn-cu" aria-label="Unit"><option value="min">minutes</option><option value="h" selected>hours</option><option value="d">days</option></select></div>' +
+              '<div class="burn-fieldset">' +
+                '<label class="burn-field"><span class="burn-fl">Who can open it</span><select class="form-input burn-who"><option value="one" selected>Just one person</option><option value="some">Up to … people</option><option value="any">Anyone with the link</option></select></label>' +
+                '<div class="burn-custom burn-some" hidden><input class="form-input burn-max" type="number" inputmode="numeric" min="1" max="' + C.MAX_VIEWERS + '" step="1" value="3" aria-label="How many people"><span class="burn-unit">people</span></div>' +
+                '<p class="burn-hint" data-hint="who"></p>' +
+              '</div>' +
               toggleRow('editable', 'Allow editing', 'Their edits appear in your note as they type, and yours appear for them.', false) +
-              toggleRow('copy', 'Allow saving a copy', 'Shows Copy and Download buttons. (Nothing can stop a screenshot.)', false) +
+              '<details class="burn-more"><summary><span>More options</span><span class="burn-more-s"></span></summary><div class="burn-more-b">' +
+                '<label class="burn-stack"><span class="burn-fl">Name they see</span><input class="form-input burn-name" type="text" maxlength="' + C.MAX_NAME + '" autocomplete="off" placeholder="' + esc(room || 'Shared note') + '"><span class="burn-hint">The title at the top of their page. Encrypted like the note.</span></label>' +
+                '<div class="burn-stack"><span class="burn-fl" id="burn-icon-l">Icon</span><div class="burn-icons" role="group" aria-labelledby="burn-icon-l">' +
+                  '<button type="button" class="burn-ico burn-ico-none" data-act="icon" data-icon="" aria-pressed="true">None</button>' +
+                  ICONS.map(function (i) { return '<button type="button" class="burn-ico" data-act="icon" data-icon="' + i + '" aria-pressed="false" aria-label="' + i + '">' + i + '</button>'; }).join('') +
+                  '<input class="form-input burn-ico-own" type="text" maxlength="16" autocomplete="off" placeholder="Other" aria-label="Your own icon (one emoji or symbol)">' +
+                '</div><span class="burn-hint">Shown next to the name. One emoji or a short symbol of your own.</span></div>' +
+                toggleRow('timer', 'Show the countdown', 'They see how long is left. The link expires on time either way.', true) +
+                toggleRow('copy', 'Allow saving a copy', 'Shows Copy and Download buttons. (Nothing can stop a screenshot.)', false) +
+                '<details class="burn-tools"><summary><span class="burn-fl">Tidy-up tools for them</span><span class="burn-tools-n">none</span></summary>' +
+                  '<p class="burn-hint burn-tools-off">Turn on <b>Allow editing</b> to give them tools.</p>' +
+                  '<div class="burn-tools-on"><p class="burn-hint">They get one “Tidy up” menu above the text with the tools you pick. Each works on what they select, or on the whole note.</p>' + toolsHtml() + '</div>' +
+                '</details>' +
+              '</div></details>' +
               '<div class="burn-err" role="alert" hidden></div>' +
               '<button type="button" class="btn btn-primary burn-create" data-act="create">Create link</button>' +
             '</section>' +
@@ -689,14 +946,16 @@
           '</div>' +
         '</div>';
       document.body.appendChild(el);
-      D = { el: el, tick: 0, listens: {}, nodes: {}, armed: null };
+      D = { el: el, tick: 0, listens: {}, nodes: {}, armed: null, icon: '' };
       el.addEventListener('click', onDlgClick);
       el.addEventListener('change', onDlgChange);
+      el.addEventListener('input', onDlgInput);
       el.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); closeOwner(); } });
       if (configured) {
         updateHints();
         loadBlob();
         if (!booted) ownerBoot(); else sweep();
+        if (entries.some(function (e) { return !e.ended && e.expiresAt; })) measureClock();
         renderList();
         D.tick = setInterval(renderList, 1000);
       }
@@ -712,16 +971,53 @@
   }
   function q(sel) { return D && D.el.querySelector(sel); }
   function val(k) { var i = q('input[data-k="' + k + '"]'); return !!(i && i.checked); }
+  function chosenScripts() { return D ? Array.prototype.map.call(D.el.querySelectorAll('input[data-script]:checked'), function (i) { return i.getAttribute('data-script'); }) : []; }
   function updateHints() {
-    if (!D) return;
-    var ed = val('editable'), h = q('[data-hint="oneTime"]');
-    if (h) h.textContent = ed ? 'Only the first browser that opens it can use it; it stays live there until the timer ends or you revoke it.'
-      : 'Deleted from the server when it’s first opened.';
-    var exp = q('.burn-exp');
-    if (exp) q('.burn-custom').hidden = exp.value !== 'custom';
+    if (!D || !q('.burn-form')) return;
+    var ed = val('editable'), who = q('.burn-who').value, exp = q('.burn-exp').value;
+    var n = Math.floor(Number(q('.burn-max').value)) || 0;
+    q('.burn-cust').hidden = exp !== 'custom';
+    q('.burn-some').hidden = who !== 'some';
+    var them = who === 'some' ? (n > 0 ? 'the first ' + n + ' browsers' : 'the first few browsers') : '';
+    var h = who === 'one'
+      ? (ed ? 'Only the first browser that opens it can use it. It stays live there until the timer ends or you revoke it.' : 'Deleted from the server as soon as it’s opened.')
+      : who === 'some'
+        ? (ed ? 'Only ' + them + ' that open it can use it; each can come back to it.' : 'Only ' + them + ' that open it can read it — it’s deleted from the server once the last of them has.')
+        : (exp === 'none' ? 'Anyone with the link — pick a time limit too, so it self-destructs.' : 'Anyone who has the link can open it until it expires.');
+    q('[data-hint="who"]').textContent = h;
+    var timer = q('[data-row="timer"]');
+    timer.hidden = exp === 'none';
+    q('.burn-tools-off').hidden = ed; q('.burn-tools-on').hidden = !ed;
+    var picked = chosenScripts().length;
+    q('.burn-tools-n').textContent = !ed ? 'needs editing' : picked ? picked + ' chosen' : 'none';
+    // A one-line summary on the closed "More options".
+    var bits = [];
+    if (q('.burn-name').value.trim()) bits.push('name');
+    if (D.icon) bits.push(D.icon);
+    if (exp !== 'none' && !val('timer')) bits.push('no countdown');
+    if (val('copy')) bits.push('copying on');
+    if (ed && picked) bits.push(picked + ' tool' + (picked > 1 ? 's' : ''));
+    q('.burn-more-s').textContent = bits.length ? bits.join(' · ') : '';
+  }
+  function setIcon(icon, fromOwn) {
+    D.icon = C.cleanIcon(icon);
+    Array.prototype.forEach.call(D.el.querySelectorAll('.burn-ico'), function (b) {
+      b.setAttribute('aria-pressed', !fromOwn && b.getAttribute('data-icon') === D.icon ? 'true' : 'false');
+    });
+    if (!fromOwn) q('.burn-ico-own').value = '';
+    q('.burn-ico-own').classList.toggle('burn-ico-on', !!(fromOwn && D.icon));
+    updateHints();
   }
   function showErr(msg) { var e = q('.burn-err'); if (e) { e.textContent = msg || ''; e.hidden = !msg; } }
   function onDlgChange() { updateHints(); showErr(''); }
+  function onDlgInput(ev) {
+    if (ev.target.classList.contains('burn-ico-own')) {
+      var v = ev.target.value;
+      if (v.trim()) setIcon(v, true); else setIcon('', false);
+      return;
+    }
+    if (ev.target.classList.contains('burn-max') || ev.target.classList.contains('burn-name')) updateHints();
+  }
   function onDlgClick(ev) {
     if (ev.target === D.el) { closeOwner(); return; }
     var b = ev.target.closest('[data-act]');
@@ -729,9 +1025,10 @@
     var a = b.getAttribute('data-act');
     if (a === 'close') closeOwner();
     else if (a === 'sync') { closeOwner(); if (window.openSyncModal) window.openSyncModal(); }
+    else if (a === 'icon') setIcon(b.getAttribute('data-icon'), false);
     else if (a === 'create') doCreate(b);
     else if (a === 'copy') copyText(q('.burn-link').value);
-    else if (a === 'share') { var l = q('.burn-link').value; if (l && navigator.share) navigator.share({ url: l, title: 'Self-destructing note' }).catch(function () {}); }
+    else if (a === 'share') { var l = q('.burn-link').value; if (l && navigator.share) navigator.share({ url: l, title: 'Shared note' }).catch(function () {}); }
     else if (a === 'new') { q('.burn-result').hidden = true; q('.burn-form').hidden = false; }
     else if (a === 'row-copy') { var e1 = entryById(b.getAttribute('data-id')); if (e1) copyText(linkFor(e1)); }
     else if (a === 'row-revoke') {
@@ -750,9 +1047,11 @@
   }
   function doCreate(btn) {
     showErr('');
+    var ed = val('editable');
     var opts = {
       expiry: q('.burn-exp').value, custom: { n: q('.burn-cn').value, unit: q('.burn-cu').value },
-      oneTime: val('oneTime'), editable: val('editable'), copy: val('copy')
+      who: q('.burn-who').value, n: q('.burn-max').value, editable: ed, copy: val('copy'),
+      title: q('.burn-name').value, icon: D.icon, timer: val('timer'), scripts: ed ? chosenScripts() : []
     };
     btn.disabled = true; btn.textContent = 'Creating…';
     var p;
@@ -760,10 +1059,12 @@
     p.then(function (e) {
       if (!D) return;
       q('.burn-link').value = linkFor(e);
-      var parts = [e.oneTime ? (e.editable ? 'One browser only' : 'Opens once') : 'Opens any number of times',
-        e.expiresAt ? 'expires in ' + C.fmtLeft(e.expiresAt - now()) : 'no time limit',
+      var cap = C.capOfEntry(e), tools = opts.scripts.length;
+      var parts = [C.capLabel(cap),
+        e.expiresAt ? 'expires in ' + C.fmtLeft(C.leftOf(e, now())) + (opts.timer ? '' : ' (countdown hidden)') : 'no time limit',
         e.editable ? 'live editing' : 'read-only'];
       if (e.copy) parts.push('saving a copy allowed');
+      if (tools) parts.push(tools + ' tidy-up tool' + (tools > 1 ? 's' : ''));
       q('.burn-sum').textContent = parts.join(' · ');
       q('.burn-form').hidden = true; q('.burn-result').hidden = false;
       var inp = q('.burn-link'); inp.focus(); inp.select();
@@ -779,7 +1080,7 @@
     ownerRoot(e.db).then(function (root) {
       if (gone || !D) return;
       var node = nodeOf(root, e.id), plain = D.nodes[e.id] = D.nodes[e.id] || {};
-      ['meta', 'tomb', 'claim', 'presence'].forEach(function (k) {
+      ['meta', 'tomb', 'claim', 'claims', 'presence'].forEach(function (k) {
         var r = node.child(k), fn = function (s) {
           plain[k] = s.val();
           var x = entryById(e.id);
@@ -799,7 +1100,8 @@
       var plain = D.nodes[e.id];
       var st = C.statusOf(e, plain && 'meta' in plain ? plain : undefined, t);
       if (!st.ended) listen(e); else if (D.listens[e.id]) D.listens[e.id]();
-      var kind = [e.oneTime ? 'one-time' : '', e.editable ? 'editable' : 'read-only'].filter(Boolean).join(' · ');
+      var cap = st.cap;
+      var kind = [cap === 1 ? 'one person' : cap > 1 ? 'up to ' + cap : 'anyone', e.editable ? 'editable' : 'read-only'].join(' · ');
       var left = !st.ended && e.expiresAt ? C.fmtLeft(st.left) + ' left' : (!st.ended ? 'no timer' : '');
       var armed = D.armed === e.id;
       rows.push('<li class="burn-li burn-st-' + st.state + (st.ended ? ' burn-ended' : '') + '"><div class="burn-li-main"><div class="burn-li-t"><b>' + esc(e.title || e.room) + '</b><span class="burn-kind">' + esc(kind) + '</span></div>' +

@@ -2816,6 +2816,26 @@ body.origami-on .cade-panel-head .cade-panel-lockbtn, .cade-panel-head .cade-pan
 .cade-panel.cade-room-away > .cade-panel-body { opacity: 0.7; cursor: pointer; }
 .cade-panel.cade-room-stale > .cade-panel-body { visibility: hidden; }
 .cade-panel-body { overflow: auto; }
+/* Resize grab areas (see _addPanelResize). A sized panel's body fills it. */
+.cade-panel.cade-sized > .cade-panel-body { flex: 1 1 auto; min-height: 0; }
+.cade-rz { position: absolute; z-index: 3; touch-action: none; }
+.cade-rz-w { left: -4px; top: 36px; bottom: 12px; width: 8px; cursor: ew-resize; }
+.cade-rz-e { right: -4px; top: 36px; bottom: 12px; width: 8px; cursor: ew-resize; }
+.cade-rz-s { left: 12px; right: 12px; bottom: -4px; height: 8px; cursor: ns-resize; }
+.cade-rz-sw { left: -4px; bottom: -4px; width: 16px; height: 16px; cursor: nesw-resize; }
+.cade-rz-se { right: -4px; bottom: -4px; width: 16px; height: 16px; cursor: nwse-resize; }
+/* a small grip in the bottom-right corner says the panel can be resized */
+.cade-rz-se::after { content: ''; position: absolute; right: 7px; bottom: 7px; width: 8px; height: 8px; opacity: 0.45;
+  background: linear-gradient(135deg, transparent 0 45%, var(--text-faint, #999) 45% 55%, transparent 55% 70%, var(--text-faint, #999) 70% 80%, transparent 80%); }
+.cade-panel:hover > .cade-rz-se::after { opacity: 0.8; }
+.cade-panel.cade-resizing, .cade-panel.cade-resizing * { user-select: none; -webkit-user-select: none; }
+.cade-popped > .cade-rz { display: none; }
+/* Phone-width: full-width sheets — only the bottom edge resizes, with a visible handle bar. */
+@media (max-width: 599px) {
+  .cade-rz-w, .cade-rz-e, .cade-rz-sw, .cade-rz-se { display: none; }
+  .cade-rz-s { left: 30%; right: 30%; bottom: -2px; height: 18px; }
+  .cade-rz-s::after { content: ''; position: absolute; left: 50%; bottom: 5px; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: var(--text-faint, #999); opacity: 0.55; }
+}
 /* Minimized panels wait as chips in a dock just above the bottom chrome (clear
    of the phone's scroll buttons); a chip brings its panel back. The dock hangs
    off a zero-height anchor in the body's flex column right before the find &
@@ -3527,8 +3547,8 @@ body.inbox-list .find-panel { display: none !important; }
         <span class="scb-desc">Embeds a compressed copy of the text in the link — anyone can read it. No sync.</span>
       </button>
       <button class="btn share-opt" id="share-opt-burn" type="button" onclick="openBurnShare()">
-        <span class="scb-title">🔥 Self-destructing link…</span>
-        <span class="scb-desc">Opens once or until a timer runs out, then deletes itself. End-to-end encrypted; can be live-editable.</span>
+        <span class="scb-title">Self-destructing link…</span>
+        <span class="scb-desc">For one person, a few, or anyone until a timer runs out — then it deletes itself. End-to-end encrypted; can be live-editable.</span>
       </button>
     </div>
     <div class="form-group" style="margin-top: var(--space-3);">
@@ -6365,6 +6385,22 @@ function fenceContaining(pos) {
 }
 window.__cadeInFence = (pos) => !!fenceContaining(pos); // Cade.inCodeFence
 
+// Typing the third backtick of an opening fence — the line was just "``" (any
+// indent) with nothing after the caret, and the caret isn't inside a code
+// block, where ``` would close it — also writes the closing ``` on the line
+// below. The caret stays after the opening fence so a language can follow.
+const fenceAutoClose = EditorView.inputHandler.of((view, from, to, text) => {
+  if (text !== '`' || from !== to) return false;
+  const st = view.state, line = st.doc.lineAt(from);
+  const before = st.sliceDoc(line.from, from), after = st.sliceDoc(from, line.to);
+  const m = /^([ \t]*)``$/.exec(before);
+  if (!m || after.trim()) return false;
+  if (fenceContaining(from)) return false;
+  if (line.number < st.doc.lines && st.doc.line(line.number + 1).text.trim() === '```') return false;
+  view.dispatch({ changes: { from, to: line.to, insert: '`\n' + m[1] + '```' }, selection: { anchor: from + 1 }, userEvent: 'input.type' });
+  return true;
+});
+
 // Registered FIRST in the extensions list so every other plugin's update sees
 // current fence state within the same transaction.
 const fenceTrackerPlugin = ViewPlugin.fromClass(class {
@@ -8522,6 +8558,7 @@ function buildEditorExtensions() {
     // Respect the wrap mode when rebuilding state on room switch (item 3).
     // Only 'soft' uses lineWrapping; 'none'/'hard' scroll/insert-breaks.
     wrapCompartment.of(_wrapMode === 'soft' ? EditorView.lineWrapping : []),
+    fenceAutoClose,     // typing ``` opens a block and adds its closing fence
     fenceTrackerPlugin, // must precede the decorators that consult fence state
     listIndentPlugin,
     todoPlugin,
@@ -9113,6 +9150,7 @@ editor.dom.addEventListener('contextmenu', (e) => {
       { label: '⇥ Align right', run: () => setLineAlignment('right') },
       { sep: true },
       { label: 'Run script…', run: () => window.openPicker() },
+      ...(!fenceContaining(selm.from) && !fenceContaining(selm.to) ? [{ label: '{ } Add to Codeblock', run: () => insertCodeBlock() }] : []),
       { sep: true },
       { label: '📖 Define', run: () => {
           // First word of the selection, letters/apostrophes/hyphens only.
@@ -9135,7 +9173,7 @@ editor.dom.addEventListener('contextmenu', (e) => {
 // The popup is position:fixed and anchored to the word — close it if the
 // editor scrolls so it can't drift away from its word.
 editor.scrollDOM.addEventListener('scroll', closeSpellPopup, { passive: true });
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSpellPopup(); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeSpellPopup(); if (document.querySelector('.ctx-menu')) closeCtxMenu(); } });
 
 // ============================================
 // LINK ACTIONS, CONTEXT MENU & DOCUMENT NAVIGATION
@@ -23065,8 +23103,83 @@ function _mkPanel(id, title, bodyHtml) {
     p.style.top = Math.max(0, Math.min(window.innerHeight - 40, oy + e.clientY - sy)) + 'px';
   });
   head.addEventListener('pointerup', e => { drag = false; try { head.releasePointerCapture(e.pointerId); } catch {} _fitPanel(p); });
+  if (GAME_PANEL_IDS.indexOf(id) === -1) _addPanelResize(p);
   _watchPanelFit(p);
   return p;
+}
+
+// Resizing a docked panel: grab areas on the left, right and bottom edges and
+// both bottom corners (the header stays the move handle). On a phone-width
+// screen panels are full-width sheets, so only the bottom edge resizes there.
+// The size is remembered per panel on this device; double-click an edge to
+// go back to the widget's own size.
+const PANEL_SIZE_KEY = 'cade-panel-size:';
+function _panelNarrow() { return window.innerWidth < 600; }
+function _applySavedPanelSize(p) {
+  let v = null;
+  try { v = JSON.parse(store.get(PANEL_SIZE_KEY + p.id) || 'null'); } catch {}
+  if (!v) return;
+  const vw = document.documentElement.clientWidth || window.innerWidth, vh = window.innerHeight;
+  if (v.w > 0 && !_panelNarrow()) { p.style.width = Math.min(v.w, vw - 8) + 'px'; p.style.maxWidth = 'none'; }
+  if (v.h > 0) { p.style.height = Math.min(v.h, vh - 52) + 'px'; p.style.maxHeight = 'none'; }
+  if (v.w > 0 || v.h > 0) p.classList.add('cade-sized');
+}
+function _addPanelResize(p) {
+  ['w', 'e', 's', 'sw', 'se'].forEach(dir => {
+    const h = document.createElement('div');
+    h.className = 'cade-rz cade-rz-' + dir;
+    h.setAttribute('aria-hidden', 'true');
+    p.appendChild(h);
+    let st = null;
+    h.addEventListener('pointerdown', e => {
+      if (p.classList.contains('cade-popped') || (e.button && e.button !== 0)) return;
+      if (_panelNarrow() && dir !== 's') return;
+      e.preventDefault(); e.stopPropagation();
+      const r = p.getBoundingClientRect();
+      st = { x: e.clientX, y: e.clientY, l: r.left, t: r.top, w: r.width, h: r.height };
+      // pin the panel by its top-left so either edge can move
+      if (!_panelNarrow()) { p.style.left = r.left + 'px'; p.style.right = 'auto'; }
+      p.style.top = r.top + 'px'; p.style.bottom = 'auto';
+      p.style.maxWidth = 'none'; p.style.maxHeight = 'none'; p.__fitMaxW = p.__fitMaxH = false;
+      p.classList.add('cade-sized', 'cade-resizing');
+      try { h.setPointerCapture(e.pointerId); } catch {}
+    });
+    h.addEventListener('pointermove', e => {
+      if (!st) return;
+      const vw = document.documentElement.clientWidth || window.innerWidth;
+      const vv = window.visualViewport, vb = vv ? Math.min(window.innerHeight, vv.offsetTop + vv.height) : window.innerHeight;
+      const dx = e.clientX - st.x, dy = e.clientY - st.y, minW = 220, minH = 140;
+      if (dir === 'e' || dir === 'se') p.style.width = Math.round(Math.max(minW, Math.min(vw - st.l - 4, st.w + dx))) + 'px';
+      if (dir === 'w' || dir === 'sw') {
+        const w = Math.max(minW, Math.min(st.l + st.w - 4, st.w - dx));
+        p.style.width = Math.round(w) + 'px'; p.style.left = Math.round(st.l + st.w - w) + 'px';
+      }
+      if (dir === 's' || dir === 'se' || dir === 'sw') p.style.height = Math.round(Math.max(minH, Math.min(vb - st.t - 4, st.h + dy))) + 'px';
+    });
+    const end = e => {
+      if (!st) return;
+      st = null;
+      p.classList.remove('cade-resizing');
+      try { h.releasePointerCapture(e.pointerId); } catch {}
+      const r = p.getBoundingClientRect();
+      try { store.set(PANEL_SIZE_KEY + p.id, JSON.stringify({ w: _panelNarrow() ? 0 : Math.round(r.width), h: Math.round(r.height) })); } catch {}
+      _fitPanel(p);
+      try { window.dispatchEvent(new Event('resize')); } catch {}   // canvases / charts inside re-measure
+    };
+    h.addEventListener('pointerup', end);
+    h.addEventListener('pointercancel', end);
+    h.addEventListener('dblclick', e => {
+      e.preventDefault(); e.stopPropagation();
+      try { store.remove(PANEL_SIZE_KEY + p.id); } catch {}
+      const right = p.getBoundingClientRect().right;
+      p.style.width = ''; p.style.height = ''; p.style.maxWidth = ''; p.style.maxHeight = '';
+      p.classList.remove('cade-sized');
+      // keep the right edge where it was (panels dock on the right)
+      if (p.style.left && !_panelNarrow()) p.style.left = Math.max(4, Math.round(right - p.getBoundingClientRect().width)) + 'px';
+      _fitPanel(p);
+    });
+  });
+  _applySavedPanelSize(p);
 }
 
 // Keep every floating panel's header (and its ×) on screen: a panel that ends
@@ -23920,6 +24033,27 @@ window.openHighlightPicker = function(ev) {
   _hlPickerEl = el;
   setTimeout(() => document.addEventListener('pointerdown', _hlPickerOutside, true), 0);
 };
+// A fenced code block: around the selection (fences on their own lines), or an
+// empty one with the caret on the blank line inside it.
+function insertCodeBlock() {
+  const st = editor.state, sel = st.selection.main, doc = st.doc;
+  const a = doc.lineAt(sel.from), b = doc.lineAt(sel.to);
+  if (sel.empty) {
+    const pre = sel.from > a.from ? '\n' : '';                         // text before the caret on this line
+    const post = sel.from < a.to ? '\n' : '';                           // text after it
+    const ins = pre + '```\n\n```' + post;
+    editor.dispatch({ changes: { from: sel.from, insert: ins }, selection: { anchor: sel.from + pre.length + 4 }, scrollIntoView: true, userEvent: 'input' });
+  } else {
+    const text = st.sliceDoc(sel.from, sel.to).replace(/\n$/, '');
+    const pre = sel.from > a.from ? '\n' : '';
+    const post = sel.to < b.to ? '\n' : '';
+    const ins = pre + '```\n' + text + '\n```' + post;
+    const start = sel.from + pre.length + 4;
+    editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: ins }, selection: { anchor: start, head: start + text.length }, scrollIntoView: true, userEvent: 'input' });
+  }
+  editor.focus();
+}
+window.insertCodeBlock = insertCodeBlock;
 window.mdBtn = function(kind) {
   const def = MD_BTN_DEFS[kind]; if (!def) return;
   try { if (window.haptic) haptic(8); } catch {}
@@ -23935,8 +24069,9 @@ window.mdBtn = function(kind) {
     editor.dispatch({ changes: { from: line.from, insert: def.prefix }, selection: { anchor: sel.head + def.prefix.length } });
     editor.focus(); return;
   }
+  if (kind === 'code') { insertCodeBlock(); return; }
   if (!def.wrap) { editor.focus(); return; }
-  // wrap kinds (bold/italic/under/code): target the selection, or the word just
+  // wrap kinds (bold/italic/under): target the selection, or the word just
   // typed when the caret is at its end, or insert empty markers at the caret.
   let from = sel.from, to = sel.to;
   if (sel.empty) { const wr = _wordRangeBeforeCursor(); if (wr) { from = wr.from; to = wr.to; } }
