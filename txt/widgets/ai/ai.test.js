@@ -184,7 +184,8 @@ test('requests: Anthropic Messages — headers, no temperature (API 2026-10-21),
   assert.ok(!('temperature' in b) && !('top_p' in b) && !('top_k' in b));
   var nf = C.buildChat({ kind: 'anthropic', provider: 'anthropic', base: 'b', apiKey: 'k', model: 'claude-haiku-4-5', messages: [{ role: 'user', content: 'q' }] });
   assert.strictEqual(nf.init.headers['anthropic-beta'], undefined, 'fallbacks only where Anthropic recommends them');
-  assert.deepStrictEqual(JSON.parse(nf.init.body), { model: 'claude-haiku-4-5', max_tokens: 4096, stream: true, messages: [{ role: 'user', content: 'q' }] });
+  assert.deepStrictEqual(JSON.parse(nf.init.body), { model: 'claude-haiku-4-5', max_tokens: 64000, stream: true, messages: [{ role: 'user', content: 'q' }] },
+    'no limit set → the model’s own output maximum (Anthropic requires a number)');
   var off = C.buildChat({ kind: 'anthropic', provider: 'anthropic', base: 'b', apiKey: 'k', model: 'claude-opus-5-5', messages: [{ role: 'user', content: 'q' }], fallbacks: false });
   assert.strictEqual(off.init.headers['anthropic-beta'], undefined);
   assert.strictEqual(JSON.parse(off.init.body).fallbacks, undefined);
@@ -311,6 +312,24 @@ test('network failures: probe + environment → cors / unreachable / mixed / lna
   assert.strictEqual(C.refineNetwork('down', {}), 'unreachable');
   assert.strictEqual(C.refineNetwork('down', { mixedBlocked: true }), 'mixed');
   assert.strictEqual(C.refineNetwork('blocked', { lna: 'denied' }), 'lna');
+});
+test('answer length: 0 = no limit everywhere — nothing sent to local/OpenAI-style servers, the model maximum to Claude, kept 0 over the relay', function () {
+  var P = {}; C.PREFS.forEach(function (f) { if (f.key) P[f.key] = f; });
+  assert.strictEqual(P.maxTokens.default, 0); assert.strictEqual(P.maxTokens.min, 0);
+  assert.strictEqual(P.cloudMaxTokens.default, 0); assert.strictEqual(P.cloudMaxTokens.min, 0);
+  var ol = JSON.parse(C.buildChat({ kind: 'ollama', base: 'http://h:1', model: 'llama3.2', messages: MSGS, maxTokens: 0 }).init.body);
+  assert.ok(!('num_predict' in ol.options), 'Ollama: no num_predict');
+  ['lmstudio', 'unsloth', 'custom', 'openai', 'openrouter'].forEach(function (pv) {
+    var b = JSON.parse(C.buildChat({ kind: 'openai', provider: pv, base: 'http://h/v1', apiKey: 'k', model: 'm', messages: MSGS, maxTokens: 0 }).init.body);
+    assert.ok(!('max_tokens' in b) && !('max_completion_tokens' in b), pv + ': no length field');
+  });
+  var an = function (m, n) { return JSON.parse(C.buildChat({ kind: 'anthropic', provider: 'anthropic', base: 'b', apiKey: 'k', model: m, messages: MSGS, maxTokens: n }).init.body).max_tokens; };
+  assert.deepStrictEqual([an('claude-opus-5-5', 0), an('claude-fable-5-1', 0), an('claude-sonnet-4-6', 0), an('claude-haiku-4-5', 0), an('claude-3-7-sonnet', 0)], [128000, 128000, 128000, 64000, 32000]);
+  assert.strictEqual(an('claude-opus-5-5', 2000), 2000, 'a set number still applies');
+  assert.strictEqual(an('claude-haiku-4-5', 100000), 64000, 'never above the model maximum');
+  assert.deepStrictEqual([C.tokenLimit(0, 0), C.tokenLimit(9000, 0), C.tokenLimit(0, 2048), C.tokenLimit(9000, 2048), C.tokenLimit(undefined, NaN)], [0, 9000, 2048, 2048, 0]);
+  var rq = C.validateRequest(C.makeRequest({ id: 'abc123def456', from: 'dev1-tab', name: 'iPhone', kind: 'phone', did: 'dev1', provider: 'ollama', model: 'm', messages: [{ role: 'user', content: 'hi' }], temperature: 0.5, maxTokens: 0 }));
+  assert.ok(rq.ok); assert.strictEqual(rq.req.maxTokens, 0, 'no limit survives the relay (was clamped to 1)');
 });
 test('addresses: LM Studio’s own /api/v1 paths and a pasted /chat go to the OpenAI-compatible /v1 — locally only', function () {
   assert.strictEqual(C.normBase('openai', 'http://localhost:1234/api/v1/chat'), 'http://localhost:1234/v1');
@@ -1117,6 +1136,7 @@ test('service: cloud sharing switched on at the host → the phone sees Anthropi
     assert.deepStrictEqual(C.badges(opus).map(function (b) { return b.t; }), ['Cloud', '$4 · $20', '1M', '★1516']);
     // a conversation that started on Ollama continues on Claude
     var ref = C.refKey('mac00001', 'anthropic', 'claude-opus-5-5'), n0 = hits.length;
+    mac.P.set('cloudMaxTokens', 2048);
     var history = [{ role: 'user', content: 'Hi there' }, { role: 'assistant', content: 'Hello, café' }, { role: 'user', content: 'And now?' }];
     return ph.chat(history, { model: ref, maxTokens: 9000 }).then(function (r) {
       assert.ok(/déjà vu/.test(r.text));
@@ -1125,6 +1145,7 @@ test('service: cloud sharing switched on at the host → the phone sees Anthropi
       assert.ok(h, 'the host called Anthropic');
       assert.strictEqual(h.headers['x-api-key'], KEY, 'with ITS key');
       assert.strictEqual(h.body.max_tokens, 2048, 'capped by "Longest cloud answer for another device"');
+      mac.P.set('cloudMaxTokens', 0);
       assert.strictEqual(h.body.messages.length, 3, 'the whole conversation');
       assert.ok(!('temperature' in h.body));
       assert.deepStrictEqual(DEV.phoneFetch, [], 'still no fetch on the phone');

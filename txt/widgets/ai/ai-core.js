@@ -57,8 +57,8 @@
     { type: 'heading', label: 'Answers' },
     { key: 'temperature', type: 'slider', label: 'Creativity (temperature)', default: 0.7, min: 0, max: 2, step: 0.1,
       hint: 'Lower is focused and repeatable, higher is more varied. Not sent where the model only takes its default (Anthropic, OpenAI reasoning models)' },
-    { key: 'maxTokens', type: 'number', label: 'Longest answer', default: 4096, min: 32, max: 32768, step: 32, unit: 'tokens',
-      hint: 'Thinking models count their thinking in this too' },
+    { key: 'maxTokens', type: 'number', label: 'Longest answer', default: 0, min: 0, max: 131072, step: 256, unit: 'tokens',
+      hint: '0 = no limit: the model stops when it’s done (Claude gets its own maximum). Set a number to cap answers — thinking models count their thinking in it too' },
     { key: 'contextWindow', type: 'number', label: 'Context window (local models)', default: 0, min: 0, max: 262144, step: 1024, unit: 'tokens',
       hint: 'How much text an Ollama model reads at once. 0 = the server’s own setting (counted as 4096 when fitting a note in; cloud models use their own window). Bigger needs more memory' },
     { key: 'system', type: 'textarea', label: 'System prompt', maxLength: 4000,
@@ -74,8 +74,8 @@
       options: [{ value: 'auto', label: 'Answer automatically' }, { value: 'ask', label: 'Ask me each time' }] },
     { key: 'shareCloud', type: 'toggle', label: 'Share cloud services too', default: false, showIf: 'share',
       hint: 'Lets your other devices use this device’s API keys (OpenAI, Anthropic, …) — that can cost money. Local models are shared whenever sharing is on' },
-    { key: 'cloudMaxTokens', type: 'number', label: 'Longest cloud answer for another device', default: 2048, min: 64, max: 16384, step: 64, unit: 'tokens', showIf: 'shareCloud',
-      hint: 'A cap on what one question from another device may spend' }
+    { key: 'cloudMaxTokens', type: 'number', label: 'Longest cloud answer for another device', default: 0, min: 0, max: 131072, step: 256, unit: 'tokens', showIf: 'shareCloud',
+      hint: '0 = no limit. A number caps what one question from another device may spend on this device’s API keys' }
   ];
   var PREF_DEFAULTS = {};
   PREFS.forEach(function (f) { if (f.key) PREF_DEFAULTS[f.key] = f.default; });
@@ -232,6 +232,20 @@
     while (out.length && out[0].role !== 'user') out.shift();
     return { system: sys.join('\n\n'), messages: out };
   }
+  // Anthropic requires max_tokens; with no limit set, send the model's own output maximum
+  // (128K on Claude Opus 4.6+, Sonnet 4.6+, Haiku 5.5, Fable/Mythos; 64K on Haiku 4.5 and the
+  // 4.5-era models; 32K on anything older or unknown, which every Claude model accepts).
+  function anthropicMaxOut(model) {
+    var m = String(model || '');
+    if (/^claude-(fable|mythos)-|^claude-(opus|sonnet|haiku)-5|^claude-opus-4-[678]|^claude-sonnet-4-6/.test(m)) return 128000;
+    if (/^claude-(haiku|sonnet|opus)-4-5/.test(m)) return 64000;
+    return 32000;
+  }
+  // Two answer-length limits combined, 0 / missing meaning "no limit": the smaller real one.
+  function tokenLimit(a, b) {
+    var l = [a, b].map(function (v) { v = +v; return isFinite(v) && v > 0 ? Math.floor(v) : 0; }).filter(Boolean);
+    return l.length ? Math.min.apply(null, l) : 0;
+  }
   // A streamed chat request → { url, init }.
   // o: { kind, provider, base, apiKey, headers, model, messages, temperature, maxTokens, numCtx, stream, fallbacks }
   function buildChat(o) {
@@ -248,7 +262,7 @@
     if (o.kind === 'anthropic') {
       // API version 2026-10-21: max_tokens is required; temperature / top_p / top_k are gone (a 400).
       var am = anthropicMessages(msgs), fb = o.fallbacks !== false && ANTHROPIC_FALLBACK.indexOf(o.model) >= 0;
-      body = { model: o.model, max_tokens: Math.floor(o.maxTokens > 0 ? o.maxTokens : 4096), messages: am.messages, stream: stream };
+      body = { model: o.model, max_tokens: Math.floor(o.maxTokens > 0 ? Math.min(o.maxTokens, anthropicMaxOut(o.model)) : anthropicMaxOut(o.model)), messages: am.messages, stream: stream };
       if (am.system) body.system = am.system;
       if (fb) body.fallbacks = 'default';
       return { url: o.base + '/messages', fallbacks: fb,
@@ -999,7 +1013,7 @@
     REQ_MAX: 240000,          // characters of messages a host accepts
     RESP_MAX: 120000,         // characters of answer a host sends at most
     QUEUE_MAX: 3,             // questions waiting behind the running one
-    MAX_TOKENS: 32768,
+    MAX_TOKENS: 131072,
     PRESENCE_MODELS: 150,     // models listed per shared provider (an allow-list picks which)
     BEAT_MS: 30000,           // presence heartbeat…
     STALE_MS: 90000,          // …and when a silent host counts as gone
@@ -1050,7 +1064,7 @@
       model: typeof o.model === 'string' ? o.model.slice(0, 240) : '',
       messages: msgs,
       temperature: clampNum(opt.temperature, 0, 2, 0.7),
-      maxTokens: Math.round(clampNum(opt.maxTokens, 1, RELAY.MAX_TOKENS, 1024))
+      maxTokens: +opt.maxTokens > 0 ? Math.round(clampNum(opt.maxTokens, 1, RELAY.MAX_TOKENS, 1024)) : 0   // 0 = no limit
     } };
   }
   // ---- what a host shares ----
@@ -1718,7 +1732,7 @@
     providerOf: providerOf, presetOf: presetOf, kindOf: kindOf, endpointProvider: endpointProvider, normBase: normBase, hostOf: hostOf, addressSpace: addressSpace, isHttp: isHttp,
     refKey: refKey, parseRef: parseRef, parsePrefModel: parsePrefModel,
     headersFor: headersFor, providerHeaders: providerHeaders, modelsRequest: modelsRequest, modelsUrl: modelsUrl, anthropicMessages: anthropicMessages,
-    buildChat: buildChat, parseModels: parseModels, chatModels: chatModels, pickModel: pickModel, readChunk: readChunk,
+    buildChat: buildChat, tokenLimit: tokenLimit, anthropicMaxOut: anthropicMaxOut, parseModels: parseModels, chatModels: chatModels, pickModel: pickModel, readChunk: readChunk,
     ndjsonParser: ndjsonParser, sseParser: sseParser,
     AiError: AiError, errorMessage: errorMessage, classifyHttp: classifyHttp, refineNetwork: refineNetwork, isAbort: isAbort, explain: explain,
     listModels: listModels, chatStream: chatStream, probe: probe,

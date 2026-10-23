@@ -1092,7 +1092,7 @@
             return '<button type="button" role="radio" aria-checked="' + (W.policy === x[0]) + '" class="' + (W.policy === x[0] ? 'on' : '') + '" data-pol="' + x[0] + '">' + x[1] + '</button>';
           }).join('') + '</div>';
           if (cloudEps.length) h += '<label class="ai-switch ai-sub2"><input type="checkbox" class="ai-sharecloud-cb"' + (W.shareCloud ? ' checked' : '') + '><span class="ai-switch-ui" aria-hidden="true"></span>' +
-            '<span><b>Share cloud services too</b><small>' + esc(cloudEps.map(function (x) { return x.label; }).join(', ')) + ' — your other devices would spend this device’s API keys (up to ' + svc.pref('cloudMaxTokens') + ' tokens an answer; AI preferences). Off: only local models are shared.</small></span></label>';
+            '<span><b>Share cloud services too</b><small>' + esc(cloudEps.map(function (x) { return x.label; }).join(', ')) + ' — your other devices would spend this device’s API keys (' + (+svc.pref('cloudMaxTokens') > 0 ? 'up to ' + svc.pref('cloudMaxTokens') + ' tokens an answer' : 'no answer-length limit') + '; AI preferences). Off: only local models are shared.</small></span></label>';
           h += '<div class="ai-shared"><div class="ai-add-h">Shared models</div>' + svc.endpoints(false).map(function (x) {
             var off = x.where === 'cloud' && !W.shareCloud;
             return '<div class="ai-shared-r' + (off ? ' off' : '') + '"><span><b>' + esc(x.label) + '</b> <small>' + (off ? 'not shared (cloud)' : x.allow.length ? x.allow.length + ' chosen' : 'all models') + '</small></span>' +

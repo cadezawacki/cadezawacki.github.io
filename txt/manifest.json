@@ -1741,12 +1741,12 @@
             "key": "maxTokens",
             "type": "number",
             "label": "Longest answer",
-            "default": 4096,
-            "min": 32,
-            "max": 32768,
-            "step": 32,
+            "default": 0,
+            "min": 0,
+            "max": 131072,
+            "step": 256,
             "unit": "tokens",
-            "hint": "Thinking models count their thinking in this too"
+            "hint": "0 = no limit: the model stops when it’s done (Claude gets its own maximum). Set a number to cap answers — thinking models count their thinking in it too"
           },
           {
             "key": "contextWindow",
@@ -1824,13 +1824,13 @@
             "key": "cloudMaxTokens",
             "type": "number",
             "label": "Longest cloud answer for another device",
-            "default": 2048,
-            "min": 64,
-            "max": 16384,
-            "step": 64,
+            "default": 0,
+            "min": 0,
+            "max": 131072,
+            "step": 256,
             "unit": "tokens",
             "showIf": "shareCloud",
-            "hint": "A cap on what one question from another device may spend"
+            "hint": "0 = no limit. A number caps what one question from another device may spend on this device’s API keys"
           }
         ]
       }
