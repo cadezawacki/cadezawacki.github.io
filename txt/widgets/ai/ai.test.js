@@ -312,6 +312,20 @@ test('network failures: probe + environment → cors / unreachable / mixed / lna
   assert.strictEqual(C.refineNetwork('down', { mixedBlocked: true }), 'mixed');
   assert.strictEqual(C.refineNetwork('blocked', { lna: 'denied' }), 'lna');
 });
+test('addresses: LM Studio’s own /api/v1 paths and a pasted /chat go to the OpenAI-compatible /v1 — locally only', function () {
+  assert.strictEqual(C.normBase('openai', 'http://localhost:1234/api/v1/chat'), 'http://localhost:1234/v1');
+  assert.strictEqual(C.normBase('openai', 'http://localhost:1234/api/v0/models'), 'http://localhost:1234/v1');
+  assert.strictEqual(C.normBase('openai', 'http://192.168.1.5:1234/v1/chat'), 'http://192.168.1.5:1234/v1');
+  assert.strictEqual(C.normBase('openai', 'https://openrouter.ai/api/v1'), 'https://openrouter.ai/api/v1', 'OpenRouter’s real base is untouched');
+  assert.strictEqual(C.normBase('openai', 'https://openrouter.ai/api/v1/chat/completions'), 'https://openrouter.ai/api/v1');
+});
+test('model lists and probes bypass every cache (an old service worker answered them with a fake 504)', function () {
+  var seen = [];
+  var f = function (u, i) { seen.push(i && i.cache); return Promise.resolve({ ok: true, status: 200, text: function () { return Promise.resolve('{"data":[{"id":"m"}]}'); } }); };
+  return C.listModels(f, { kind: 'openai', provider: 'lmstudio', base: 'http://127.0.0.1:1234/v1' }).then(function () {
+    return C.probe(f, 'http://127.0.0.1:1234/v1/models', {});
+  }).then(function () { assert.deepStrictEqual(seen, ['no-store', 'no-store']); });
+});
 test('Unsloth Studio: local OpenAI-compatible preset on 8888, Bearer key, loaded models first, own fix texts', function () {
   var P = C.PROVIDERS.unsloth;
   assert.strictEqual(P.kind, 'openai'); assert.strictEqual(P.where, 'local'); assert.strictEqual(P.key, 'optional');

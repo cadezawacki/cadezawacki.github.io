@@ -142,7 +142,10 @@
       path = path.replace(/\/(api|v1)(\/.*)?$/, '');
       return origin + path;
     }
-    path = path.replace(/\/(chat\/completions|completions|messages|models|responses|embeddings)$/, '');
+    path = path.replace(/\/(chat\/completions|completions|messages|models|responses|embeddings|chat)$/, '');
+    // LM Studio's own API (/api/v1/chat, /api/v0/models…) is not the OpenAI-compatible one, which
+    // lives at /v1 on the same port. Only on this computer / the LAN: OpenRouter's base is /api/v1.
+    if (/^\/api\/v\d+(\/|$)/.test(path) && addressSpace(origin) !== 'public') path = '/v1';
     if (!path) path = '/v1';
     return origin + path;
   }
@@ -681,7 +684,7 @@
   function listModels(fetchImpl, o) {
     if (needsKey(o) && o.provider !== 'openrouter') return Promise.reject(AiError('key-missing', 'No API key'));
     var w = watchdog(o.signal, o.timeoutMs || 8000), t0 = nowMs(), rq = modelsRequest(o);
-    return fetchImpl(rq.url, netInit(rq.url, { method: 'GET', headers: rq.headers, signal: w.signal }, o.Request)).then(function (res) {
+    return fetchImpl(rq.url, netInit(rq.url, { method: 'GET', headers: rq.headers, signal: w.signal, cache: 'no-store' }, o.Request)).then(function (res) {
       return res.text().then(function (body) {
         if (!res.ok) { var c = classifyHttp(res.status, body); throw AiError(c.code, c.detail, { status: res.status, detail: c.detail }); }
         var j;
@@ -782,7 +785,7 @@
     var ms = o.timeoutMs || 2500, t0 = nowMs();
     function timed(init) {
       var w = watchdog(null, ms);
-      return fetchImpl(url, netInit(url, Object.assign({ method: 'GET', headers: o.headers || {}, signal: w.signal }, init), o.Request))
+      return fetchImpl(url, netInit(url, Object.assign({ method: 'GET', headers: o.headers || {}, signal: w.signal, cache: 'no-store' }, init), o.Request))
         .then(function (r) { w.done(); return r; }, function (e) { w.done(); throw e; });
     }
     return timed({}).then(function (res) {
