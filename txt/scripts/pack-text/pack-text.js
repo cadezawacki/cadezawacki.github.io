@@ -386,6 +386,6 @@
     description: 'Black out the selected text with █ blocks (keeps spaces and line breaks)',
     author: 'Cade',
     icon: '⬛',
-    tags: 'redact,censor,black out,blackout,hide,mask,obscure,privacy,secret,classified,block'
+    tags: 'redact,censor,black out,blackout,hide,hide text,hide this text,hide selection,hide words,mask,obscure,privacy,secret,classified,block'
   }, redactMain, [redact]);
 })();

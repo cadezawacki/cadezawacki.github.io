@@ -21,9 +21,9 @@
 
   var META = {
     name: 'Steganography',
-    description: 'Hide a secret message inside an image (invisible LSB, optional AES-GCM password) or inside ordinary text — and analyse any image to find data hidden in it',
+    description: 'Conceal a secret message in an image (invisible LSB, optional AES-GCM password) or in ordinary text — and analyse any image for concealed data',
     icon: '🕵',
-    tags: 'steganography,stego,hide,secret,message,image,photo,lsb,least significant bit,encrypt,password,aes,zero-width,invisible,ctf,reveal,extract,decode,bit plane,exif,strings,watermark'
+    tags: 'steganography,stego,hide message in image,hide in picture,hide in photo,hidden message,hidden data,secret message,conceal,image,photo,picture,lsb,least significant bit,encrypt,password,aes,zero-width,invisible,ctf,reveal,extract,decode,bit plane,exif,strings,watermark'
   };
 
   var esc = function (s) { return Cade.escapeHtml(String(s == null ? '' : s)); };
