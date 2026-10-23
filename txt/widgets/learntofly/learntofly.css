@@ -154,7 +154,3 @@
   .ltf-lnk { min-height: 40px; padding: 0 6px; }
   .ltf-go { padding: 12px; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .ltf-pk { transition: none; }
-  .ltf-pk.on { transform: none; }
-}

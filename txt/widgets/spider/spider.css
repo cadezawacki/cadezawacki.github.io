@@ -206,11 +206,6 @@
 }
 @keyframes sp-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 @keyframes sp-pop { 0% { transform: scale(0.3); opacity: 0; } 70% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); } }
-@media (prefers-reduced-motion: reduce) {
-  .sp-c, .kl .sp-c { transition: none; }
-  .sp-c.sp-hs .sp-in, .sp-c.sp-ht .sp-in, .sp-shake, .sp-big { animation: none; }
-  .sp-c.sp-hs .sp-in, .sp-c.sp-ht .sp-in { box-shadow: 0 0 0 3px var(--accent); }
-}
 @media (pointer: coarse) {
   .sp .sp-tool { min-height: 46px; }
   .sp .sp-btn { min-height: 32px; }

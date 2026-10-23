@@ -808,7 +808,7 @@
     try { Cade.closeAllMenus(); } catch (e) {}
     if (document.getElementById(PANEL)) { close(true); return; }
     teardown();
-    try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { reduced = false; }
+    reduced = false;
     var prefs = loadPrefs();
     var p = Cade.mkPanel(PANEL, '\u2604\ufe0f Asteroids', bodyHtml());
     if (Cade.markGamePanel) Cade.markGamePanel(p);

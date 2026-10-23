@@ -38,7 +38,7 @@
   function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
   function sevCounts(list) { var c = { high: 0, med: 0, low: 0 }; list.forEach(function (s) { if (c[s] != null) c[s]++; }); return c; }
   function noSolution(p) { return !p.solution || /^tbd\.?$/i.test(String(p.solution).trim()); }
-  function reduceMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  function reduceMotion() { return false; }
   function smooth() { return reduceMotion() ? 'auto' : 'smooth'; }
   /* readiness: puzzles count double, by design stage; assets by making stage. null when there is nothing to measure */
   function readiness(puzzles, assets) {

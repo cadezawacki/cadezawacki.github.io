@@ -586,8 +586,7 @@
     function hostResolve(req) {
       var t = C.resolveShared(shareCfg(), req.provider, req.model);
       if (!t.ok) return t;
-      if (t.ep.where === 'cloud') t.maxTokens = Math.min(req.maxTokens, pref('cloudMaxTokens'));
-      else t.maxTokens = req.maxTokens;
+      t.maxTokens = t.ep.where === 'cloud' ? C.tokenLimit(req.maxTokens, pref('cloudMaxTokens')) : C.tokenLimit(req.maxTokens, 0);
       return t;
     }
     function hostRun(job, h) {
@@ -597,7 +596,7 @@
       var tmo = pref('timeout') * 1000;
       return C.chatStream(fetchImpl, {
         kind: ep.kind, provider: ep.provider, base: ep.base, apiKey: ep.apiKey, headers: ep.headers, model: t.model, messages: job.req.messages,
-        temperature: job.req.temperature, maxTokens: Math.min(t.maxTokens || job.req.maxTokens, C.RELAY.MAX_TOKENS), numCtx: ep.kind === 'ollama' ? pref('contextWindow') : 0,
+        temperature: job.req.temperature, maxTokens: t.maxTokens, numCtx: ep.kind === 'ollama' ? pref('contextWindow') : 0,
         signal: h.signal, timeoutMs: tmo, firstTimeoutMs: Math.max(tmo, 60000), onDelta: h.onDelta, onThinking: h.onThinking, Request: mkReq
       }).then(function (r) { return { reason: r.reason, usage: r.usage, model: t.model }; }, function (e) {
         return refine(e, ep.base, ep.where).then(function (e2) {

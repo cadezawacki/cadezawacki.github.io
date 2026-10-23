@@ -24,4 +24,3 @@
 /* The || markers: hidden, shown faint on the caret's line (like **, ~~). */
 .cm-spl-mk { display: none; }
 .cm-activeLine .cm-spl-mk { display: inline; color: var(--text-faint); }
-@media (prefers-reduced-motion: reduce) { .cm-spl { transition: none; } }

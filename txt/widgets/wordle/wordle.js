@@ -167,7 +167,7 @@
   var stickyMsg = false;
 
   function later(fn, ms) { var t = setTimeout(function () { timers.splice(timers.indexOf(t), 1); if (P) fn(); }, ms); timers.push(t); return t; }
-  function reduced() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
+  function reduced() { return false; }
   function isDark() { return document.documentElement.getAttribute('data-theme') === 'dark'; }
 
   function loadWords() {

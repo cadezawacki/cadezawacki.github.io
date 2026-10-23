@@ -152,7 +152,6 @@
   .sr-b.sr-play { width: 52px; height: 52px; }
   .sr-hint { bottom: 4px; }
 }
-@media (prefers-reduced-motion: reduce) { .sr-hint { transition: none; } }
 /* Popped out: no minimize (the sheet rule above would otherwise bring it back
    in a narrow pop-out window) — its window is minimized like any other. */
 #speedread-panel.cade-popped .cade-panel-head .cade-panel-minbtn { display: none; }

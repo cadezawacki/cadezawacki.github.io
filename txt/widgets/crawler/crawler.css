@@ -64,7 +64,6 @@
   72%  { opacity: 1; }
   100% { opacity: 0; transform: translateY(-2px); }
 }
-@media (prefers-reduced-motion: reduce) { .cr-line { transform: none !important; } }
 .cr-line.cr-up { color: #ffe28a; }
 .cr-line.cr-win { color: #9fe0a0; }
 .cr-line.cr-die { color: #ff9a9a; }

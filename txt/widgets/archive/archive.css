@@ -174,7 +174,6 @@ select.ar-in { padding-right: 4px; }
 .ar-bar > span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 3px; transition: width 0.2s linear; }
 .ar-bar.ind > span { width: 30% !important; position: absolute; left: 0; animation: ar-ind 1.2s ease-in-out infinite; }
 @keyframes ar-ind { 0% { left: -30%; } 100% { left: 100%; } }
-@media (prefers-reduced-motion: reduce) { .ar-bar.ind > span { animation: none; width: 100% !important; opacity: 0.4; } .ar-bar > span { transition: none; } }
 .ar-job-s, .ar-job-f { font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; min-height: 1em; }
 .ar-job-f { color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

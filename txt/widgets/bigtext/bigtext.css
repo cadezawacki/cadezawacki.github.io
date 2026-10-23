@@ -40,10 +40,6 @@
   0% { background: var(--bt-bg); color: var(--bt-fg); }
   50% { background: var(--bt-fg); color: var(--bt-bg); }
 }
-@media (prefers-reduced-motion: reduce) {
-  .bt-flashing .bt-stage { animation: bt-pulse 1.6s ease-in-out infinite; }
-  @keyframes bt-pulse { 50% { opacity: 0.3; } }
-}
 
 .bt-count {
   position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);

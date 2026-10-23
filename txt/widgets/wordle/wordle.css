@@ -57,9 +57,6 @@
   0%, 20% { transform: translateY(0); } 40% { transform: translateY(-22px); } 50% { transform: translateY(4px); }
   60% { transform: translateY(-11px); } 80% { transform: translateY(2px); } 100% { transform: translateY(0); }
 }
-@media (prefers-reduced-motion: reduce) {
-  .wd-tile.wd-pop, .wd-tile.wd-flip, .wd-tile.wd-bounce, .wd-row.wd-shake { animation: none; }
-}
 
 .wd-toast {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 6; max-width: 92%;

@@ -310,7 +310,7 @@
   function readJSON(k, d) { try { var v = JSON.parse(Cade.store.get(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } }
   function writeJSON(k, v) { try { Cade.store.set(k, JSON.stringify(v)); } catch (e) {} }
   function now() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
-  function reduced() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  function reduced() { return false; }
   function toast(msg, type) { try { Cade.showToast(msg, type || 'info', 2200); } catch (e) {} }
   function haptic(ms) { try { Cade.haptic(ms); } catch (e) {} }
 

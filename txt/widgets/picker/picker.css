@@ -169,10 +169,6 @@ select.rp-in option { background: var(--surface); color: var(--text); }
 .rp-olist li { padding: 2px 0; overflow-wrap: anywhere; }
 .rp-olist li::marker { color: var(--text-faint); font-variant-numeric: tabular-nums; }
 
-@media (prefers-reduced-motion: reduce) {
-  .rp-coin { transition: none; }
-  .rp-pop, .rp-coinwrap.toss, .rp-pointer.kick { animation: none; }
-}
 @media (max-width: 560px) {
   #picker-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; max-height: calc(100vh - 100px); max-height: calc(100dvh - 100px); }
 }

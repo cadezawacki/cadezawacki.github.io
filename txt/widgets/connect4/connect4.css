@@ -125,10 +125,6 @@
 @keyframes c4-pulse { from { opacity: 1; transform: scale(1); } to { opacity: 0.35; transform: scale(0.75); } }
 @keyframes c4-ring { from { transform: scale(0.85); opacity: 0.6; } to { transform: scale(1.12); opacity: 1; } }
 @keyframes c4-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
-@media (prefers-reduced-motion: reduce) {
-  .c4-win::after, .c4-status.think .c4-dot, .c4-col.c4-shake { animation: none; }
-  .c4-ghost { transition: none; }
-}
 @media (pointer: coarse) {
   .c4 .c4-seg button { min-height: 36px; }
   .c4 .c4-tools button { min-height: 46px; }

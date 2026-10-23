@@ -152,7 +152,7 @@
   // ---- easing ----------------------------------------------------------------------------
   function ease(x) { return 0.5 - 0.5 * Math.cos(Math.PI * Math.max(0, Math.min(1, x))); }
   function fmtClock(s) { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60); }
-  function reducedOS() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
+  function reducedOS() { return false; }
 
   // ---- UI --------------------------------------------------------------------------------
   var S = null;

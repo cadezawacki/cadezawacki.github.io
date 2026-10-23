@@ -303,9 +303,6 @@ button.wx-tile:hover { border-color: var(--text-faint); }
 
 /* ---- motion off ---- */
 #weather-panel.wx-still *, #weather-panel.wx-still *::after { animation: none !important; }
-@media (prefers-reduced-motion: reduce) {
-  #weather-panel *, #weather-panel *::after { animation: none !important; transition: none !important; }
-}
 
 /* ---- phones ---- */
 @media (max-width: 560px) {

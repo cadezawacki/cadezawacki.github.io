@@ -109,7 +109,6 @@
 .burn-chip-clock b { color: var(--text); }
 .burn-chip-clock.burn-soon, .burn-chip-clock.burn-soon b { color: var(--error, #dc2626); border-color: var(--error, #dc2626); }
 @keyframes burn-pulse { 50% { opacity: 0.35; } }
-@media (prefers-reduced-motion: reduce) { .burn-chip-live i { animation: none; } }
 @media (min-width: 700px) {
   .burn-rv-chips { order: 0; flex: 0 0 auto; }
 }

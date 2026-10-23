@@ -131,10 +131,6 @@
   100% { transform: scale(1); }
 }
 @keyframes fp-pop { 0% { transform: scale(0.3); opacity: 0; } 70% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); } }
-@media (prefers-reduced-motion: reduce) {
-  .fp-t, .fp-last { transition: none; }
-  .fp-board.won .fp-t .fp-ti, .fp-big, .fp-wrap.fp-bump, .fp-ti.fp-bump { animation: none; }
-}
 @media (pointer: coarse) {
   .fp .fp-seg button { min-height: 36px; }
   .fp .fp-tool { min-height: 46px; }

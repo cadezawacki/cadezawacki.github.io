@@ -172,6 +172,3 @@
   .cbf-menu button { padding: 12px; font-size: var(--text-base, 14px); }
   .cbf-open { padding: 5px 10px 5px 8px; font-size: 12.5px; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .cbf-card.cbf-new, .cbf-ph { animation: none; }
-}

@@ -220,11 +220,3 @@ body.dz-on #side-nav { top: calc(var(--menubar-h, 44px) + var(--dz-bh)); }
   .dz-sw { margin-top: 2px; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .dz-banner.dz-run.dz-a::after, .dz-banner.dz-run.dz-b::after { animation: none; }
-  .dz-banner.dz-run.dz-a .dz-drain > i { animation: dz-drain-a var(--dz-g, 5s) linear both; }
-  .dz-banner.dz-run.dz-b .dz-drain > i { animation: dz-drain-b var(--dz-g, 5s) linear both; }
-  .dz-gone-card { animation: none; }
-  .dz-banner.dz-removing::after { animation: none; opacity: 0.15; }
-  .cm-editor.dz-on.dz-removing::after, .dz-doomed { animation: none; }
-}

@@ -147,7 +147,6 @@
 .sm-empty-s { color: var(--text-muted); font-size: var(--text-sm); line-height: 1.45; }
 .sm-empty-pick { text-align: left; margin-top: 8px; }
 
-@media (prefers-reduced-motion: reduce) { .sm-sheet { transition: none; } }
 @media (max-width: 560px) {
   #sunmoon-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; height: calc(100vh - 96px); height: calc(100dvh - 96px); }
   .sm-ev-v { font-size: 19px; }

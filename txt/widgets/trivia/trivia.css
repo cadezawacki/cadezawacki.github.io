@@ -143,7 +143,3 @@
   .tv-btn { padding: 10px 16px; }
   .tv-kbd, .tv-key { display: none; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .tv-spin { animation-duration: 2s; }
-  .tv-opt, .tv-timebar i { transition: none; }
-}

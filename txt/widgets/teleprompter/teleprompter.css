@@ -71,7 +71,6 @@
   22% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   100% { opacity: 0.15; transform: translate(-50%, -50%) scale(1.12); }
 }
-@media (prefers-reduced-motion: reduce) { .tp-cd.pop { animation: none; } }
 
 /* ---- progress / time ---- */
 .tp-hud {

@@ -76,6 +76,7 @@
   if (!Cade.ai) Cade.ai = { version: 2, status: lazy('status'), chat: lazy('chat'), models: lazy('models'), open: function () { open(); } };
 
   var I = {
+    chats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.7A8 8 0 1 1 21 12z"/></svg>',
     gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
     send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>',
     stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></svg>',
@@ -145,8 +146,8 @@
   var CARET = '<span class="ai-caret" aria-hidden="true"></span>';
   // The streaming caret goes right after the last character, not on a line of its own.
   function withCaret(html) {
-    return /(<\/(p|li|ul|ol|h\d|blockquote|code|pre|td|tr|tbody|table|strong|em|del|a)>)+$/.test(html)
-      ? html.replace(/((<\/(p|li|ul|ol|h\d|blockquote|code|pre|td|tr|tbody|table|strong|em|del|a)>)+)$/, CARET + '$1') : html + CARET;
+    return /(<\/(p|li|ul|ol|h\d|blockquote|code|pre|div|td|tr|tbody|table|strong|em|del|a)>)+$/.test(html)
+      ? html.replace(/((<\/(p|li|ul|ol|h\d|blockquote|code|pre|div|td|tr|tbody|table|strong|em|del|a)>)+)$/, CARET + '$1') : html + CARET;
   }
   function md(t) {
     t = stripThink(t);
@@ -161,6 +162,15 @@
     var tpl = document.createElement('template');
     tpl.innerHTML = html;
     clean(tpl.content);
+    Array.prototype.forEach.call(tpl.content.querySelectorAll('pre'), function (pre) {
+      var code = pre.querySelector('code'), lang = code && /(?:^|\s)language-([\w+#.-]{1,24})/.exec(code.className || '');
+      var box = document.createElement('div');
+      box.className = 'ai-code';
+      box.innerHTML = '<div class="ai-code-bar"><span class="ai-code-lang">' + (lang ? esc(lang[1]) : '') + '</span>' +
+        '<button type="button" class="ai-code-copy" data-act="codecopy" aria-label="Copy code">' + I.copy + '<span>Copy</span></button></div>';
+      pre.parentNode.insertBefore(box, pre);
+      box.appendChild(pre);
+    });
     return tpl.innerHTML;
   }
 
@@ -214,7 +224,7 @@
     s.offs.forEach(function (f) { try { f(); } catch (e) {} });
     s.offs = [];
     if (s.offHosts) { s.offHosts(); s.offHosts = null; }
-    clearTimeout(s.ctxT); clearTimeout(s.pkT); cancelAnimationFrame(s.raf);
+    clearTimeout(s.ctxT); clearTimeout(s.pkT); cancelAnimationFrame(s.raf); cancelAnimationFrame(s.jumpRaf || 0);
     try { Cade.offEditorUpdate(onEd); } catch (e) {}
     document.removeEventListener('visibilitychange', onVis);
     if (s.unuse) s.unuse();
@@ -229,7 +239,8 @@
       '<button type="button" class="ai-status" data-act="picker" aria-haspopup="dialog"><span class="ai-dot" aria-hidden="true"></span>' +
         '<span class="ai-status-t" role="status">Checking…</span><span class="ai-status-a"></span><span class="ai-status-dn">' + I.down + '</span></button>' +
       '<div class="ai-chat">' +
-        '<div class="ai-log" tabindex="-1" aria-live="polite"></div>' +
+        '<div class="ai-logwrap"><div class="ai-log" tabindex="-1" aria-live="polite"></div>' +
+          '<button type="button" class="ai-jump" data-act="jump" hidden aria-label="Jump to the latest message" title="Jump to the latest">' + I.down + '</button></div>' +
         '<div class="ai-dock">' +
           '<div class="ai-row ai-ctx" role="group" aria-label="What the AI reads">' +
             '<span class="ai-row-l">Reads</span>' +
@@ -245,11 +256,14 @@
             '<textarea class="ai-in" rows="1" placeholder="Ask about this note, or anything…" aria-label="Message"></textarea>' +
             '<button type="button" class="ai-send" data-act="send" aria-label="Send">' + I.send + '</button>' +
           '</div>' +
-          '<div class="ai-foot"><span class="ai-ctxinfo"></span><button type="button" class="ai-link" data-act="clear">Clear</button></div>' +
+          '<div class="ai-foot"><span class="ai-ctxinfo"></span><span class="ai-foot-a">' +
+            '<button type="button" class="ai-link ai-hubbtn" data-act="hub" title="Every note with a conversation on this device">' + I.chats + '<span>All chats</span></button>' +
+            '<button type="button" class="ai-link ai-clear" data-act="clear">Clear</button></span></div>' +
         '</div>' +
       '</div>' +
       '<div class="ai-setup" hidden></div>' +
       '<div class="ai-picker" hidden role="dialog" aria-label="Choose a model"></div>' +
+      '<div class="ai-hub" hidden role="dialog" aria-label="All chats" tabindex="-1"></div>' +
     '</div>';
   }
 
@@ -270,7 +284,7 @@
     head.insertBefore(gear, q('.cade-panel-popbtn') || q('.cade-panel-minbtn'));
 
     S = {
-      panel: panel, q: q, svc: svc, C: C, root: q('.ai-root'), log: q('.ai-log'), input: q('.ai-in'), setupEl: q('.ai-setup'), pkEl: q('.ai-picker'),
+      panel: panel, q: q, svc: svc, C: C, root: q('.ai-root'), log: q('.ai-log'), input: q('.ai-in'), setupEl: q('.ai-setup'), pkEl: q('.ai-picker'), hubEl: q('.ai-hub'), jump: q('.ai-jump'), hub: null,
       view: 'chat', wiz: null, msgs: [], room: currentRoom(), ctx: 'auto', ctxRoom: '', busy: null, route: null, routeGen: 0, histGen: 0,
       pick: svc.notePick(currentRoom()), pk: null, pkT: 0,
       offs: [], offHosts: null, unuse: svc.use(), raf: 0, ctxT: 0, copies: [], fixOs: null, hosts: null
@@ -282,6 +296,7 @@
     panel.addEventListener('keydown', onKey);
     panel.addEventListener('pointerdown', onPickOpen);
     panel.addEventListener('focusin', onPickOpen);
+    S.log.addEventListener('scroll', onLogScroll, { passive: true });
     S.offs.push(svc.on('host', function () { if (S) { paintStatus(); if (S.view === 'setup' && S.wiz && S.wiz.step === 3) renderSetup(); } }));
     S.offs.push(svc.on('badges', function () { if (!S) return; if (S.pk) loadPicker(); if (S.view === 'chat') refreshRoute(); }));
     S.offs.push(svc.on('prefs', function (k) {
@@ -512,6 +527,121 @@
     else showSetup(1, false);
   }
 
+  // ---- all chats: every note with a saved conversation on this device ------------------------------------
+  function ago(ts) {
+    var s = Math.max(0, (Date.now() - (+ts || 0)) / 1000);
+    if (!ts) return '';
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + ' min ago';
+    if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+    if (s < 86400 * 7) { var d = Math.floor(s / 86400); return d === 1 ? 'yesterday' : d + ' days ago'; }
+    return new Date(+ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: new Date(+ts).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+  }
+  function roomList() { try { var ra = Cade.roomsApi; return (ra && ra.list ? ra.list() : []) || []; } catch (e) { return []; } }
+  function openHub() {
+    if (!S || S.view !== 'chat') return;
+    closePicker();
+    S.hub = { q: '', items: null };
+    S.hubEl.hidden = false;
+    S.root.classList.add('ai-pk-open');
+    renderHub();
+    loadHub();
+    var qi = S.hubEl.querySelector('.ai-pk-q');
+    if (qi && !coarse()) qi.focus(); else S.hubEl.focus({ preventScroll: true });
+  }
+  function closeHub() {
+    if (!S || !S.hub) return;
+    S.hub = null;
+    S.hubEl.hidden = true;
+    S.hubEl.innerHTML = '';
+    S.root.classList.remove('ai-pk-open');
+  }
+  function loadHub() {
+    var h = S.hub, st = Cade.idbStore;
+    if (!st || !st.keys) { h.items = []; renderHub(); return; }
+    st.keys().then(function (keys) {
+      keys = (keys || []).filter(function (k) { return typeof k === 'string' && k.indexOf(CHAT_KEY) === 0; });
+      return Promise.all(keys.map(function (k) {
+        return st.get(k).then(function (v) { return { room: k.slice(CHAT_KEY.length), v: v }; }, function () { return null; });
+      }));
+    }).then(function (rows) {
+      if (!S || S.hub !== h) return;
+      // the list holds names lower-cased while the open note keeps its typed casing; "" is the
+      // note you have before Sync / rooms are set up, which always exists
+      var exists = { '': 1 };
+      roomList().forEach(function (n) { exists[String(n).toLowerCase()] = 1; });
+      h.items = (rows || []).filter(function (r) { return r && r.v && Array.isArray(r.v.msgs) && r.v.msgs.length; }).map(function (r) {
+        var msgs = r.v.msgs, qs = msgs.filter(function (m) { return m.role === 'user'; }), lastQ = qs[qs.length - 1];
+        var lastA = msgs.filter(function (m) { return m.role === 'assistant' && m.model; }).pop();
+        var at = r.v.at || msgs.reduce(function (n, m) { return Math.max(n, +m.at || 0); }, 0);
+        return { room: r.room, at: at, n: qs.length, missing: !exists[r.room.toLowerCase()],
+          q: lastQ ? String(lastQ.show || lastQ.content || '').replace(/\s+/g, ' ').trim() : '',
+          model: lastA ? (lastA.modelName || lastA.model) : '',
+          text: (r.room + ' ' + msgs.map(function (m) { return m.show || m.content || ''; }).join(' ')).toLowerCase() };
+      }).sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
+      renderHub();
+    }, function () { if (S && S.hub === h) { h.items = []; renderHub(); } });
+  }
+  function renderHub() {
+    var h = S.hub;
+    if (!h) return;
+    var y = 0, list = S.hubEl.querySelector('.ai-pk-list'), qi = S.hubEl.querySelector('.ai-pk-q'), hadFocus = qi && document.activeElement === qi,
+      inside = S.hubEl.contains(document.activeElement);
+    if (list) y = list.scrollTop;
+    var q = h.q.trim().toLowerCase(), body = '';
+    if (!h.items) body = '<div class="ai-busyline"><span class="ai-spin"></span>Looking for chats…</div>';
+    else {
+      var items = q ? h.items.filter(function (it) { return it.text.indexOf(q) >= 0; }) : h.items;
+      if (!S.svc.pref('history')) body += '<p class="ai-pk-empty">Conversations aren’t being kept — turn on “Keep the conversation for each note” in AI preferences.</p>';
+      if (!h.items.length) body += '<p class="ai-pk-empty">No chats yet. Every note you ask the AI about shows up here, newest first.</p>';
+      else if (!items.length) body += '<p class="ai-pk-empty">No chat matches “' + esc(h.q.trim()) + '”.</p>';
+      body += items.map(function (it) {
+        var cur = it.room === S.room, live = S.busy && S.busy.room === it.room;
+        var tags = (cur ? '<span class="ai-hub-tag">this note</span>' : '') + (live ? '<span class="ai-hub-tag ai-hub-live">answering…</span>' : '') +
+          (it.missing ? '<span class="ai-hub-tag ai-hub-gone">note not found</span>' : '');
+        var sub = [it.n + (it.n === 1 ? ' question' : ' questions'), ago(it.at), it.model].filter(Boolean).map(esc).join(' · ');
+        return '<div class="ai-hub-row' + (cur ? ' on' : '') + '">' +
+          '<button type="button" class="ai-hub-main" data-act="hub-open" data-room="' + esc(it.room) + '"' + (it.missing ? ' disabled' : '') + '>' +
+            '<span class="ai-hub-n">' + esc(it.room || 'Your note (no room)') + tags + '</span>' +
+            (it.q ? '<span class="ai-hub-q">' + esc(it.q.length > 140 ? it.q.slice(0, 140) + '…' : it.q) + '</span>' : '') +
+            '<span class="ai-hub-sub">' + sub + '</span></button>' +
+          '<button type="button" class="ai-hub-del" data-act="hub-del" data-room="' + esc(it.room) + '" aria-label="Delete the chat for ' + esc(it.room) + '" title="Delete this chat">×</button></div>';
+      }).join('');
+    }
+    S.hubEl.innerHTML = '<div class="ai-pk-head"><span class="ai-pk-title">All chats' + (h.items && h.items.length ? ' <small>' + h.items.length + '</small>' : '') + '</span>' +
+        '<button type="button" class="ai-pk-x" data-act="hub-close" aria-label="Close">×</button></div>' +
+      '<input class="ai-pk-q ai-hub-q" type="search" placeholder="Search notes and conversations" aria-label="Search chats" value="' + esc(h.q) + '" autocomplete="off" spellcheck="false">' +
+      '<div class="ai-pk-list">' + body + '</div>' +
+      '<div class="ai-hub-foot">Chats are kept on this device only.</div>';
+    list = S.hubEl.querySelector('.ai-pk-list');
+    if (list) list.scrollTop = y;
+    if (hadFocus) { qi = S.hubEl.querySelector('.ai-pk-q'); qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
+    else if (inside && !S.hubEl.contains(document.activeElement)) S.hubEl.focus({ preventScroll: true });   // Escape keeps working
+  }
+  function hubOpen(room) {
+    var ra = Cade.roomsApi;
+    closeHub();
+    if (room === S.room) return;
+    if (!room) { toast('That chat belongs to your note from before rooms were set up', 'info', 2600); return; }
+    if (!ra || typeof ra.switchRoom !== 'function') { toast('Can’t open notes from here', 'error'); return; }
+    Promise.resolve(ra.switchRoom(room)).then(function () { if (S) onEd(null); }, function () { toast('Couldn’t open “' + room + '”', 'error'); });
+  }
+  // Two taps: the first arms the button ("Delete?"), the second deletes.
+  function hubDelete(btn) {
+    var room = btn.dataset.room;
+    if (!btn.classList.contains('ai-armed')) {
+      btn.classList.add('ai-armed'); btn.textContent = 'Delete?';
+      setTimeout(function () { if (btn.isConnected) { btn.classList.remove('ai-armed'); btn.textContent = '×'; } }, 2500);
+      return;
+    }
+    if (S.busy && S.busy.room === room) { toast('Wait for the answer to finish', 'info', 1800); return; }
+    Promise.resolve(Cade.idbStore && Cade.idbStore.remove(CHAT_KEY + room)).catch(function () {}).then(function () {
+      if (!S) return;
+      if (room === S.room) { S.msgs = []; renderLog(); }
+      if (S.hub) { S.hub.items = (S.hub.items || []).filter(function (it) { return it.room !== room; }); renderHub(); }
+    });
+  }
+
   // ---- conversation ----------------------------------------------------------------------------------
   function loadHistory() {
     if (!S) return;
@@ -590,6 +720,16 @@
     S.log.innerHTML = S.msgs.length ? S.msgs.map(msgHtml).join('') : emptyHtml();
     S.log.scrollTop = S.log.scrollHeight;
     S.q('[data-act="clear"]').hidden = !S.msgs.length;
+    paintJump();
+  }
+  // "Jump to the latest": shown once the newest message is out of view; a dot while an
+  // answer is still coming in below.
+  function onLogScroll() { if (S && !S.jumpRaf) S.jumpRaf = requestAnimationFrame(function () { if (S) { S.jumpRaf = 0; paintJump(); } }); }
+  function paintJump() {
+    if (!S || !S.jump) return;
+    var l = S.log, away = S.view === 'chat' && S.msgs.length > 0 && l.scrollHeight - l.scrollTop - l.clientHeight > 160;
+    S.jump.hidden = !away;
+    S.jump.classList.toggle('ai-jump-new', away && !!(S.busy && S.busy.room === S.room));
   }
   // While streaming: only the live answer is redrawn (once a frame at most).
   function scheduleLive() {
@@ -607,6 +747,7 @@
       if (old) old.outerHTML = html || '<span hidden></span>';
       else if (html) el.insertAdjacentHTML('beforeend', html);
       if (stick) S.log.scrollTop = S.log.scrollHeight;
+      paintJump();
     });
   }
   function paintBusy() {
@@ -951,7 +1092,7 @@
             return '<button type="button" role="radio" aria-checked="' + (W.policy === x[0]) + '" class="' + (W.policy === x[0] ? 'on' : '') + '" data-pol="' + x[0] + '">' + x[1] + '</button>';
           }).join('') + '</div>';
           if (cloudEps.length) h += '<label class="ai-switch ai-sub2"><input type="checkbox" class="ai-sharecloud-cb"' + (W.shareCloud ? ' checked' : '') + '><span class="ai-switch-ui" aria-hidden="true"></span>' +
-            '<span><b>Share cloud services too</b><small>' + esc(cloudEps.map(function (x) { return x.label; }).join(', ')) + ' — your other devices would spend this device’s API keys (up to ' + svc.pref('cloudMaxTokens') + ' tokens an answer; AI preferences). Off: only local models are shared.</small></span></label>';
+            '<span><b>Share cloud services too</b><small>' + esc(cloudEps.map(function (x) { return x.label; }).join(', ')) + ' — your other devices would spend this device’s API keys (' + (+svc.pref('cloudMaxTokens') > 0 ? 'up to ' + svc.pref('cloudMaxTokens') + ' tokens an answer' : 'no answer-length limit') + '; AI preferences). Off: only local models are shared.</small></span></label>';
           h += '<div class="ai-shared"><div class="ai-add-h">Shared models</div>' + svc.endpoints(false).map(function (x) {
             var off = x.where === 'cloud' && !W.shareCloud;
             return '<div class="ai-shared-r' + (off ? ' off' : '') + '"><span><b>' + esc(x.label) + '</b> <small>' + (off ? 'not shared (cloud)' : x.allow.length ? x.allow.length + ' chosen' : 'all models') + '</small></span>' +
@@ -1176,6 +1317,18 @@
         else openPicker('chat');
         break;
       case 'pk-close': closePicker(); break;
+      case 'codecopy': {
+        var pre = t.closest('.ai-code') && t.closest('.ai-code').querySelector('pre'), lbl = t.querySelector('span');
+        if (!pre) break;
+        copyText(pre.textContent.replace(/\n$/, ''));
+        if (lbl) { lbl.textContent = 'Copied'; t.classList.add('ai-done'); setTimeout(function () { if (lbl.isConnected) { lbl.textContent = 'Copy'; t.classList.remove('ai-done'); } }, 1400); }
+        break;
+      }
+      case 'jump': S.log.scrollTo({ top: S.log.scrollHeight, behavior: 'smooth' }); break;
+      case 'hub': openHub(); break;
+      case 'hub-close': closeHub(); break;
+      case 'hub-open': hubOpen(t.dataset.room); break;
+      case 'hub-del': hubDelete(t); break;
       case 'pk-save': {
         var pk = S.pk;
         S.svc.saveEndpoint({ id: pk.opts.ep, allow: pk.sel ? pk.sel.slice() : [] });
@@ -1235,11 +1388,16 @@
       S.pk.q = t.value;
       clearTimeout(S.pkT);
       S.pkT = setTimeout(function () { if (S && S.pk) renderPicker(); }, 120);
+    } else if (t.classList.contains('ai-hub-q') && S.hub) {
+      S.hub.q = t.value;
+      clearTimeout(S.pkT);
+      S.pkT = setTimeout(function () { if (S && S.hub) renderHub(); }, 120);
     }
   }
   function onKey(e) {
     if (!S) return;
     if (e.key === 'Escape' && S.pk) { e.preventDefault(); e.stopPropagation(); closePicker(); return; }
+    if (e.key === 'Escape' && S.hub) { e.preventDefault(); e.stopPropagation(); closeHub(); return; }
     if (e.key === 'Escape' && S.busy) { e.preventDefault(); e.stopPropagation(); S.busy.ctl.abort(); return; }
     if (e.target === S.input && e.key === 'Enter' && !e.shiftKey && !e.isComposing && !coarse()) { e.preventDefault(); send(S.input.value); return; }
     if (S.wiz && e.key === 'Enter' && e.target.classList && (e.target.classList.contains('ai-ep-url') || e.target.classList.contains('ai-ep-key'))) {

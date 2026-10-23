@@ -91,8 +91,3 @@
   .tts-sbtn { padding: 8px 12px; }
   .tts-row input[type="range"] { height: 28px; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .tts-bar-fill, .tts-prog-fill { transition: none; }
-  .tts-prog.busy .tts-prog-fill { animation: none; }
-  .tts-status.busy::after { animation: none; }
-}

@@ -213,7 +213,3 @@
   .gq-kbd, .gq-opt .gq-key { display: none; }
   .gq-opts-flags .gq-opt { min-height: 78px; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .gq-shake { animation: none; }
-  .gq-opt { transition: none; }
-}

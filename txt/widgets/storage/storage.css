@@ -142,7 +142,6 @@
 }
 .si-wait { margin-left: 5px; font-size: var(--text-xs); color: var(--text-faint); }
 @keyframes si-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .si-spin { animation: none; border-top-color: var(--text-faint); } }
 
 /* ---- confirm sheet ---- */
 .si-sheet {
