@@ -8,7 +8,8 @@
  * fragment (#burn=…), which browsers never send to a server. The node holds:
  *   meta     { v: 2 | 3, created (server time), expiresAt (ms, 0 = no timer),
  *              maxOpens (0 = anyone), oneTime (= maxOpens 1, for older code), editable,
- *              live (v3 only: "watch live" — editable stays false) }
+ *              live (v3 only: "watch live" — editable stays false),
+              respond (v4: a response link — also live, never editable) }
  *            plain, non-secret: only what enforcement needs
  *   head     sealed { title, copy, icon, timer, scripts, live }              (AAD …/head)
  *            everything that describes the content: the name the reader sees,
@@ -28,6 +29,9 @@
  * 'edit' keep their text on the server while the link is alive and take
  * slots the same way. A v3 'live' meta keeps editable: false, so code from
  * before v3 shows such a link as a snapshot (and treats it as read-only).
+ * 'respond' (v4) — a poll, date planner, RSVP or shared list; its logic and
+ * extra nodes (resp, closed, reveal) are in burn-respond-core.js. Its doc
+ * holds only a "reload to respond" text for older readers.
  *
  * Live editing: every writer keeps `shared` = the last version it fully
  * incorporated. A push is a compare-and-swap transaction on doc (ver must
@@ -234,12 +238,17 @@
   // What a link lets its reader do (a meta or an owner's entry): 'edit' (live
   // two-way), 'live' (watch the owner's changes, read only) or 'read' (a
   // snapshot). editable wins, so a link can't be both.
-  function modeOf(m) { return !m ? 'read' : m.editable ? 'edit' : m.live ? 'live' : 'read'; }
+  // 'respond' (v4: a poll, date planner, list… — burn-respond-core.js) wins over
+  // the rest: its meta also says live (so v3 readers keep its slots and show
+  // the fallback text) but never editable.
+  function modeOf(m) { return !m ? 'read' : m.respond ? 'respond' : m.editable ? 'edit' : m.live ? 'live' : 'read'; }
   // Live links (edit / live) keep their text on the server while the link is
   // alive, and a slot stays its browser's; a snapshot may burn after reading.
   function staysLive(m) { return modeOf(m) !== 'read'; }
   // The owner list's word for it.
-  function modeWord(m) { var md = modeOf(m); return md === 'edit' ? 'editable' : md === 'live' ? 'watch live' : 'read-only'; }
+  function modeWord(m) { var md = modeOf(m); return md === 'respond' ? 'responses' : md === 'edit' ? 'editable' : md === 'live' ? 'watch live' : 'read-only'; }
+  // Owner devices keep an engine (LiveDoc) running only for these.
+  function hasEngine(m) { var md = modeOf(m); return md === 'edit' || md === 'live'; }
   // A v1 one-time link: a single `claim` node rather than `claims`.
   function isV1Claim(meta) { return !!meta && meta.maxOpens == null && !!meta.oneTime; }
 
@@ -371,11 +380,12 @@
       seen[e.id] = 1;
       var x = {
         id: e.id, key: e.key, db: e.db, room: String(e.room || ''), title: String(e.title || e.room || ''),
-        created: +e.created || 0, expiresAt: +e.expiresAt || 0, oneTime: !!e.oneTime, editable: !!e.editable, live: !e.editable && !!e.live, copy: !!e.copy,
+        created: +e.created || 0, expiresAt: +e.expiresAt || 0, oneTime: !!e.oneTime, editable: !e.respond && !!e.editable, live: !e.editable && !e.respond && !!e.live, copy: !!e.copy,
         ended: e.ended && e.ended.why ? { why: String(e.ended.why), at: +e.ended.at || 0 } : null
       };
       if (e.v === 2) { x.v = 2; x.maxOpens = capOfEntry(e); }
       if (+e.ttl > 0) x.ttl = +e.ttl;
+      if (e.respond) { x.respond = true; if (typeof e.rtype === 'string') x.rtype = e.rtype.slice(0, 20); }
       out.shares.push(x);
     });
     return out;
@@ -408,7 +418,9 @@
   // A head as read; v1 links sealed only { title, copy }, v2 no `live`.
   function readHead(h) {
     h = h && typeof h === 'object' ? h : {};
-    return { title: cleanName(h.title), copy: !!h.copy, icon: cleanIcon(h.icon), timer: h.timer !== false, scripts: cleanScripts(h.scripts), live: h.live === true };
+    var out = { title: cleanName(h.title), copy: !!h.copy, icon: cleanIcon(h.icon), timer: h.timer !== false, scripts: cleanScripts(h.scripts), live: h.live === true };
+    if (h.respond && typeof h.respond === 'object') out.respond = true;     // (its content: burn-respond-core's readRespond)
+    return out;
   }
   // How the reader's page shows a link. A "watch live" view needs both the
   // plain meta and the sealed head to say so; anything else falls back to the
@@ -416,6 +428,7 @@
   function viewOf(meta, head) {
     var md = modeOf(meta);
     if (md === 'live' && !(head && head.live)) return 'read';
+    if (md === 'respond' && !(head && head.respond)) return 'read';
     return md;
   }
 
@@ -737,7 +750,7 @@
     cleanName: cleanName, cleanIcon: cleanIcon, cleanScripts: cleanScripts, makeHead: makeHead, readHead: readHead,
     SCRIPTS: SCRIPTS, scriptById: scriptById, packsFor: packsFor, parsePack: parsePack, runScript: runScript, minimalEdit: minimalEdit,
     mergeLive: mergeLive, mergeWords: mergeWords, mapPos: mapPos,
-    modeOf: modeOf, staysLive: staysLive, modeWord: modeWord, viewOf: viewOf, LiveDoc: LiveDoc, Follow: Follow, isVer: isVer
+    modeOf: modeOf, staysLive: staysLive, modeWord: modeWord, hasEngine: hasEngine, viewOf: viewOf, LiveDoc: LiveDoc, Follow: Follow, isVer: isVer
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.__cadeBurnCore = api;
