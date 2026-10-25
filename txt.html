@@ -9352,6 +9352,7 @@ function openLinkMenu(link, x, y) {
   const items = [
     { label: 'Open link', run: () => openLink(link.url) },
     { label: 'Copy link', run: () => ctxCopy(link.url) },
+    { label: 'Send to device…', run: () => window.sendLinkToDevice({ url: link.url, title: link.kind === 'md' ? link.title : '' }) },
     { sep: true },
     { label: link.kind === 'md' ? 'Edit title…' : 'Add title…', run: () => retitleLink(link) },
   ];
@@ -11689,6 +11690,42 @@ async function _clipGoToInbox() {
     setTimeout(tryApply, 120);
   };
   setTimeout(tryApply, 120);
+})();
+
+// ---- Send a link to another device  (?send=…) --------------------------------
+// The sender half of "Send to device" (txt/widgets/linksend/, lazy): an iOS
+// Shortcut or the bookmarklet opens txt.html?send=<url>&title=<title>&to=<device>.
+// As with ?clip=, the parameters leave the address bar at once (a refresh can't
+// send twice); the request waits in sessionStorage until the module's sheet has
+// sent it, so a reload before that brings the sheet back.
+function _linksendModule() {
+  if (window.__cadeLinkSend) return Promise.resolve(window.__cadeLinkSend);
+  const t0 = Date.now();
+  return new Promise((res, rej) => {
+    (function go() {
+      const m = _manifestById.get('linksend') || (Date.now() - t0 > 4000 ? { id: 'linksend', entry: 'widgets/linksend/linksend.js' } : null);
+      if (!m) { setTimeout(go, 100); return; }
+      loadModule(m).then(() => window.__cadeLinkSend ? res(window.__cadeLinkSend) : rej(new Error('linksend module missing')), rej);
+    })();
+  });
+}
+window.sendLinkToDevice = function(req) {
+  try { closeCtxMenu(); } catch {}
+  _linksendModule().then(M => M.openSender(req || {})).catch(() => showToast('Couldn’t load Send to device (offline?)', 'error', 3500));
+};
+(function _sendFromUrl() {
+  let req = null;
+  try {
+    const p = new URLSearchParams(location.search);
+    if (p.has('send')) {
+      req = { url: p.get('send') || '', title: p.get('title') || '', to: p.get('to') || '' };
+      ['send', 'title', 'to'].forEach(k => p.delete(k));
+      const qs = p.toString();
+      window.history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+      sessionStorage.setItem('cade-linksend-req', JSON.stringify(req));
+    } else req = JSON.parse(sessionStorage.getItem('cade-linksend-req') || 'null');
+  } catch {}
+  if (req && typeof req === 'object') setTimeout(() => window.sendLinkToDevice(req), 0);
 })();
 
 
