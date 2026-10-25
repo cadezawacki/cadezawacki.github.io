@@ -7,7 +7,8 @@
  *
  *  - OWNER (Share → "Self-destructing link…", or Ctrl+K "Self-destructing
  *    links"): a dialog to create a link — expiry, who can open it, what they
- *    can do (read a snapshot / watch my changes live / edit with me) up top;
+ *    can do (read a snapshot / watch my changes live / edit with me /
+ *    respond — a poll, dates, RSVP or a shared list: burn-respond.js) up top;
  *    under "More options" the name and icon the reader sees, the
  *    countdown, saving a copy and the tidy-up tools (an allow-list of the
  *    app's own text scripts, run on the reader's text) — and the list of
@@ -30,7 +31,10 @@
  * through Cade.roomsApi.write, whether or not the room is open.
  * Watch live: the owner's devices run the same push path (LiveDoc pushOnly —
  * no merge, no apply: nothing from the share ever reaches the room); the
- * reader's page follows the versions read-only (burn-core's Follow). */
+ * reader's page follows the versions read-only (burn-core's Follow).
+ * Respond: burn-respond-core.js / burn-respond.js / burn-respond.css are
+ * loaded (respondLib) only when the owner picks Respond, has such a link in
+ * the list, or a reader opens one; this file keeps the link's lifecycle. */
 (function () {
   'use strict';
   if (typeof window === 'undefined' || !window.Cade) return;
@@ -41,9 +45,9 @@
   var NAME = 'Self-destructing links';
   var META = {
     name: NAME,
-    description: 'Share a note by a link that self-destructs — after one open, or when a timer runs out — end-to-end encrypted, optionally live-editable; for people without Cade.txt',
+    description: 'Share a note by a link that self-destructs — after one open, or when a timer runs out — end-to-end encrypted, optionally live-editable; or ask for answers: polls, dates, RSVPs, lists; for people without Cade.txt',
     icon: '🔥',
-    tags: 'share,link,self-destruct,burn,burn after reading,one-time,expiring,expire,secret,private,encrypted,live,collaborate,guest,send'
+    tags: 'share,link,self-destruct,burn,burn after reading,one-time,expiring,expire,secret,private,encrypted,live,collaborate,guest,send,poll,vote,survey,rsvp,date,schedule,doodle,checklist,shopping list,packing list,who brings what'
   };
   var esc = function (s) { return Cade.escapeHtml(String(s == null ? '' : s)); };
   var PUSH_MS = 350;
@@ -72,6 +76,33 @@
     return libP;
   }
   var C = null, M = null;
+  // Response links (polls, dates, RSVP, lists): their own core, UI and CSS,
+  // loaded only when someone picks "Respond", opens such a link or has one in their list.
+  var respP = null, RU = null;
+  function respondLib() {
+    if (!respP) {
+      respP = libs().then(function (L) {
+        C = L.C; M = L.M;
+        if (window.__loadCSSOnce) window.__loadCSSOnce(BASE + 'burn-respond.css');
+        return window.__cadeBurnRespondCore ? null : addScript(BASE + 'burn-respond-core.js');
+      }).then(function () {
+        return window.__cadeBurnRespond ? null : addScript(BASE + 'burn-respond.js');
+      }).then(function () {
+        if (!window.__cadeBurnRespond || !window.__cadeBurnRespondCore) throw new Error('Response links failed to load');
+        return (RU = window.__cadeBurnRespond.init(respondHost()));
+      }).catch(function (e) { respP = null; throw e; });
+    }
+    return respP;
+  }
+  // What burn-respond.js may use of this module.
+  function respondHost() {
+    return {
+      C: C, rvMain: rvMain, rvBrand: rvBrand, rvFoot: rvFoot, rvNow: rvNow, isCurrent: function (r) { return r === R && !r.ended; },
+      TS: function () { var fb = window.firebase; return fb && fb.database && fb.database.ServerValue ? fb.database.ServerValue.TIMESTAMP : (Cade.cloud.TIMESTAMP || Date.now()); },
+      now: now, ownerRoot: ownerRoot, nodeOf: nodeOf, once: once, withTimeout: withTimeout,
+      linkFor: linkFor, copyText: copyText, insertIntoNote: insertIntoNote, closeResults: closeResults
+    };
+  }
 
   // ---- Firebase -------------------------------------------------------------------------------------
   function waitFirebase(ms) {
@@ -294,6 +325,7 @@
           return Promise.all([C.open(r.key, r.id, 'head', head), C.open(r.key, r.id, 'v' + doc.ver, doc.ct)]).then(function (x) {
             if (r !== R) return;
             r.head = C.readHead(x[0]);
+            if (C.viewOf(meta, r.head) === 'respond') return rvRespond(r, x[0]);
             var text = String(x[1] && x[1].t != null ? x[1].t : '');
             if (burn) {
               // The last one who may read it: delete the ciphertext now (meta +
@@ -307,6 +339,21 @@
           }, function () { return rvEnd('key'); });
         });
       });
+    });
+  }
+
+  // A response link: the respond module draws the page; the lifecycle (timer,
+  // tombstone, presence) is the same as any other link's.
+  function rvRespond(r, rawHead) {
+    return respondLib().then(function (U) {
+      if (r !== R || r.ended) return;
+      r.view = 'respond';
+      if (!U.recipient(r, rawHead)) return rvEnd('key');
+      rvLifecycle(r, 'respond');
+    }, function (e) {
+      if (r !== R) return;
+      console.warn('burn respond:', e);
+      rvEnd('offline', true);
     });
   }
 
@@ -341,42 +388,7 @@
     rvFoot('<p>' + bits.join(' ') + '</p>' + acts);
     // Tidy-up tools the owner chose (live links only).
     if (editable && head.scripts.length) tidySetup(r, head.scripts);
-    // Countdown — the timer runs (and ends the link) whether or not it's shown.
-    if (meta.expiresAt) {
-      var chip = r.el.querySelector('.burn-chip-clock');
-      chip.hidden = !head.timer;
-      var tick = function () {
-        if (r !== R || r.ended) return;
-        var left = C.msLeft(meta, rvNow());
-        if (head.timer) {
-          var b = chip.querySelector('b'); if (b) b.textContent = C.fmtClock(left);
-          var f = r.el.querySelector('.burn-left'); if (f) f.textContent = C.fmtLeft(left);
-          chip.classList.toggle('burn-soon', left < 60000);
-        }
-        if (left <= 0) {
-          r.node.set(tombOf(meta, 'expired', rvNow())).catch(function () {});
-          return rvEnd('expired');
-        }
-        r.tick = setTimeout(tick, left > 3600000 ? 30000 : !head.timer ? Math.min(left + 5, 30000) : 1000 - (rvNow() % 1000) + 5);
-      };
-      tick();
-    }
-    // The owner ending it (or a timer elsewhere) ends it here too. An
-    // 'opened' tombstone doesn't: whoever is already reading a read-only
-    // capped link keeps what they opened.
-    var tombRef = r.node.child('tomb'), metaRef = r.node.child('meta');
-    var onTomb = function (s) { var t = s.val(); if (t && !(t.why === 'opened' && cap && view === 'read')) rvEnd(t.why || 'gone'); };
-    var onMeta = function (s) { if (s.val() === null) rvEnd('gone'); };
-    tombRef.on('value', onTomb); metaRef.on('value', onMeta);
-    r.offs.push(function () { tombRef.off('value', onTomb); metaRef.off('value', onMeta); });
-    // Presence (the owner's list shows "N viewers"); not once the note is burned.
-    if (!r.burned) {
-      var pres = r.node.child('presence/' + r.me);
-      var ts = (window.firebase && firebase.database && firebase.database.ServerValue) ? firebase.database.ServerValue.TIMESTAMP : rvNow();
-      pres.set({ at: ts, ed: editable, lv: watching }).catch(function () {});
-      try { pres.onDisconnect().remove(); } catch (e) {}
-      r.offs.push(function () { try { pres.onDisconnect().cancel(); } catch (e) {} pres.remove().catch(function () {}); });
-    }
+    rvLifecycle(r, view);
     if (editable) {
       // Seeded with the version just shown, so the first remote change merges instead of replacing.
       var seed = { ver: doc.ver, text: String(box.value), ct: doc.ct };
@@ -408,6 +420,46 @@
           once(r.node.child('tomb'), 5000).then(function (t) { end((t && t.why) || 'gone'); }, function () { end('gone'); });
         }
       });
+    }
+  }
+  // What every open link runs until it ends: the countdown (which ends the
+  // link whether or not it's shown), the owner ending it, and presence.
+  function rvLifecycle(r, view) {
+    var meta = r.meta, head = r.head, cap = C.capOf(meta);
+    if (meta.expiresAt) {
+      var chip = r.el.querySelector('.burn-chip-clock');
+      chip.hidden = !head.timer;
+      var tick = function () {
+        if (r !== R || r.ended) return;
+        var left = C.msLeft(meta, rvNow());
+        if (head.timer) {
+          var b = chip.querySelector('b'); if (b) b.textContent = C.fmtClock(left);
+          var f = r.el.querySelector('.burn-left'); if (f) f.textContent = C.fmtLeft(left);
+          chip.classList.toggle('burn-soon', left < 60000);
+        }
+        if (left <= 0) {
+          r.node.set(tombOf(meta, 'expired', rvNow())).catch(function () {});
+          return rvEnd('expired');
+        }
+        r.tick = setTimeout(tick, left > 3600000 ? 30000 : !head.timer ? Math.min(left + 5, 30000) : 1000 - (rvNow() % 1000) + 5);
+      };
+      tick();
+    }
+    // The owner ending it (or a timer elsewhere) ends it here too. An
+    // 'opened' tombstone doesn't: whoever is already reading a read-only
+    // capped link keeps what they opened.
+    var tombRef = r.node.child('tomb'), metaRef = r.node.child('meta');
+    var onTomb = function (s) { var t = s.val(); if (t && !(t.why === 'opened' && cap && view === 'read')) rvEnd(t.why || 'gone'); };
+    var onMeta = function (s) { if (s.val() === null) rvEnd('gone'); };
+    tombRef.on('value', onTomb); metaRef.on('value', onMeta);
+    r.offs.push(function () { tombRef.off('value', onTomb); metaRef.off('value', onMeta); });
+    // Presence (the owner's list shows "N viewers"); not once the note is burned.
+    if (!r.burned) {
+      var pres = r.node.child('presence/' + r.me);
+      var ts = (window.firebase && firebase.database && firebase.database.ServerValue) ? firebase.database.ServerValue.TIMESTAMP : rvNow();
+      pres.set({ at: ts, ed: view === 'edit', lv: view === 'live', rs: view === 'respond' }).catch(function () {});
+      try { pres.onDisconnect().remove(); } catch (e) {}
+      r.offs.push(function () { try { pres.onDisconnect().cancel(); } catch (e) {} pres.remove().catch(function () {}); });
     }
   }
   // A live update of the read-only text: the smallest change to its one text
@@ -566,7 +618,9 @@
     if (!keepSession) {
       setSession(null);
       if (r.id) Cade.store.remove(meKey(r.id));
+      if (r.cleanup) { try { r.cleanup(); } catch (e) {} }
     }
+    r.cleanup = null;
     r.head = null;
   }
   // Not offered to the reader; used to reopen (retry / another link) and by tests.
@@ -654,9 +708,12 @@
   // The plain meta of a link (v1 links keep their v1 shape; "watch live" ones are v3).
   function metaOf(e) {
     var cap = C.capOfEntry(e), md = C.modeOf(e);
-    var m = { v: e.v === 2 ? (md === 'live' ? 3 : 2) : 1, created: e.created, expiresAt: e.expiresAt, oneTime: cap === 1, editable: md === 'edit' };
+    var m = { v: e.v === 2 ? (md === 'respond' ? 4 : md === 'live' ? 3 : 2) : 1, created: e.created, expiresAt: e.expiresAt, oneTime: cap === 1, editable: md === 'edit' };
     if (e.v === 2) m.maxOpens = cap;
     if (md === 'live') m.live = true;
+    // A response link also says live, so readers on v3 code keep its slots
+    // (and show its "reload to respond" text) instead of burning it.
+    if (md === 'respond') { m.live = true; m.respond = true; }
     return m;
   }
   function baseKey(id) { return 'cade-burn-base:' + id; }
@@ -688,6 +745,7 @@
         return ownerRoot(e.db).then(function (root) { return nodeOf(root, e.id).remove(); }).then(function () {
           entries = entries.filter(function (x) { return x.id !== e.id; }); changed = true;
           Cade.idbStore.remove(baseKey(e.id));
+          if (e.respond) forgetRespond(e.id);
         }).catch(function () {});
       }
       if (e.ended) return null;
@@ -695,6 +753,9 @@
         var node = nodeOf(root, e.id);
         return readPlain(node, 12000).then(function (plain) {
           var a = C.sweepAction(e, plain, now());
+          // A response link whose flag an owner device on older code dropped from the
+          // synced list: the server's meta still says so — never destruct it as "opened".
+          if (plain.meta && plain.meta.respond && !e.respond) { e.respond = true; changed = true; a = C.sweepAction(e, plain, now()); }
           if (a.act === 'tomb') return node.set(tombOf(plain.meta || metaOf(e), a.why, now())).then(function () { e.ended = { why: a.why, at: now() }; changed = true; });
           if (a.act === 'end') { e.ended = { why: a.why, at: now() }; changed = true; }
         });
@@ -715,7 +776,7 @@
   // Start / stop the live engines to match the list.
   function reconcileOwner() {
     var want = {};
-    entries.forEach(function (e) { if (C.staysLive(e) && !e.ended && e.room && !(e.expiresAt && now() >= e.expiresAt)) want[e.id] = e; });
+    entries.forEach(function (e) { if (C.hasEngine(e) && !e.ended && e.room && !(e.expiresAt && now() >= e.expiresAt)) want[e.id] = e; });
     // (an engine whose link changed mode is restarted as the new kind)
     Object.keys(engines).forEach(function (id) { if (!want[id] || engines[id].mode !== C.modeOf(want[id])) { engines[id].stop(); delete engines[id]; } });
     Object.keys(want).forEach(function (id) { if (!engines[id]) startEngine(want[id]); });
@@ -789,21 +850,50 @@
     saveBlob(); renderList();
     ownerRoot(e.db).then(function (root) { return nodeOf(root, e.id).remove(); }).catch(function () {});
     Cade.idbStore.remove(baseKey(e.id));
+    if (e.respond) forgetRespond(e.id);
+  }
+  function forgetRespond(id) { respondLib().then(function (U) { U.forget(id); }).catch(function () {}); }
+  // "Copy results into the note": at the cursor when the link's room is open
+  // (or it has none), else at the end of that room. → Promise<'here' | 'end'>
+  function insertIntoNote(e, md) {
+    var api = Cade.roomsApi, room = e.room, active = api && api.activeRoom();
+    if (!room || room === active || !api) {
+      var v = Cade.editor, sel = v.state.selection.main, doc = v.state.doc;
+      var before = doc.sliceString(Math.max(0, sel.from - 2), sel.from), after = doc.sliceString(sel.to, sel.to + 1);
+      var pre = sel.from === 0 || /\n\n$/.test(before) ? '' : /\n$/.test(before) ? '\n' : '\n\n';
+      var text = pre + String(md).replace(/\s+$/, '') + (after === '' || after === '\n' ? '\n' : '\n\n');
+      v.dispatch({ changes: { from: sel.from, to: sel.to, insert: text }, selection: { anchor: sel.from + text.length }, scrollIntoView: true, userEvent: 'input.paste' });
+      return Promise.resolve('here');
+    }
+    return api.read(room).then(function (t) {
+      if (t == null) throw new Error('Couldn’t open “' + room + '” here');
+      return api.write(room, (t.replace(/\s+$/, '') ? t.replace(/\s+$/, '') + '\n\n' : '') + String(md).replace(/\s+$/, '') + '\n', { reason: 'burn-results' });
+    }).then(function () { return 'end'; });
   }
   function linkFor(e) { return C.encodeLink(location.href.split('#')[0].split('?')[0], e); }
 
-  // opts: { expiry, custom, who, n, mode: 'read'|'live'|'edit' (or v2 callers: editable), copy, title, icon, timer, scripts }
+  // What an older reader shows for a response link (the real content is in the sealed head).
+  var RESPOND_FALLBACK = 'This link asks for your answer — a poll, a date, a list or an RSVP — but this copy of the page is out of date.\n\nReload the page to respond.';
+  // opts: { expiry, custom, who, n, mode: 'read'|'live'|'edit'|'respond' (or v2 callers: editable), copy, title, icon, timer, scripts,
+  //         respond: { type, spec } (mode 'respond') }
   function create(opts) {
+    var mode = opts.mode === 'live' || opts.mode === 'edit' || opts.mode === 'respond' ? opts.mode : opts.editable ? 'edit' : 'read';
+    if (mode === 'respond') {
+      return respondLib().then(function (U) { return U.prepare(opts.respond); }).then(function (prep) { return createLink(opts, mode, prep); });
+    }
+    return createLink(opts, mode, null);
+  }
+  function createLink(opts, mode, prep) {
     var api = Cade.roomsApi, room = (api && api.activeRoom()) || '';
-    var mode = opts.mode === 'live' || opts.mode === 'edit' ? opts.mode : opts.editable ? 'edit' : 'read';
-    if (!room && mode !== 'read') return Promise.reject(new Error((mode === 'edit' ? 'Live editing' : 'Watching live') + ' works on a room — open or add one first'));
-    var text = Cade.editor.state.doc.toString();
+    if (!room && (mode === 'live' || mode === 'edit')) return Promise.reject(new Error((mode === 'edit' ? 'Live editing' : 'Watching live') + ' works on a room — open or add one first'));
+    var text = prep ? RESPOND_FALLBACK : Cade.editor.state.doc.toString();
     var db = Cade.store.get('cade-firebase-url') || '';
     var maxOpens = C.capFrom(opts.who, opts.n);
     var ttl = C.expiryFrom(opts.expiry, opts.custom, 0);     // a duration: anchored on the server's clock below
     C.checkOptions({ expiresAt: ttl, maxOpens: maxOpens, text: text });
     if (!C.validDb(db)) return Promise.reject(new Error('Set up Sync first'));
-    var head = C.makeHead({ title: opts.title || room || 'Shared note', copy: opts.copy, icon: opts.icon, timer: opts.timer, editable: mode === 'edit', live: mode === 'live', scripts: opts.scripts });
+    var head = C.makeHead({ title: opts.title || (prep && prep.head.spec.q) || room || 'Shared note', copy: prep ? false : opts.copy, icon: opts.icon, timer: opts.timer, editable: mode === 'edit', live: mode === 'live', scripts: opts.scripts });
+    if (prep) head.respond = prep.head;
     // The root first: for the sync database that also hooks the core's server-clock offset.
     return ownerRoot(db).then(function (root) {
       var t = now();
@@ -811,6 +901,7 @@
         v: 2, id: C.newId(), key: C.newKey(), db: db, room: room, title: head.title, created: t, ttl: ttl, expiresAt: ttl ? t + ttl : 0,
         maxOpens: maxOpens, oneTime: maxOpens === 1, editable: mode === 'edit', live: mode === 'live', copy: head.copy, ended: null
       };
+      if (prep) { e.respond = true; e.rtype = prep.head.type; RU.remember(e.id, prep, room); }
       return Promise.all([C.seal(e.key, e.id, 'head', head), C.seal(e.key, e.id, 'v1', { t: text })]).then(function (x) {
         // Listed first, so a write that lands late is still swept / revocable.
         entries.unshift(e); saveBlob();
@@ -819,7 +910,7 @@
         var doc = { ver: 1, ct: x[1], by: 'o:create', base: 0, at: t };
         var l0 = Date.now();
         return withTimeout(node.set({ meta: meta, head: x[0], doc: doc }), 15000).then(function () {
-          if (mode !== 'read') Cade.idbStore.set(baseKey(e.id), JSON.stringify({ ver: 1, text: text, ct: x[1] }));
+          if (C.hasEngine(e)) Cade.idbStore.set(baseKey(e.id), JSON.stringify({ ver: 1, text: text, ct: x[1] }));
           // Anchor the timer on the moment the server stamped the link, and
           // learn this device's clock offset from it.
           return serverVal(node.child('meta/created')).then(function (sc) {
@@ -835,6 +926,7 @@
           });
         }, function (err) {
           entries = entries.filter(function (y) { return y.id !== e.id; }); saveBlob();
+          if (prep) RU.forget(e.id);
           node.remove().catch(function () {});
           throw new Error(/offline/.test(err && err.message) ? 'No connection to your database — try again when you’re online' : (err && err.message) || 'Could not create the link');
         });
@@ -852,7 +944,8 @@
   var MODES = [
     { v: 'read', label: 'Read a snapshot', hint: 'The note as it is now. Your later changes stay with you.' },
     { v: 'live', label: 'Watch my changes live', hint: 'They see your edits as you type, but can’t change anything.' },
-    { v: 'edit', label: 'Edit with me', hint: 'You both edit the same note — changes appear on both sides as you type.' }
+    { v: 'edit', label: 'Edit with me', hint: 'You both edit the same note — changes appear on both sides as you type.' },
+    { v: 'respond', label: 'Respond', hint: 'A poll, picking a date, an RSVP, who brings what, or a shared checklist.' }
   ];
   function modesHtml() {
     return '<div class="burn-modes" role="radiogroup" aria-labelledby="burn-mode-l"><span class="burn-fl" id="burn-mode-l">What they can do</span>' +
@@ -894,6 +987,7 @@
                 '<p class="burn-hint" data-hint="who"></p>' +
               '</div>' +
               modesHtml() +
+              '<div class="burn-compose" hidden></div>' +
               '<details class="burn-more"><summary><span>More options</span><span class="burn-more-s"></span></summary><div class="burn-more-b">' +
                 '<label class="burn-stack"><span class="burn-fl">Name they see</span><input class="form-input burn-name" type="text" maxlength="' + C.MAX_NAME + '" autocomplete="off" placeholder="' + esc(room || 'Shared note') + '"><span class="burn-hint">The title at the top of their page. Encrypted like the note.</span></label>' +
                 '<div class="burn-stack"><span class="burn-fl" id="burn-icon-l">Icon</span><div class="burn-icons" role="group" aria-labelledby="burn-icon-l">' +
@@ -919,6 +1013,7 @@
                 (navigator.share ? '<button type="button" class="btn" data-act="share">Share…</button>' : '') +
                 '<button type="button" class="btn" data-act="new">New link</button></div>' +
             '</section>' +
+            '<section class="burn-res" hidden></section>' +
             '<section class="burn-list"><div class="burn-lh">Your links</div><ul class="burn-ul"></ul><p class="burn-empty">No links yet.</p></section>' +
             '<p class="burn-fine">Self-destruction is done by the apps — yours and the reader’s — not by the server: an opened or expired link’s note is deleted from your database, and anyone can still take a screenshot of what they saw.</p>'
           :
@@ -928,11 +1023,11 @@
           '</div>' +
         '</div>';
       document.body.appendChild(el);
-      D = { el: el, tick: 0, listens: {}, nodes: {}, armed: null, icon: '' };
+      D = { el: el, tick: 0, listens: {}, nodes: {}, armed: null, icon: '', sums: {}, comp: null, res: null };
       el.addEventListener('click', onDlgClick);
       el.addEventListener('change', onDlgChange);
       el.addEventListener('input', onDlgInput);
-      el.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); closeOwner(); } });
+      el.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); if (D && D.res) closeResults(); else closeOwner(); } });
       if (configured) {
         updateHints();
         loadBlob();
@@ -947,6 +1042,8 @@
   function closeOwner() {
     if (!D) return;
     clearInterval(D.tick);
+    if (D.res) { D.res.close(); D.res = null; }
+    if (D.comp) { D.comp.destroy(); D.comp = null; }
     Object.keys(D.listens).forEach(function (id) { D.listens[id](); });
     if (D.el.parentNode) D.el.parentNode.removeChild(D.el);
     D = null;
@@ -957,12 +1054,24 @@
   function chosenScripts() { return D ? Array.prototype.map.call(D.el.querySelectorAll('input[data-script]:checked'), function (i) { return i.getAttribute('data-script'); }) : []; }
   function updateHints() {
     if (!D || !q('.burn-form')) return;
-    var md = modeVal(), ed = md === 'edit', stays = md !== 'read', who = q('.burn-who').value, exp = q('.burn-exp').value;
+    var md = modeVal(), ed = md === 'edit', rs = md === 'respond', stays = md !== 'read', who = q('.burn-who').value, exp = q('.burn-exp').value;
+    showComposer(rs);
+    var room = Cade.roomsApi && Cade.roomsApi.activeRoom();
+    q('.burn-room').innerHTML = rs
+      ? 'Asks people who don’t need Cade.txt to answer — your note itself isn’t shared. End-to-end encrypted: the key is only in the link.'
+      : 'Shares ' + (room ? '<b>' + esc(room) + '</b>' : '<b>this note</b>') + ' with someone who doesn’t need Cade.txt. End-to-end encrypted: the key is only in the link.';
+    q('[data-row="copy"]').hidden = rs;
+    q('.burn-tools').hidden = rs;
+    q('.burn-name').placeholder = rs ? ((D.comp && D.comp.title()) || 'Your question') : (room || 'Shared note');
     var n = Math.floor(Number(q('.burn-max').value)) || 0;
     q('.burn-cust').hidden = exp !== 'custom';
     q('.burn-some').hidden = who !== 'some';
     var them = who === 'some' ? (n > 0 ? 'the first ' + n + ' browsers' : 'the first few browsers') : '';
-    var h = who === 'one'
+    var h = rs
+      ? (who === 'one' ? 'Only the first browser that opens it can answer (and change its answer later).'
+        : who === 'some' ? 'Only ' + them + ' that open it can answer; each can come back to change its answer.'
+          : exp === 'none' ? 'Anyone with the link — pick a time limit too, so it self-destructs.' : 'Anyone with the link can answer until it expires — one response per browser.')
+      : who === 'one'
       ? (stays ? 'Only the first browser that opens it can use it. It stays live there until the timer ends or you revoke it.' : 'Deleted from the server as soon as it’s opened.')
       : who === 'some'
         ? (stays ? 'Only ' + them + ' that open it can use it; each can come back to it.' : 'Only ' + them + ' that open it can read it — it’s deleted from the server once the last of them has.')
@@ -979,9 +1088,26 @@
     if (q('.burn-name').value.trim()) bits.push('name');
     if (D.icon) bits.push(D.icon);
     if (exp !== 'none' && !val('timer')) bits.push('no countdown');
-    if (val('copy')) bits.push('copying on');
+    if (val('copy') && !rs) bits.push('copying on');
     if (ed && picked) bits.push(picked + ' tool' + (picked > 1 ? 's' : ''));
     q('.burn-more-s').textContent = bits.length ? bits.join(' · ') : '';
+  }
+  // The "Respond" composer, under the mode cards (its module loads on first use).
+  function showComposer(on) {
+    var box = q('.burn-compose');
+    if (!box) return;
+    box.hidden = !on;
+    if (!on || D.comp || D.compLoading) return;
+    D.compLoading = true;
+    box.innerHTML = '<div class="burn-rv-wait"><span class="burn-spin" aria-hidden="true"></span><span>Loading…</span></div>';
+    var d = D;
+    respondLib().then(function (U) {
+      if (D !== d) return;
+      box.innerHTML = '';
+      D.comp = U.composer(box, { text: Cade.editor ? Cade.editor.state.doc.toString() : '', now: now(), onChange: function () { showErr(''); updateHints(); } });
+      updateHints();
+    }, function (e) { if (D === d) box.innerHTML = '<p class="burn-err">' + esc((e && e.message) || 'Couldn’t load — check your connection') + '</p>'; })
+      .then(function () { d.compLoading = false; });
   }
   function setIcon(icon, fromOwn) {
     D.icon = C.cleanIcon(icon);
@@ -1023,6 +1149,7 @@
       revoke(e2);
     }
     else if (a === 'row-forget') { var e3 = entryById(b.getAttribute('data-id')); if (e3) forget(e3); }
+    else if (a === 'row-results') { var e4 = entryById(b.getAttribute('data-id')); if (e4) openResults(e4); }
   }
   function copyText(t) {
     if (!t) return;
@@ -1034,9 +1161,13 @@
     var md = modeVal(), ed = md === 'edit';
     var opts = {
       expiry: q('.burn-exp').value, custom: { n: q('.burn-cn').value, unit: q('.burn-cu').value },
-      who: q('.burn-who').value, n: q('.burn-max').value, mode: md, copy: val('copy'),
+      who: q('.burn-who').value, n: q('.burn-max').value, mode: md, copy: md === 'respond' ? false : val('copy'),
       title: q('.burn-name').value, icon: D.icon, timer: val('timer'), scripts: ed ? chosenScripts() : []
     };
+    if (md === 'respond') {
+      if (!D.comp) { showErr('Still loading — try again in a moment'); return; }
+      try { opts.respond = D.comp.get(); } catch (e) { showErr(e.message); return; }
+    }
     btn.disabled = true; btn.textContent = 'Creating…';
     var p;
     try { p = create(opts); } catch (e) { p = Promise.reject(e); }
@@ -1046,7 +1177,7 @@
       var cap = C.capOfEntry(e), tools = opts.scripts.length;
       var parts = [C.capLabel(cap),
         e.expiresAt ? 'expires in ' + C.fmtLeft(C.leftOf(e, now())) + (opts.timer ? '' : ' (countdown hidden)') : 'no time limit',
-        e.editable ? 'live editing' : e.live ? 'they watch live' : 'read-only snapshot'];
+        e.respond ? RU.describe(opts.respond) : e.editable ? 'live editing' : e.live ? 'they watch live' : 'read-only snapshot'];
       if (e.copy) parts.push('saving a copy allowed');
       if (tools) parts.push(tools + ' tidy-up tool' + (tools > 1 ? 's' : ''));
       q('.burn-sum').textContent = parts.join(' · ');
@@ -1073,7 +1204,33 @@
         };
         r.on('value', fn); offs.push(function () { r.off('value', fn); });
       });
+      if (e.respond) {
+        respondLib().then(function (U) {
+          if (gone || !D) return;
+          offs.push(U.summarize(e, function (sm) { if (D) { D.sums[e.id] = sm; renderList(); } }));
+        }).catch(function () {});
+      }
     }).catch(function () {});
+  }
+  // The results of a response link, in place of the form and the list.
+  function openResults(e) {
+    if (!D) return;
+    closeResults(true);
+    var sec = q('.burn-res');
+    ['.burn-form', '.burn-result', '.burn-list', '.burn-fine'].forEach(function (k) { var x = q(k); if (x) { x.__wasHidden = x.hidden; x.hidden = true; } });
+    sec.hidden = false;
+    var d = D;
+    respondLib().then(function (U) { if (D !== d || sec.hidden) return; D.res = U.results(sec, e); }).catch(function () { Cade.showToast('Couldn’t load the results (offline?)', 'error', 2600); closeResults(); });
+    var b = q('.burn-body'); if (b) b.scrollTop = 0;
+  }
+  function closeResults(keepHidden) {
+    if (!D) return;
+    if (D.res) { D.res.close(); D.res = null; }
+    var sec = q('.burn-res');
+    if (!sec || sec.hidden) return;
+    sec.hidden = true; sec.innerHTML = '';
+    if (keepHidden) return;
+    ['.burn-form', '.burn-result', '.burn-list', '.burn-fine'].forEach(function (k) { var x = q(k); if (x) x.hidden = !!x.__wasHidden; });
   }
   function renderList() {
     if (!D) return;
@@ -1085,14 +1242,17 @@
       var st = C.statusOf(e, plain && 'meta' in plain ? plain : undefined, t);
       if (!st.ended) listen(e); else if (D.listens[e.id]) D.listens[e.id]();
       var cap = st.cap;
-      var kind = [cap === 1 ? 'one person' : cap > 1 ? 'up to ' + cap : 'anyone', C.modeWord(e)].join(' · ');
+      var rsp = e.respond, sum = rsp && D.sums[e.id];
+      var kind = [cap === 1 ? 'one person' : cap > 1 ? 'up to ' + cap : 'anyone', rsp ? ({ poll: 'poll', dates: 'dates', rsvp: 'RSVP', packing: 'who brings what', list: 'checklist' }[e.rtype] || 'responses') : C.modeWord(e)].join(' · ');
       var left = !st.ended && e.expiresAt ? C.fmtLeft(st.left) + ' left' : (!st.ended ? 'no timer' : '');
       var armed = D.armed === e.id;
       rows.push('<li class="burn-li burn-st-' + st.state + (st.ended ? ' burn-ended' : '') + '"><div class="burn-li-main"><div class="burn-li-t"><b>' + esc(e.title || e.room) + '</b><span class="burn-kind">' + esc(kind) + '</span></div>' +
-        '<div class="burn-li-s"><span class="burn-dot"></span><span class="burn-st">' + esc(st.label) + '</span>' + (left ? '<span class="burn-left2">' + esc(left) + '</span>' : '') + '</div></div>' +
+        (rsp && !st.ended ? '<div class="burn-sum2">' + esc(sum ? sum.text : '…') + '</div>' : '') +
+        '<div class="burn-li-s"><span class="burn-dot"></span><span class="burn-st">' + esc(rsp && !st.ended ? (st.viewers ? st.viewers + ' here now' : sum && sum.closed ? 'Closed' : 'Open for answers') + (st.cap > 1 ? ' · ' + st.used + ' of ' + st.cap + ' opened' : '') : st.label) + '</span>' + (left ? '<span class="burn-left2">' + esc(left) + '</span>' : '') + '</div></div>' +
         '<div class="burn-li-a">' + (st.ended
           ? '<button type="button" class="btn burn-sm" data-act="row-forget" data-id="' + e.id + '">Remove</button>'
-          : '<button type="button" class="btn burn-sm" data-act="row-copy" data-id="' + e.id + '" aria-label="Copy link">Copy</button><button type="button" class="btn burn-sm burn-rev' + (armed ? ' burn-armed' : '') + '" data-act="row-revoke" data-id="' + e.id + '">' + (armed ? 'Tap again to revoke' : 'Revoke') + '</button>') +
+          : (rsp ? '<button type="button" class="btn burn-sm burn-res-b" data-act="row-results" data-id="' + e.id + '">Results</button>' : '') +
+            '<button type="button" class="btn burn-sm" data-act="row-copy" data-id="' + e.id + '" aria-label="Copy link">Copy</button><button type="button" class="btn burn-sm burn-rev' + (armed ? ' burn-armed' : '') + '" data-act="row-revoke" data-id="' + e.id + '">' + (armed ? 'Tap again to revoke' : 'Revoke') + '</button>') +
         '</div></li>');
     });
     var html = rows.join('');
