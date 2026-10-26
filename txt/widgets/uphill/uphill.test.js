@@ -545,6 +545,8 @@ test('save data: v1 saves migrate (upgrades refunded), v2 normalises, cosmetics 
   assert.strictEqual(s.career.team, 'kings');
   assert.ok(E.lookOwned(s, 'p', E.find(E.PAINTS, 'sand')), 'boss paint earned');
   assert.ok(!E.ttUnlocked(s, 2) && E.ttUnlocked(s, 1) && E.ttUnlocked(s, 3), 'track unlocks per location');
+  var f = E.normSave({ v: 2, tt: { dust1: { t: 25, s: 3 } }, far: { dust1: { d: 80, v: 'mule' }, dust2: { d: 123.4, v: 'nope' }, pine1: { d: -3 } } });
+  assert.deepStrictEqual(f.far, { dust2: { d: 123.4, v: 'mule' } }, 'farthest attempts kept only for unfinished tracks');
 });
 
 test('time-trial results: a faster run replaces the best; stars pay once; style best tracked', function () {

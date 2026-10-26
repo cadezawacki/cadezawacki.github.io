@@ -1614,6 +1614,7 @@
       if (C.boss && typeof C.boss === 'object') LOCS.forEach(function (l) { if (C.boss[l.key]) s.career.boss[l.key] = 1; });
       if (C.seen && typeof C.seen === 'object') LOCS.forEach(function (l) { if (C.seen[l.key]) s.career.seen[l.key] = 1; });
       s.career.champ = !!C.champ;
+      if (o.far && typeof o.far === 'object') { s.far = {}; TRACKS.forEach(function (t) { var f = o.far[t.key]; if (f && +f.d > 0 && isFinite(+f.d) && !s.tt[t.key]) s.far[t.key] = { d: +f.d, v: find(VEHICLES, f.v) ? f.v : 'mule' }; }); }
       if (o.ghostVeh && typeof o.ghostVeh === 'object') { s.ghostVeh = {}; TRACKS.forEach(function (t) { var v = o.ghostVeh[t.key]; if (find(VEHICLES, v)) s.ghostVeh[t.key] = v; }); }
       return s;
     }
@@ -2791,7 +2792,7 @@
     if (live) {
       if (ghostOn(w) && E.ghostAt(S.ghost.data, w.t, GQ)) {
         if (!drawGhostRig(c, S.ghostP, GQ, S.ghost.tag)) edgeTag(c, GQ[0], GQ[1], S.ghost.tag + ' ' + Math.abs(GQ[0] - w.c.x).toFixed(0) + 'm', K.ghost);
-      }
+      } else if (ghostOn(w) && S.ghost.end) drawGhostEnd(c, S.ghost.end);
       for (i = 0; i < S.rivals.length; i++) {
         var rv = S.rivals[i], rw = rv.w;
         if (rw.c.x < V.x0 - 3 || rw.c.x > V.x1 + 3) { edgeTag(c, rw.c.x, rw.c.y, rv.short + ' ' + Math.abs(rw.c.x - w.c.x).toFixed(0) + 'm', rv.col); continue; }
@@ -2805,6 +2806,16 @@
     if (T.L.night) drawNight(c, w, a);
     drawWeather(c, T, cx);
     if (live) drawHud(c, w);
+  }
+  // Where the farthest attempt gave up: a flag on the trail.
+  function drawGhostEnd(c, e) {
+    if (e[0] < V.x0 - 2 || e[0] > V.x1 + 2) return;
+    var px = CW * V.ppm / S.adv, gy = E.heightAt(S.w.ter, e[0]);
+    c.fillStyle = S.col.ghost;
+    textMode(c, px, 700);
+    var top = pole(c, e[0], gy, 2.2, px);
+    g1(c, '>', V.ox + e[0] * V.ppm + px * S.adv, top + px * 0.5, px);
+    label(c, 'FARTHEST', V.ox + e[0] * V.ppm, top - px * 0.6, px * 0.8, 800);
   }
   // Night: everything outside the headlight falls into the dark.
   function drawNight(c, w, al) {
@@ -2939,6 +2950,7 @@
   function begin(w, run) {
     halt();
     bankEndless();
+    saveAttempt();
     w.camMode = S.save.cam;
     setView(w); E.resetCam(w);
     S.w = w; S.run = run; S.paused = false; S.shake = 0; S.banked = run.kind !== 'endless'; S.trickSeen = 0; resetPops();
@@ -2954,6 +2966,7 @@
   function startTT(key) {
     if (!S) return;
     var tr = E.trackOf(key), rec = S.save.tt[key], idx = E.trackIdx(key);
+    saveAttempt();                                  // a restart: the run being dropped may be the new farthest
     var w = E.newWorld({ track: key, cfg: myCfg() });
     w.rec = S.rec; w.recN = 0;
     S.rivals = [];
@@ -2964,14 +2977,20 @@
       '★★★ ' + fmtT(tr.par[0]) + '   ★★ ' + fmtT(tr.par[1]) + (rec ? '   best ' + fmtT(rec.t) : ''), goLine()];
     begin(w, { kind: 'tt', track: key });
   }
-  // Ghost: your best run, or the crew chief's reference line ('rival', also the fallback).
+  // Ghost: your best run; on a track you haven't finished yet, your farthest
+  // attempt; else the crew chief's reference line ('rival', also the fallback).
   function loadGhost(key) {
     S.ghost = null; S.ghostP = null;
     var mode = S.save.ghost;
     if (mode === 'off') return;
     var best = mode === 'best' && S.save.tt[key] ? E.decodeGhost(sget(GHOST_KEY + key)) : null;
+    var far = mode === 'best' && !S.save.tt[key] && S.save.far && S.save.far[key] ? E.decodeGhost(sget(GHOST_KEY + 'far-' + key)) : null;
     if (best && best.length >= E.GCH * 2) { S.ghost = { data: best, tag: 'BEST' }; S.ghostP = E.bikeParams({ veh: S.save.ghostVeh && S.save.ghostVeh[key] || 'mule' }); }
-    else {
+    else if (far && far.length >= E.GCH * 2) {
+      for (var i = 0, m = 0; i < far.length; i += E.GCH) if (far[i] > far[m]) m = i;
+      S.ghost = { data: far, tag: 'FARTHEST', end: [far[m], far[m + 1]] };
+      S.ghostP = E.bikeParams({ veh: S.save.far[key].v });
+    } else {
       var rg = S.rivalGhosts[key] || (S.rivalGhosts[key] = E.rivalGhost(key));
       if (rg.data.length) { S.ghost = { data: rg.data, tag: 'MAGS' }; S.ghostP = E.bikeParams({ veh: 'mule' }); }
     }
@@ -3038,11 +3057,27 @@
     if (r.kind === 'endless') endlessOver();
     else if (r.kind === 'event') finishEvent(true);
   }
+  // An unfinished time-trial run that got farther than any before becomes the
+  // track's 'farthest' ghost (until the track is finished once).
+  function saveAttempt() {
+    if (!S || !S.w || !S.run || S.run.kind !== 'tt' || S.w.attemptSaved) return;
+    var w = S.w, key = w.track;
+    w.attemptSaved = true;
+    if (w.state === 'finish' || S.save.tt[key] || w.recN < 3) return;
+    var d = 0;
+    for (var i = 0; i < w.recN; i++) if (w.rec[i * E.GCH] > d) d = w.rec[i * E.GCH];
+    var far = S.save.far || (S.save.far = {}), prev = far[key];
+    if (d < 5 || (prev && d <= prev.d)) return;
+    var gs = E.packGhost(w.rec, w.recN);
+    if (gs && sset(GHOST_KEY + 'far-' + key, gs)) { far[key] = { d: Math.round(d * 10) / 10, v: S.save.veh }; writeSave(); }
+  }
   function finishTT() {
     var w = S.w, key = w.track, t = w.final;
     var wasOpen = E.ttUnlocked(S.save, E.trackIdx(key) + 1 < E.TRACKS.length ? E.trackIdx(key) + 1 : 0);
     var r = E.stageResult(S.save, key, t, w.score);
     S.save.coins += w.coins;
+    S.w.attemptSaved = true;
+    if (S.save.far && S.save.far[key]) { delete S.save.far[key]; sdel(GHOST_KEY + 'far-' + key); }
     if (r.newBest) {                                // the new best's run becomes the ghost (never a stale one)
       var gs = w.recN > 2 ? E.packGhost(w.rec, w.recN) : '';
       if (gs && sset(GHOST_KEY + key, gs)) { S.save.ghostVeh = S.save.ghostVeh || {}; S.save.ghostVeh[key] = S.save.veh; } else sdel(GHOST_KEY + key);
@@ -3224,7 +3259,7 @@
         }
         h += '</div>';
       });
-      return h + '<div class="uh-note">The ghost is your best run — or Mags\' reference line until you have one. ' + E.STAR_COINS + ' coins per new star.</div></div>';
+      return h + '<div class="uh-note">The ghost is your best run — until you finish a track it is your farthest attempt, or Mags\' reference line. ' + E.STAR_COINS + ' coins per new star.</div></div>';
     }
     if (kind === 'garage') return garageHtml();
     if (kind === 'team') {
@@ -3438,6 +3473,7 @@
     halt();
     bankEndless();
     S.paused = false;
+    saveAttempt();
     if (S.w) { S.bgw = S.w; S.w = null; }
     S.rivals = [];
     showOverlay(kind || 'home');
@@ -3499,7 +3535,7 @@
     var sv = S.save;
     sv.ghost = sv.ghost === 'best' ? 'rival' : sv.ghost === 'rival' ? 'off' : 'best'; writeSave();
     if (S.w && S.run && S.run.kind === 'tt') loadGhost(S.run.track);
-    pop('ghost: ' + (sv.ghost === 'best' ? 'your best (or Mags)' : sv.ghost === 'rival' ? 'Mags\' line' : 'off'));
+    pop('ghost: ' + (sv.ghost === 'best' ? 'your best (or farthest try)' : sv.ghost === 'rival' ? 'Mags\' line' : 'off'));
     if (S.ovlKind) refresh(); else if (S.w && !S.raf) draw(1);
   }
   function cycleCam() {
@@ -3682,6 +3718,7 @@
   function teardown() {
     if (!S) return;
     bankEndless();
+    saveAttempt();
     var s = S;
     S = null;
     if (s.raf) cancelAnimationFrame(s.raf);
