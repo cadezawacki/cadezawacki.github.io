@@ -1388,6 +1388,57 @@
       "default": true
     },
     {
+      "id": "linksend",
+      "type": "widget",
+      "name": "Send to device",
+      "description": "Send a link to your computer or phone and it opens there by itself — from the share sheet (iOS Shortcut), a bookmarklet, a link’s menu or here. End-to-end encrypted through Sync",
+      "icon": "📲",
+      "tags": "send,link,url,tab,open,devices,phone,computer,desktop,laptop,handoff,continuity,share,push,browser,shortcut,bookmarklet,send to computer,send to phone,send tab,multi-device",
+      "entry": "widgets/linksend/linksend.js",
+      "css": "widgets/linksend/linksend.css",
+      "precache": [
+        "widgets/linksend/linksend-core.js"
+      ]
+    },
+    {
+      "id": "linksend-recv",
+      "type": "plugin",
+      "name": "Open links sent from my other devices",
+      "description": "While txt is open here — even in a background tab — links you send from your other devices (Send to device, the iOS Shortcut, the bookmarklet) open in a new tab. Allow pop-ups for this site so they open by themselves; otherwise each waits for a tap. End-to-end encrypted through Sync",
+      "entry": "widgets/linksend/linksend-recv.js",
+      "precache": [
+        "widgets/linksend/linksend-core.js",
+        "widgets/linksend/linksend.css",
+        "widgets/linksend/opened.html"
+      ],
+      "settingKey": "plugins.linksend-recv",
+      "section": "Devices",
+      "default": false,
+      "prefs": {
+        "title": "Open links from my devices",
+        "fields": [
+          {
+            "key": "ttl",
+            "type": "slider",
+            "label": "Open links that arrive within",
+            "default": 10,
+            "min": 1,
+            "max": 60,
+            "step": 1,
+            "unit": "min",
+            "hint": "An older link (this device was off, or txt wasn’t open) doesn’t open by itself — it waits under Missed links in Send to device"
+          },
+          {
+            "key": "notify",
+            "type": "toggle",
+            "label": "Notify me when a link can’t open by itself",
+            "default": true,
+            "hint": "When pop-ups are blocked and txt isn’t in front, a system notification — click it to open the link. Needs notification permission (Send to device → Setup)"
+          }
+        ]
+      }
+    },
+    {
       "id": "postcard",
       "type": "widget",
       "name": "ASCII Postcard",
