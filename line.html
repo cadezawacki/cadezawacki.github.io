@@ -281,6 +281,8 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
 
 /* scrollbars */
 .pane::-webkit-scrollbar,.flist::-webkit-scrollbar{width:11px;height:11px}
+.pane::-webkit-scrollbar:vertical{width:20px}
+.pane::-webkit-scrollbar-thumb:vertical{border-width:4px}
 .pane::-webkit-scrollbar-thumb,.flist::-webkit-scrollbar-thumb{background:rgb(120 130 150/.35);border-radius:9px;border:3px solid transparent;background-clip:content-box}
 .pane::-webkit-scrollbar-corner{background:transparent}
 
@@ -356,6 +358,8 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
     <button class="chip" data-scheme="coded" title="Salmon for L1, sage for L2">Color-coded</button>
     <span class="gl" style="margin-left:6px">Tab</span>
     <select class="sel" id="tab" title="Tab width (display, tabs ⇄ spaces, indentation)"><option>2</option><option>4</option><option>8</option></select>
+    <select class="sel" id="indent" title="What Tab / Enter insert while editing, and what “Fix indent” converts to"><option value="spaces">Indent: spaces</option><option value="tabs">Indent: tabs</option><option value="auto">Indent: match file</option></select>
+    <button class="chip" id="fixIndent" title="Convert both files to the chosen indentation: tabs ⇄ spaces and 2/3/8-wide levels rescaled to the tab width (undoable)">⇥ Fix indent (both)</button>
   </div>
 </div>
 
@@ -458,7 +462,7 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
       <li><b>Ignore</b> options only change what counts as “equal” — your text is never modified. Ignored differences are still shown with a dotted underline.</li>
       <li><b>Comments</b> is language-aware (Python <code>#</code>/docstrings, JS/C# <code>//</code> <code>/* */</code>, VBA <code>'</code>/<code>Rem</code>, CSS, HTML, INI). <b>Line order</b> treats moved lines as equal (they're tinted blue).</li>
       <li>Colours follow the kind of change: <b style="color:rgb(var(--hlL))">L1’s colour</b> = only in L1, <b style="color:rgb(var(--hlR))">L2’s colour</b> = only in L2 (pick them with the colour dot on each side, or <b>Color-coded</b>), <b style="color:rgb(var(--mix))">purple</b> = changed on both sides, <b style="color:rgb(var(--mv))">striped blue</b> = moved. The overview ruler on the right uses a left lane for L1-only and a right lane for L2-only content; hover a mark for details, click or drag to scroll. Lines that differ only in whitespace, indentation or case are labelled as such.</li>
-      <li>Transform tools (⋯ on each side, or “Both sides”) <em>do</em> change text: prettify/normalize, scrub comments or docstrings, tabs ⇄ spaces, trim, sort, adopt whitespace or casing from the other side. All undoable.</li>
+      <li>Transform tools (⋯ on each side, or “Both sides”) <em>do</em> change text: prettify/normalize, scrub comments or docstrings, <b>fix indentation</b> (⇥ Fix indent converts both files to the Indent setting — 4 spaces by default — rescaling 2-wide or tab levels), tabs ⇄ spaces, trim, sort, adopt whitespace or casing from the other side. All undoable.</li>
       <li><code>.bas .cls .frm</code> are VBA. <code>.cs</code> is auto-detected as VBA or C# from its content — override with the language dropdown.</li>
     </ul>
     <h3>Keyboard</h3>
@@ -884,7 +888,16 @@ function computeDiff(fA, fB, o, light) {
   const keyer = makeKeyer(o);
   const cA = o.icomments && fA ? scanOf(fA).code : A, cB = o.icomments && fB ? scanOf(fB).code : B;
   const kA = A.map((l, i) => keyer(l, cA[i])), kB = B.map((l, i) => keyer(l, cB[i]));
-  const ig = (keys, L) => keys.map((k, i) => k.trim() === '' && (o.iblank || L[i].trim() !== ''));
+  const ig = (keys, L) => {
+    const r = keys.map((k, i) => k.trim() === '' && (o.iblank || L[i].trim() !== ''));
+    // ignoring comments: blank lines inside / around a comment or docstring block go with it
+    if (o.icomments) for (let i = 0; i < keys.length;) {
+      if (keys[i].trim() !== '') { i++; continue; }
+      let j = i, hit = false; for (; j < keys.length && keys[j].trim() === ''; j++) if (L[j].trim() !== '') hit = true;
+      if (hit) for (let x = i; x < j; x++) r[x] = true; i = j;
+    }
+    return r;
+  };
   const igA = ig(kA, A), igB = ig(kB, B);
   const ids = new Map(); const id = k => { let v = ids.get(k); if (v === undefined) { v = ids.size; ids.set(k, v); } return v; };
   const iA = [], sA = [], iB = [], sB = [];
@@ -912,6 +925,10 @@ function computeDiff(fA, fB, o, light) {
   const rows = [], chunks = []; let Dl = [], Il = [], ca = 0, cb = 0;
   const flush = () => {
     if (!Dl.length && !Il.length) return;
+    // a hunk that holds ignored comments: leftover blank lines there are just the comment's spacing
+    if (o.icomments && (Dl.some(i => igA[i] && A[i].trim()) || Il.some(j => igB[j] && B[j].trim()))) {
+      for (const i of Dl) if (!A[i].trim()) igA[i] = true; for (const j of Il) if (!B[j].trim()) igB[j] = true;
+    }
     const sig = Dl.some(i => !igA[i]) || Il.some(j => !igB[j]);
     const path = alignHunk(Dl, Il, kA, kB, igA, igB, movable);
     const r0 = rows.length;
@@ -970,7 +987,7 @@ function computeDiff(fA, fB, o, light) {
 /* =========================================================================
    State
    ========================================================================= */
-const DEF = { smartIndent: true, compact: false, ctx: 3, wrap: false, syntax: true, sync: true, intra: 'word', ws: 'exact', icase: false, iblank: false, icomments: false, iquotes: false, ipunct: false, iorder: false, iattr: false, tab: 4, theme: 'auto', showOpts: true, fileFilter: 'all' };
+const DEF = { smartIndent: true, compact: false, ctx: 3, wrap: false, syntax: true, sync: true, intra: 'word', ws: 'exact', icase: false, iblank: false, icomments: false, iquotes: false, ipunct: false, iorder: false, iattr: false, tab: 4, indent: 'spaces', theme: 'auto', showOpts: true, fileFilter: 'all' };
 const savedSide = store.get('side', {});
 const S = {
   files: { L: [], R: [] }, cur: { L: null, R: null }, links: [], pairs: [],
@@ -1759,6 +1776,7 @@ function mergeLines(c, src, dst) {
   return { lines: shiftBlock(lines, delta, indentUnit(fd) === '\t', keep), delta };
 }
 function indentUnit(f) {
+  if (S.opts.indent !== 'auto') return S.opts.indent === 'tabs' ? '\t' : ' '.repeat(tabW());
   let tabs = 0, sp = 0; for (let i = 0; i < Math.min(f.lines.length, 400); i++) { const c = f.lines[i][0]; if (c === '\t') tabs++; else if (c === ' ') sp++; }
   return tabs > sp ? '\t' : ' '.repeat(+S.opts.tab || 4);
 }
@@ -2099,6 +2117,30 @@ function tAdopt(s, mode) {
   for (const r of d.rows) { if (r.t !== 'soft' || r.l == null || r.r == null) continue; const mine = s === 'L' ? r.l : r.r, theirs = s === 'L' ? r.r : r.l; out[mine] = g.lines[theirs]; n++; }
   return { lines: out, n };
 }
+// Re-indent to the chosen unit: detect the file's indent step (2, 4, tab…), expand tabs and rescale each
+// level to the tab width. Leading whitespace inside multi-line strings is content, so it is left alone, and
+// lines continuing an open bracket keep their offset from the line that opened it (hanging alignment).
+function tReindent(f) {
+  const n = tabW(), tabs = S.opts.indent === 'tabs', sc = scanOf(f), cont = sc.cont, W = f.lines.map(l => colW(leadWS(l)));
+  const anchor = new Int32Array(f.lines.length).fill(-1); let depth = 0, open = -1;
+  f.lines.forEach((l, i) => {
+    if (depth > 0) anchor[i] = open; else open = i;
+    for (const ch of bareOf(sc, i, l)) { if ('([{'.includes(ch)) depth++; else if (')]}'.includes(ch)) depth = Math.max(0, depth - 1); }
+  });
+  const hist = new Map(); let prev = 0;
+  f.lines.forEach((l, i) => {
+    if (!l.trim() || cont[i] === 's' || anchor[i] >= 0) return;
+    const d = W[i] - prev; if (d >= 2 && d <= 8) hist.set(d, (hist.get(d) || 0) + 1); prev = W[i];
+  });
+  let step = n, best = 0; for (const [d, c] of hist) if (c > best) { best = c; step = d; }
+  const nw = W.map(w => Math.floor(w / step) * n + w % step);
+  const lines = f.lines.map((l, i) => {
+    if (cont[i] === 's') return l; if (!l.trim()) return '';
+    const a = anchor[i], w = a >= 0 ? Math.max(0, nw[a] + W[i] - W[a]) : nw[i];
+    return mkIndent(w, tabs) + l.slice(leadWS(l).length);
+  });
+  return { lines, step };
+}
 async function applyTool(s, act) {
   if (s === 'B') {
     if (act === 'pushAll') return mergeAll('R'); if (act === 'pullAll') return mergeAll('L');
@@ -2117,6 +2159,11 @@ async function applyTool(s, act) {
     case 'scrubAll': { const r = tScrub(f, new Set(['c', 'd'])); return r.n ? setLines(s, r.lines, { msg: `${who}: removed comments & docstrings` }) : toast(`${who}: nothing to scrub`); }
     case 'trim': return setLines(s, tTrim(f.lines), { msg: `${who}: trailing whitespace trimmed` });
     case 't2s': return setLines(s, tTabs2Spaces(f.lines, n), { msg: `${who}: tabs → ${n} spaces` });
+    case 'reindent': {
+      const r = tReindent(f), to = S.opts.indent === 'tabs' ? 'tabs' : `${n} spaces`;
+      if (arrEq(r.lines, f.lines)) return toast(`${who}: indentation already ${to}`);
+      return setLines(s, r.lines, { msg: `${who}: indentation ${r.step !== n ? `${r.step}-wide → ` : ''}${to}` });
+    }
     case 's2t': return setLines(s, tSpaces2Tabs(f.lines, n), { msg: `${who}: ${n} spaces → tabs` });
     case 'sort': return setLines(s, tSort(f.lines), { msg: `${who}: lines sorted` });
     case 'upper': return setLines(s, f.lines.map(l => l.toUpperCase()), { msg: `${who}: UPPERCASE` });
@@ -2392,7 +2439,7 @@ function applyTheme() {
 }
 function syncOptUI() {
   $$('[data-opt]').forEach(b => b.setAttribute('aria-pressed', String(!!S.opts[b.dataset.opt])));
-  $('#ctx').value = S.opts.ctx; $('#intra').value = S.opts.intra; $('#ws').value = S.opts.ws; $('#tab').value = String(S.opts.tab);
+  $('#ctx').value = S.opts.ctx; $('#intra').value = S.opts.intra; $('#ws').value = S.opts.ws; $('#tab').value = String(S.opts.tab); $('#indent').value = S.opts.indent;
   $('#ctx').closest('label').style.opacity = S.opts.compact ? 1 : .45;
   document.documentElement.style.setProperty('--tab', S.opts.tab);
   $('#opts').classList.toggle('hidden', !S.opts.showOpts);
@@ -2405,7 +2452,7 @@ function toolItems(s) {
     { label: `Copy all changes ${sideName('L')} → ${sideName('R')}`, act: 'pushAll' }, { label: `Copy all changes ${sideName('R')} → ${sideName('L')}`, act: 'pullAll' },
     { label: 'Swap sides', act: 'swap' }, { sep: 1 },
     { label: 'Prettify / normalize both', act: 'prettify' }, { label: 'Scrub comments (both)', act: 'scrubC' }, { label: 'Scrub docstrings (both)', act: 'scrubD' },
-    { label: 'Trim trailing whitespace (both)', act: 'trim' }, { label: `Tabs → ${n} spaces (both)`, act: 't2s' }, { label: `Spaces → tabs (both)`, act: 's2t' }, { sep: 1 },
+    { label: 'Trim trailing whitespace (both)', act: 'trim' }, { label: 'Fix indentation (both)', act: 'reindent' }, { label: `Tabs → ${n} spaces (both)`, act: 't2s' }, { label: `Spaces → tabs (both)`, act: 's2t' }, { sep: 1 },
     { label: 'Download both sides as .zip…', act: 'zipmenu' }, { label: 'Manage files…', act: 'mgr' }, { sep: 1 },
     { label: 'Export patch (.diff) — this pair', act: 'patch' }, { label: 'Export patch — all pairs', act: 'patchAll', hidden: S.pairs.length < 2 }, { label: 'Copy patch to clipboard', act: 'copyPatch' }
   ];
@@ -2417,6 +2464,7 @@ function toolItems(s) {
     { label: 'Scrub comments', act: 'scrubC', disabled: !has || lang === 'txt' },
     { label: 'Scrub docstrings', act: 'scrubD', hidden: lang !== 'py' },
     { label: 'Trim trailing whitespace', act: 'trim', disabled: !has },
+    { label: 'Fix indentation', act: 'reindent', disabled: !has },
     { label: `Tabs → spaces (${n})`, act: 't2s', disabled: !has }, { label: `Spaces → tabs (${n})`, act: 's2t', disabled: !has },
     { label: 'Sort lines A → Z', act: 'sort', disabled: !has }, { label: 'UPPERCASE', act: 'upper', disabled: !has }, { label: 'lowercase', act: 'lower', disabled: !has },
     { sep: 1 },
@@ -2538,6 +2586,8 @@ $$('[data-scheme]').forEach(b => b.onclick = () => { if (b.dataset.scheme === 't
 $('#ctx').oninput = () => { S.opts.ctx = clamp(+$('#ctx').value || 0, 0, 50); saveOpts(); if (S.opts.compact) refresh({ keepCaret: false }); };
 $('#intra').onchange = () => { S.opts.intra = $('#intra').value; saveOpts(); refresh({ keepCaret: false }); };
 $('#ws').onchange = () => { S.opts.ws = $('#ws').value; saveOpts(); S.statusCache.clear(); refresh({ keepCaret: false }); renderFiles(); };
+$('#indent').onchange = () => { S.opts.indent = $('#indent').value; saveOpts(); };
+$('#fixIndent').onclick = () => applyTool('B', 'reindent');
 $('#tab').onchange = () => { S.opts.tab = +$('#tab').value; saveOpts(); syncOptUI(); if (S.opts.wrap) refresh({ keepCaret: false }); };
 let rulerDrag = false;
 const rulerJump = e => { const r = E.ruler.getBoundingClientRect(); const frac = clamp((e.clientY - r.top) / r.height, 0, 1); const p = E.pane.L; p.scrollTop = frac * contentH() - p.clientHeight / 2; };
