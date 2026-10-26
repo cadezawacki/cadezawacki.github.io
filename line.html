@@ -125,6 +125,11 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
 .st .lg{width:9px;height:9px;border-radius:2px;display:inline-block;align-self:center}
 .note{font-size:11.5px;padding:2px 8px;border-radius:7px;background:rgb(var(--warn)/.14);color:var(--text);white-space:nowrap}
 .dnav{display:flex;align-items:center;gap:2px;margin-left:auto}
+.cfilt{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.cfilt .chip{padding:1px 8px;font-size:12px}.cfilt .chip i{font-style:normal;font:11px var(--mono);opacity:.75}
+.cfilt .chip .lg{margin-right:1px}
+.ln.fd,.g.fd,.m.fd{opacity:.4}
+.fold.cfh{color:rgb(var(--mix));font-style:italic}
 .dnav .lbl{font:12px var(--mono);color:var(--muted);padding:0 4px;min-width:52px;text-align:center}
 .simbar{width:54px;height:6px;border-radius:9px;background:var(--panel3);overflow:hidden;display:inline-block;vertical-align:middle}
 .simbar i{display:block;height:100%;background:rgb(var(--accent))}
@@ -281,6 +286,8 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
 
 /* scrollbars */
 .pane::-webkit-scrollbar,.flist::-webkit-scrollbar{width:11px;height:11px}
+.pane::-webkit-scrollbar:vertical{width:20px}
+.pane::-webkit-scrollbar-thumb:vertical{border-width:4px}
 .pane::-webkit-scrollbar-thumb,.flist::-webkit-scrollbar-thumb{background:rgb(120 130 150/.35);border-radius:9px;border:3px solid transparent;background-clip:content-box}
 .pane::-webkit-scrollbar-corner{background:transparent}
 
@@ -356,6 +363,8 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
     <button class="chip" data-scheme="coded" title="Salmon for L1, sage for L2">Color-coded</button>
     <span class="gl" style="margin-left:6px">Tab</span>
     <select class="sel" id="tab" title="Tab width (display, tabs ⇄ spaces, indentation)"><option>2</option><option>4</option><option>8</option></select>
+    <select class="sel" id="indent" title="What Tab / Enter insert while editing, and what “Fix indent” converts to"><option value="spaces">Indent: spaces</option><option value="tabs">Indent: tabs</option><option value="auto">Indent: match file</option></select>
+    <button class="chip" id="fixIndent" title="Convert both files to the chosen indentation: tabs ⇄ spaces and 2/3/8-wide levels rescaled to the tab width (undoable)">⇥ Fix indent (both)</button>
   </div>
 </div>
 
@@ -458,7 +467,8 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
       <li><b>Ignore</b> options only change what counts as “equal” — your text is never modified. Ignored differences are still shown with a dotted underline.</li>
       <li><b>Comments</b> is language-aware (Python <code>#</code>/docstrings, JS/C# <code>//</code> <code>/* */</code>, VBA <code>'</code>/<code>Rem</code>, CSS, HTML, INI). <b>Line order</b> treats moved lines as equal (they're tinted blue).</li>
       <li>Colours follow the kind of change: <b style="color:rgb(var(--hlL))">L1’s colour</b> = only in L1, <b style="color:rgb(var(--hlR))">L2’s colour</b> = only in L2 (pick them with the colour dot on each side, or <b>Color-coded</b>), <b style="color:rgb(var(--mix))">purple</b> = changed on both sides, <b style="color:rgb(var(--mv))">striped blue</b> = moved. The overview ruler on the right uses a left lane for L1-only and a right lane for L2-only content; hover a mark for details, click or drag to scroll. Lines that differ only in whitespace, indentation or case are labelled as such.</li>
-      <li>Transform tools (⋯ on each side, or “Both sides”) <em>do</em> change text: prettify/normalize, scrub comments or docstrings, tabs ⇄ spaces, trim, sort, adopt whitespace or casing from the other side. All undoable.</li>
+      <li><b>Show</b> (above the code) filters the differences: only-L1, only-L2, both sides, amended lines, moved, or cosmetic (whitespace / case). Other changes fold into a “hidden by filter” bar you can click open; F7 navigation, the counter and <b>Copy all changes</b> follow the filter.</li>
+      <li>Transform tools (⋯ on each side, or “Both sides”) <em>do</em> change text: prettify/normalize, scrub comments or docstrings, <b>fix indentation</b> (⇥ Fix indent converts both files to the Indent setting — 4 spaces by default — rescaling 2-wide or tab levels), tabs ⇄ spaces, trim, sort, adopt whitespace or casing from the other side. All undoable.</li>
       <li><code>.bas .cls .frm</code> are VBA. <code>.cs</code> is auto-detected as VBA or C# from its content — override with the language dropdown.</li>
     </ul>
     <h3>Keyboard</h3>
@@ -884,7 +894,16 @@ function computeDiff(fA, fB, o, light) {
   const keyer = makeKeyer(o);
   const cA = o.icomments && fA ? scanOf(fA).code : A, cB = o.icomments && fB ? scanOf(fB).code : B;
   const kA = A.map((l, i) => keyer(l, cA[i])), kB = B.map((l, i) => keyer(l, cB[i]));
-  const ig = (keys, L) => keys.map((k, i) => k.trim() === '' && (o.iblank || L[i].trim() !== ''));
+  const ig = (keys, L) => {
+    const r = keys.map((k, i) => k.trim() === '' && (o.iblank || L[i].trim() !== ''));
+    // ignoring comments: blank lines inside / around a comment or docstring block go with it
+    if (o.icomments) for (let i = 0; i < keys.length;) {
+      if (keys[i].trim() !== '') { i++; continue; }
+      let j = i, hit = false; for (; j < keys.length && keys[j].trim() === ''; j++) if (L[j].trim() !== '') hit = true;
+      if (hit) for (let x = i; x < j; x++) r[x] = true; i = j;
+    }
+    return r;
+  };
   const igA = ig(kA, A), igB = ig(kB, B);
   const ids = new Map(); const id = k => { let v = ids.get(k); if (v === undefined) { v = ids.size; ids.set(k, v); } return v; };
   const iA = [], sA = [], iB = [], sB = [];
@@ -912,6 +931,10 @@ function computeDiff(fA, fB, o, light) {
   const rows = [], chunks = []; let Dl = [], Il = [], ca = 0, cb = 0;
   const flush = () => {
     if (!Dl.length && !Il.length) return;
+    // a hunk that holds ignored comments: leftover blank lines there are just the comment's spacing
+    if (o.icomments && (Dl.some(i => igA[i] && A[i].trim()) || Il.some(j => igB[j] && B[j].trim()))) {
+      for (const i of Dl) if (!A[i].trim()) igA[i] = true; for (const j of Il) if (!B[j].trim()) igB[j] = true;
+    }
     const sig = Dl.some(i => !igA[i]) || Il.some(j => !igB[j]);
     const path = alignHunk(Dl, Il, kA, kB, igA, igB, movable);
     const r0 = rows.length;
@@ -970,13 +993,13 @@ function computeDiff(fA, fB, o, light) {
 /* =========================================================================
    State
    ========================================================================= */
-const DEF = { smartIndent: true, compact: false, ctx: 3, wrap: false, syntax: true, sync: true, intra: 'word', ws: 'exact', icase: false, iblank: false, icomments: false, iquotes: false, ipunct: false, iorder: false, iattr: false, tab: 4, theme: 'auto', showOpts: true, fileFilter: 'all' };
+const DEF = { smartIndent: true, compact: false, ctx: 3, wrap: false, syntax: true, sync: true, intra: 'word', ws: 'exact', icase: false, iblank: false, icomments: false, iquotes: false, ipunct: false, iorder: false, iattr: false, tab: 4, indent: 'spaces', theme: 'auto', showOpts: true, fileFilter: 'all' };
 const savedSide = store.get('side', {});
 const S = {
   files: { L: [], R: [] }, cur: { L: null, R: null }, links: [], pairs: [],
   opts: Object.assign({}, DEF, store.get('opts', {})),
   side: { L: Object.assign({ label: '', color: 'teal' }, savedSide.L), R: Object.assign({ label: '', color: 'teal' }, savedSide.R) },
-  d: null, vis: [], rowToVis: null, lineEl: { L: [], R: [] }, curChunk: -1, expanded: new Set(),
+  d: null, vis: [], rowToVis: null, lineEl: { L: [], R: [] }, curChunk: -1, cf: 'all', expanded: new Set(),
   composing: false, lastMs: 0, statusCache: new Map(), filesOpen: null, forceCmp: new Set(), wrapOn: false
 };
 const saveOpts = () => store.set('opts', S.opts);
@@ -1127,16 +1150,18 @@ function selectPair(p, opts = {}) {
    ========================================================================= */
 const isDiffRow = r => r.t === 'mod' || r.t === 'del' || r.t === 'ins' || (r.t === 'mov' && !S.opts.iorder);
 function buildVis(forceRows) {
-  const rows = S.d.rows; if (!S.opts.compact) return rows.map((_, i) => i);
+  const rows = S.d.rows, filt = S.cf !== 'all'; if (!S.opts.compact && !filt) return rows.map((_, i) => i);
   const ctx = clamp(+S.opts.ctx || 0, 0, 50); const show = new Uint8Array(rows.length);
-  rows.forEach((r, i) => { if (isDiffRow(r)) for (let k = Math.max(0, i - ctx); k <= Math.min(rows.length - 1, i + ctx); k++) show[k] = 1; });
+  if (!S.opts.compact) rows.forEach((r, i) => { show[i] = cfHidden(r) ? 0 : 1; }); // filter only: fold the hunks it hides
+  else rows.forEach((r, i) => { if (isDiffRow(r) && !cfHidden(r)) for (let k = Math.max(0, i - ctx); k <= Math.min(rows.length - 1, i + ctx); k++) if (!cfHidden(rows[k])) show[k] = 1; });
   for (const i of forceRows) if (i >= 0 && i < rows.length) show[i] = 1;
   const vis = []; let i = 0;
   while (i < rows.length) {
     if (show[i]) { vis.push(i++); continue; }
     let j = i; while (j < rows.length && !show[j]) j++;
     const key = `${rows[i].l}|${rows[i].r}`;
-    if (j - i < 2 || S.expanded.has(key)) { for (let k = i; k < j; k++) vis.push(k); }
+    let hid = false; if (filt) for (let k = i; k < j && !hid; k++) hid = cfHidden(rows[k]);
+    if ((j - i < 2 && !hid) || S.expanded.has(key)) { for (let k = i; k < j; k++) vis.push(k); }
     else vis.push({ fold: [i, j], key });
     i = j;
   }
@@ -1217,21 +1242,24 @@ function rowHTML(vi) {
   const d = S.d, v = S.vis[vi], files = { L: cur('L'), R: cur('R') }; let out;
   if (typeof v === 'object') {
     const [a, b] = v.fold; const lr = rangeLines(a, b);
-    const txt = `⋯ ${b - a} unchanged line${b - a > 1 ? 's' : ''} · click to expand`;
-    out = [`<div class="fold" contenteditable="false" data-fold="${esc(v.key)}" data-a="${lr.L[0]}" data-b="${lr.L[1]}">${txt}</div>`,
-      `<div class="fold" contenteditable="false" data-fold="${esc(v.key)}" data-a="${lr.R[0]}" data-b="${lr.R[1]}">${txt}</div>`,
+    const hid = new Set(); for (let k = a; k < b; k++) if (cfHidden(d.rows[k])) hid.add(d.rows[k].c);
+    const txt = hid.size ? `⋯ ${b - a} line${b - a > 1 ? 's' : ''} · ${hid.size} change${hid.size > 1 ? 's' : ''} hidden by the “${esc(cfDef(S.cf).name())}” filter · click to show`
+      : `⋯ ${b - a} unchanged line${b - a > 1 ? 's' : ''} · click to expand`;
+    const fc = hid.size ? ' cfh' : '';
+    out = [`<div class="fold${fc}" contenteditable="false" data-fold="${esc(v.key)}" data-a="${lr.L[0]}" data-b="${lr.L[1]}">${txt}</div>`,
+      `<div class="fold${fc}" contenteditable="false" data-fold="${esc(v.key)}" data-a="${lr.R[0]}" data-b="${lr.R[1]}">${txt}</div>`,
       '<div class="g foldg">⋯</div>', '<div class="g foldg">⋯</div>', `<div class="m foldm" data-fold="${esc(v.key)}"></div>`];
     return (S.rc[vi] = out);
   }
   const i = v, row = d.rows[i]; const syn = S.opts.syntax;
   const c = row.c != null ? d.chunks[row.c] : null; const isCur = c && c === d.chunks[S.curChunk];
-  const k = rowKind(row), kc = k && c && !c.soft && k !== 'S' ? ' k' + k : '';
+  const k = rowKind(row), kc = k && c && !c.soft && k !== 'S' ? ' k' + k : '', fd = cfHidden(row) ? ' fd' : '';
   const H = {}, G = {};
   for (const s of ['L', 'R']) {
     const ln = s === 'L' ? row.l : row.r; const f = files[s];
     if (ln == null || !f) {
       H[s] = `<div class="fill${row.t === 'raw' ? ' blank' : ''}" contenteditable="false" data-row="${i}"></div>`;
-      G[s] = `<div class="g${c && !c.soft ? ' chg' + kc : ''}${isCur ? ' cur' : ''}">${c && c.r0 === i ? mgBtn(s, row.c) : ''}</div>`;
+      G[s] = `<div class="g${c && !c.soft ? ' chg' + kc : ''}${fd}${isCur ? ' cur' : ''}">${c && c.r0 === i ? mgBtn(s, row.c) : ''}</div>`;
       continue;
     }
     let cls = 'ln', gcls = 'g', rng = null, rcls = 'x';
@@ -1244,6 +1272,7 @@ function rowHTML(vi) {
     }
     if (S.opts.intra === 'none' && rng && rcls === 'x') rng = null;
     if (isCur) { gcls += ' cur'; cls += ' curln'; }
+    cls += fd; gcls += fd;
     const text = f.lines[ln];
     const mo = row.t === 'mov' && d.rows[row.mv];
     const note = mo ? (row.l != null ? `moved → ${sideName('R')}:${mo.r + 1}` : `moved ← ${sideName('L')}:${mo.l + 1}`) : row.note;
@@ -1255,7 +1284,7 @@ function rowHTML(vi) {
   let M = '<div class="m"></div>';
   if (c) {
     const first = c.r0 === i, last = c.r1 - 1 === i;
-    M = `<div class="m in${c.mv ? ' mvc' : ''}${c.soft && !c.mv ? ' softc' : ''}${kc}${first ? ' first' : ''}${last ? ' last' : ''}${isCur ? ' cur' : ''}">${first ? `<button class="mb toR" data-chunk="${row.c}" data-dir="R" title="Copy this change ${esc(sideName('L'))} → ${esc(sideName('R'))}">»</button><button class="mb toL" data-chunk="${row.c}" data-dir="L" title="Copy this change ${esc(sideName('R'))} → ${esc(sideName('L'))}">«</button>` : ''}</div>`;
+    M = `<div class="m in${c.mv ? ' mvc' : ''}${c.soft && !c.mv ? ' softc' : ''}${kc}${fd}${first ? ' first' : ''}${last ? ' last' : ''}${isCur ? ' cur' : ''}">${first ? `<button class="mb toR" data-chunk="${row.c}" data-dir="R" title="Copy this change ${esc(sideName('L'))} → ${esc(sideName('R'))}">»</button><button class="mb toL" data-chunk="${row.c}" data-dir="L" title="Copy this change ${esc(sideName('R'))} → ${esc(sideName('L'))}">«</button>` : ''}</div>`;
   }
   return (S.rc[vi] = [H.L, H.R, G.L, G.R, M]);
 }
@@ -1326,10 +1355,34 @@ function syncHeights() {
   for (let i = 0; i < n; i++) hs[i] = Math.max(cL[i].offsetHeight, cR[i] ? cR[i].offsetHeight : 0, LH);
   for (let i = 0; i < n; i++) if (hs[i] > LH + 0.5) for (const col of all) if (col[i]) col[i].style.height = hs[i] + 'px';
 }
-// summary of a chunk for the ruler tooltip
-function chunkInfo(c) {
+// per-kind line counts of a chunk (cached on the chunk; chunks are rebuilt with every diff)
+function chunkN(c) {
+  if (c.n) return c.n;
   const n = { L: 0, R: 0, X: 0, W: 0, M: 0 };
   for (let i = c.r0; i < c.r1; i++) { const k = rowKind(S.d.rows[i]); if (k in n) n[k]++; }
+  return (c.n = n);
+}
+// change filter: which hunks are shown, navigated, counted and copied by "Copy all"
+const CFILT = [
+  { k: 'all', name: () => 'All', tip: () => 'Every difference', test: () => true },
+  { k: 'L', name: () => `Only ${sideName('L')}`, sw: '--hlL', tip: () => `Hunks whose lines exist only in ${sideName('L')} (removed in ${sideName('R')})`, test: n => n.L && !n.R && !n.X },
+  { k: 'R', name: () => `Only ${sideName('R')}`, sw: '--hlR', tip: () => `Hunks whose lines exist only in ${sideName('R')} (new in ${sideName('R')})`, test: n => n.R && !n.L && !n.X },
+  { k: 'both', name: () => 'Both sides', sw: '--mix', tip: () => 'Hunks that change both sides: amended lines, or lines removed and different lines added', test: n => n.X || (n.L && n.R) },
+  { k: 'X', name: () => 'Amended', sw: '--mix', tip: () => 'Hunks containing lines edited on both sides (same line, different content)', test: n => n.X },
+  { k: 'M', name: () => 'Moved', sw: '--mv', tip: () => 'Hunks containing lines that moved position', test: n => n.M },
+  { k: 'W', name: () => 'Cosmetic', tip: () => 'Hunks where only whitespace, indentation or case differs', test: n => n.W && !n.L && !n.R && !n.X && !n.M }
+];
+const cfDef = k => CFILT.find(f => f.k === k) || CFILT[0];
+const matchCF = c => !c.soft && (S.cf === 'all' || !!cfDef(S.cf).test(chunkN(c)));
+const cfHidden = r => r.c != null && S.cf !== 'all' && !S.d.chunks[r.c].soft && !matchCF(S.d.chunks[r.c]);
+function setCF(k) {
+  S.cf = k; const c = S.d && S.d.chunks[S.curChunk];
+  if (c && !matchCF(c)) S.curChunk = -1;
+  S.expanded.clear(); render(); updateStats();
+}
+// summary of a chunk for the ruler tooltip
+function chunkInfo(c) {
+  const n = chunkN(c);
   const pl = (v, w) => `${v} line${v === 1 ? '' : 's'} ${w}`;
   const parts = [n.L && pl(n.L, `only in ${sideName('L')}`), n.R && pl(n.R, `only in ${sideName('R')}`), n.X && pl(n.X, 'changed on both sides'),
     n.W && pl(n.W, 'whitespace / case only'), n.M && pl(n.M, 'moved')].filter(Boolean);
@@ -1366,19 +1419,21 @@ function drawRuler() {
   // runs of consecutive visible rows with the same kind
   const runs = []; let run = null;
   for (let vi = 0; vi < S.vis.length; vi++) {
-    const v = S.vis[vi]; let k = null;
+    const v = S.vis[vi]; let k = null, dim = false;
     if (typeof v === 'number') {
+      dim = cfHidden(d.rows[v]);
       const r = d.rows[v], c = r.c != null ? d.chunks[r.c] : null;
       k = r.t === 'eq' ? null : c && c.soft ? 'S' : rowKind(r);
       if (k === 'M') k = r.l != null ? 'ML' : 'MR';
     }
-    if (run && run.k === k && run.v1 === vi) { run.v1 = vi + 1; continue; }
-    if (k) runs.push(run = { k, v0: vi, v1: vi + 1 }); else run = null;
+    if (run && run.k === k && run.dim === dim && run.v1 === vi) { run.v1 = vi + 1; continue; }
+    if (k) runs.push(run = { k, dim, v0: vi, v1: vi + 1 }); else run = null;
   }
   // mixed hunks get a purple band behind their rows, so they read as one "both sides" change
   g.fillStyle = col('--mix', .3);
   for (const c of d.chunks) {
     if (c.soft) continue; const v0 = S.rowToVis[c.r0]; if (v0 < 0) continue;
+    g.globalAlpha = c.soft || matchCF(c) ? 1 : .25;
     if (chunkInfo(c).mixed) box('F', v0, v0 + (c.r1 - c.r0));
   }
   // side lanes go on top of purple, so dense files still show which side gained content
@@ -1386,6 +1441,7 @@ function drawRuler() {
   const style = { S: ['C', '--faint'], W: ['F', '--mix', .45], L: ['L', '--hlL'], R: ['R', '--hlR'], X: ['F', '--mix'] };
   for (const k of order) for (const r of runs) {
     if (r.k !== k) continue;
+    g.globalAlpha = r.dim ? .25 : 1;
     if (k === 'ML' || k === 'MR') { stripes(k[1], r.v0, r.v1); continue; }
     const [ln, v, a] = style[k]; g.fillStyle = k === 'S' ? cs.getPropertyValue('--faint').trim() : col(v, a); box(ln, r.v0, r.v1);
   }
@@ -1420,7 +1476,15 @@ function updateStats() {
     if (fL.lang !== fR.lang) notes.push(`Languages: ${LANGS[fL.lang]} vs ${LANGS[fR.lang]}`);
   }
   const ignored = st.soft + st.ign + (S.opts.iorder ? st.mov : 0);
-  const chunksReal = d.chunks.map((c, i) => [c, i]).filter(([c]) => !c.soft);
+  const chunksReal = d.chunks.map((c, i) => [c, i]).filter(([c]) => matchCF(c));
+  let cfHTML = '';
+  if (!d.raw && d.chunks.some(c => !c.soft)) {
+    const real = d.chunks.filter(c => !c.soft);
+    cfHTML = `<span class="cfilt" title="Show only some kinds of change"><span class="gl">Show</span>${CFILT.map(f => {
+      const cnt = real.filter(c => f.test(chunkN(c))).length; if (!cnt && f.k !== S.cf) return '';
+      return `<button class="chip" data-cf="${f.k}" aria-pressed="${f.k === S.cf}" title="${esc(f.tip())}">${f.sw ? `<i class="lg" style="background:rgb(var(${f.sw}))"></i>` : ''}${esc(f.name())} <i>${cnt}</i></button>`;
+    }).join('')}</span>`;
+  }
   const pos = chunksReal.findIndex(([, i]) => i === S.curChunk);
   E.stats.innerHTML = `${pill}
     <span class="st" title="Lines in ${esc(sideName('L'))} / ${esc(sideName('R'))}">lines <b>${fmt(d.nA)}</b> / <b>${fmt(d.nB)}</b></span>
@@ -1432,11 +1496,13 @@ function updateStats() {
     <span class="st" title="Similarity">similar <b>${d.sim}%</b> <span class="simbar"><i style="width:${d.sim}%"></i></span></span>
     `}${ignored ? `<span class="st" title="Differences hidden by your Ignore options (shown with dotted underline / hatch)">ignored <b>${fmt(ignored)}</b></span>` : ''}
     ${notes.map(n => `<span class="note">${esc(n)}</span>`).join('')}
+    ${cfHTML}
     <span class="dnav">
       <button class="ibtn sm" id="prevDiff" title="Previous difference (Shift+F7)"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
       <span class="lbl">${chunksReal.length ? `${pos >= 0 ? pos + 1 : '–'} / ${chunksReal.length}` : '0 / 0'}</span>
       <button class="ibtn sm" id="nextDiff" title="Next difference (F7)"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
     </span>`;
+  $$('[data-cf]', E.stats).forEach(b => b.onclick = () => setCF(b.dataset.cf));
   $('#prevDiff').onclick = () => gotoDiff(-1); $('#nextDiff').onclick = () => gotoDiff(1);
 }
 function updateBanner() {
@@ -1759,6 +1825,7 @@ function mergeLines(c, src, dst) {
   return { lines: shiftBlock(lines, delta, indentUnit(fd) === '\t', keep), delta };
 }
 function indentUnit(f) {
+  if (S.opts.indent !== 'auto') return S.opts.indent === 'tabs' ? '\t' : ' '.repeat(tabW());
   let tabs = 0, sp = 0; for (let i = 0; i < Math.min(f.lines.length, 400); i++) { const c = f.lines[i][0]; if (c === '\t') tabs++; else if (c === ' ') sp++; }
   return tabs > sp ? '\t' : ' '.repeat(+S.opts.tab || 4);
 }
@@ -1892,8 +1959,8 @@ function scrollToRow(ri) {
   p.scrollTop = target; E.pane.R.scrollTop = target; E.mid.scrollTop = target;
 }
 function gotoDiff(dir) {
-  const ch = S.d.chunks; const idx = ch.map((c, i) => i).filter(i => !ch[i].soft);
-  if (!idx.length) { toast('No differences'); return; }
+  const ch = S.d.chunks; const idx = ch.map((c, i) => i).filter(i => matchCF(ch[i]));
+  if (!idx.length) { toast(S.cf === 'all' ? 'No differences' : `No “${cfDef(S.cf).name()}” differences`); return; }
   let pos = idx.indexOf(S.curChunk), next;
   if (pos < 0) {
     const top = E.pane.L.scrollTop;
@@ -1925,11 +1992,11 @@ function mergeChunk(ci, dst) {
 }
 function mergeAll(dst) {
   const src = OTHER[dst]; const fs = cur(src); if (!fs) return; const fd = ensureSide(dst);
-  const ch = S.d.chunks.filter(c => !c.soft); if (!ch.length) { toast('Nothing to copy'); return; }
+  const ch = S.d.chunks.filter(matchCF); if (!ch.length) { toast('Nothing to copy'); return; }
   const nl = fd.lines.slice();
   for (let k = ch.length - 1; k >= 0; k--) { const c = ch[k]; spliceArr(nl, c[dst].a, c[dst].b - c[dst].a, mergeLines(c, src, dst).lines); }
   pushUndo(fd); fd.lines = nl.length ? nl : ['']; bump(fd); S.curChunk = -1;
-  refresh({ keepCaret: false }); toast(`Applied ${ch.length} change${ch.length === 1 ? '' : 's'} ${sideName(src)} → ${sideName(dst)}`);
+  refresh({ keepCaret: false }); toast(`Applied ${ch.length}${S.cf === 'all' ? '' : ` “${cfDef(S.cf).name()}”`} change${ch.length === 1 ? '' : 's'} ${sideName(src)} → ${sideName(dst)}`);
 }
 
 /* =========================================================================
@@ -2099,6 +2166,30 @@ function tAdopt(s, mode) {
   for (const r of d.rows) { if (r.t !== 'soft' || r.l == null || r.r == null) continue; const mine = s === 'L' ? r.l : r.r, theirs = s === 'L' ? r.r : r.l; out[mine] = g.lines[theirs]; n++; }
   return { lines: out, n };
 }
+// Re-indent to the chosen unit: detect the file's indent step (2, 4, tab…), expand tabs and rescale each
+// level to the tab width. Leading whitespace inside multi-line strings is content, so it is left alone, and
+// lines continuing an open bracket keep their offset from the line that opened it (hanging alignment).
+function tReindent(f) {
+  const n = tabW(), tabs = S.opts.indent === 'tabs', sc = scanOf(f), cont = sc.cont, W = f.lines.map(l => colW(leadWS(l)));
+  const anchor = new Int32Array(f.lines.length).fill(-1); let depth = 0, open = -1;
+  f.lines.forEach((l, i) => {
+    if (depth > 0) anchor[i] = open; else open = i;
+    for (const ch of bareOf(sc, i, l)) { if ('([{'.includes(ch)) depth++; else if (')]}'.includes(ch)) depth = Math.max(0, depth - 1); }
+  });
+  const hist = new Map(); let prev = 0;
+  f.lines.forEach((l, i) => {
+    if (!l.trim() || cont[i] === 's' || anchor[i] >= 0) return;
+    const d = W[i] - prev; if (d >= 2 && d <= 8) hist.set(d, (hist.get(d) || 0) + 1); prev = W[i];
+  });
+  let step = n, best = 0; for (const [d, c] of hist) if (c > best) { best = c; step = d; }
+  const nw = W.map(w => Math.floor(w / step) * n + w % step);
+  const lines = f.lines.map((l, i) => {
+    if (cont[i] === 's') return l; if (!l.trim()) return '';
+    const a = anchor[i], w = a >= 0 ? Math.max(0, nw[a] + W[i] - W[a]) : nw[i];
+    return mkIndent(w, tabs) + l.slice(leadWS(l).length);
+  });
+  return { lines, step };
+}
 async function applyTool(s, act) {
   if (s === 'B') {
     if (act === 'pushAll') return mergeAll('R'); if (act === 'pullAll') return mergeAll('L');
@@ -2117,6 +2208,11 @@ async function applyTool(s, act) {
     case 'scrubAll': { const r = tScrub(f, new Set(['c', 'd'])); return r.n ? setLines(s, r.lines, { msg: `${who}: removed comments & docstrings` }) : toast(`${who}: nothing to scrub`); }
     case 'trim': return setLines(s, tTrim(f.lines), { msg: `${who}: trailing whitespace trimmed` });
     case 't2s': return setLines(s, tTabs2Spaces(f.lines, n), { msg: `${who}: tabs → ${n} spaces` });
+    case 'reindent': {
+      const r = tReindent(f), to = S.opts.indent === 'tabs' ? 'tabs' : `${n} spaces`;
+      if (arrEq(r.lines, f.lines)) return toast(`${who}: indentation already ${to}`);
+      return setLines(s, r.lines, { msg: `${who}: indentation ${r.step !== n ? `${r.step}-wide → ` : ''}${to}` });
+    }
     case 's2t': return setLines(s, tSpaces2Tabs(f.lines, n), { msg: `${who}: ${n} spaces → tabs` });
     case 'sort': return setLines(s, tSort(f.lines), { msg: `${who}: lines sorted` });
     case 'upper': return setLines(s, f.lines.map(l => l.toUpperCase()), { msg: `${who}: UPPERCASE` });
@@ -2392,7 +2488,7 @@ function applyTheme() {
 }
 function syncOptUI() {
   $$('[data-opt]').forEach(b => b.setAttribute('aria-pressed', String(!!S.opts[b.dataset.opt])));
-  $('#ctx').value = S.opts.ctx; $('#intra').value = S.opts.intra; $('#ws').value = S.opts.ws; $('#tab').value = String(S.opts.tab);
+  $('#ctx').value = S.opts.ctx; $('#intra').value = S.opts.intra; $('#ws').value = S.opts.ws; $('#tab').value = String(S.opts.tab); $('#indent').value = S.opts.indent;
   $('#ctx').closest('label').style.opacity = S.opts.compact ? 1 : .45;
   document.documentElement.style.setProperty('--tab', S.opts.tab);
   $('#opts').classList.toggle('hidden', !S.opts.showOpts);
@@ -2402,10 +2498,10 @@ function toolItems(s) {
   const n = S.opts.tab;
   if (s === 'B') return [
     { head: 'Both sides' },
-    { label: `Copy all changes ${sideName('L')} → ${sideName('R')}`, act: 'pushAll' }, { label: `Copy all changes ${sideName('R')} → ${sideName('L')}`, act: 'pullAll' },
+    { label: `Copy all ${S.cf === 'all' ? '' : `“${cfDef(S.cf).name()}” `}changes ${sideName('L')} → ${sideName('R')}`, act: 'pushAll' }, { label: `Copy all ${S.cf === 'all' ? '' : `“${cfDef(S.cf).name()}” `}changes ${sideName('R')} → ${sideName('L')}`, act: 'pullAll' },
     { label: 'Swap sides', act: 'swap' }, { sep: 1 },
     { label: 'Prettify / normalize both', act: 'prettify' }, { label: 'Scrub comments (both)', act: 'scrubC' }, { label: 'Scrub docstrings (both)', act: 'scrubD' },
-    { label: 'Trim trailing whitespace (both)', act: 'trim' }, { label: `Tabs → ${n} spaces (both)`, act: 't2s' }, { label: `Spaces → tabs (both)`, act: 's2t' }, { sep: 1 },
+    { label: 'Trim trailing whitespace (both)', act: 'trim' }, { label: 'Fix indentation (both)', act: 'reindent' }, { label: `Tabs → ${n} spaces (both)`, act: 't2s' }, { label: `Spaces → tabs (both)`, act: 's2t' }, { sep: 1 },
     { label: 'Download both sides as .zip…', act: 'zipmenu' }, { label: 'Manage files…', act: 'mgr' }, { sep: 1 },
     { label: 'Export patch (.diff) — this pair', act: 'patch' }, { label: 'Export patch — all pairs', act: 'patchAll', hidden: S.pairs.length < 2 }, { label: 'Copy patch to clipboard', act: 'copyPatch' }
   ];
@@ -2417,6 +2513,7 @@ function toolItems(s) {
     { label: 'Scrub comments', act: 'scrubC', disabled: !has || lang === 'txt' },
     { label: 'Scrub docstrings', act: 'scrubD', hidden: lang !== 'py' },
     { label: 'Trim trailing whitespace', act: 'trim', disabled: !has },
+    { label: 'Fix indentation', act: 'reindent', disabled: !has },
     { label: `Tabs → spaces (${n})`, act: 't2s', disabled: !has }, { label: `Spaces → tabs (${n})`, act: 's2t', disabled: !has },
     { label: 'Sort lines A → Z', act: 'sort', disabled: !has }, { label: 'UPPERCASE', act: 'upper', disabled: !has }, { label: 'lowercase', act: 'lower', disabled: !has },
     { sep: 1 },
@@ -2538,6 +2635,8 @@ $$('[data-scheme]').forEach(b => b.onclick = () => { if (b.dataset.scheme === 't
 $('#ctx').oninput = () => { S.opts.ctx = clamp(+$('#ctx').value || 0, 0, 50); saveOpts(); if (S.opts.compact) refresh({ keepCaret: false }); };
 $('#intra').onchange = () => { S.opts.intra = $('#intra').value; saveOpts(); refresh({ keepCaret: false }); };
 $('#ws').onchange = () => { S.opts.ws = $('#ws').value; saveOpts(); S.statusCache.clear(); refresh({ keepCaret: false }); renderFiles(); };
+$('#indent').onchange = () => { S.opts.indent = $('#indent').value; saveOpts(); };
+$('#fixIndent').onclick = () => applyTool('B', 'reindent');
 $('#tab').onchange = () => { S.opts.tab = +$('#tab').value; saveOpts(); syncOptUI(); if (S.opts.wrap) refresh({ keepCaret: false }); };
 let rulerDrag = false;
 const rulerJump = e => { const r = E.ruler.getBoundingClientRect(); const frac = clamp((e.clientY - r.top) / r.height, 0, 1); const p = E.pane.L; p.scrollTop = frac * contentH() - p.clientHeight / 2; };
