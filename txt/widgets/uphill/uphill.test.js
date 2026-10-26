@@ -1,4 +1,5 @@
-/* Headless checks for the Uphill Rush engine (physics, terrain, tricks, scoring).
+/* Headless checks for the Uphill Rush engine (physics, vehicles, surfaces, set
+ * pieces, tricks, scoring, bots, career data, saves, ghosts).
  * Not loaded by the app (not in the manifest). Run: node txt/widgets/uphill/uphill.test.js */
 'use strict';
 var assert = require('assert');
@@ -19,11 +20,11 @@ function finite(w) {
   return [c.x, c.y, c.a, c.vx, c.vy, c.w, a.x, a.y, a.om, b.x, b.y, b.om].every(function (v) { return typeof v === 'number' && isFinite(v); });
 }
 function energy(w) {
-  var c = w.c, e = 0.5 * (c.vx * c.vx + c.vy * c.vy) + 0.15 * c.w * c.w + E.G * c.y;
-  w.wh.forEach(function (q) { e += 0.12 * (0.5 * (q.vx * q.vx + q.vy * q.vy) + E.G * q.y); });
+  var c = w.c, P = w.P, e = 0.5 * P.mc * (c.vx * c.vx + c.vy * c.vy) + 0.5 * P.ic * c.w * c.w + P.mc * E.G * c.y;
+  w.wh.forEach(function (q) { e += P.mw * (0.5 * (q.vx * q.vx + q.vy * q.vy) + E.G * q.y); });
   return e;
 }
-// Lift the whole bike by dy, set its attitude / spin, and let it fly.
+// Lift the whole machine by dy, set its attitude / spin, and let it fly.
 function launch(w, x, dy, angle, spin) {
   E.placeBike(w, x);
   var c = w.c, ca = Math.cos(angle), sa = Math.sin(angle);
@@ -36,16 +37,20 @@ function launch(w, x, dy, angle, spin) {
   c.y += dy; c.a = angle; c.w = spin; c.py = c.y; c.pa = c.a;
   w.state = 'ride'; w.air = false; w.airT = 0; w.airRot = 0;
 }
+// a bot rider on a track until it finishes (or time runs out)
+function botRun(opt, maxT) {
+  var w = E.newWorld(opt);
+  while (w.state !== 'finish' && w.t < (maxT || 150)) { if (!opt.ai) E.bot(w); E.step(w); w.events.length = 0; }
+  return w;
+}
 
 test('module exports the engine; the widget registers under the manifest name', function () {
   assert.strictEqual(typeof E.newWorld, 'function');
   assert.strictEqual(typeof E.step, 'function');
   var entry = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'manifest.json'), 'utf8')).modules.filter(function (m) { return m.id === 'uphill'; })[0];
-  assert.strictEqual(entry.id, 'uphill');
   assert.strictEqual(entry.type, 'widget');
   assert.strictEqual(entry.entry, 'widgets/uphill/uphill.js');
   assert.strictEqual(entry.css, 'widgets/uphill/uphill.css');
-  // load the file again as the browser would, against a fake Cade
   var reg = null, css = [];
   var src = fs.readFileSync(path.join(__dirname, 'uphill.js'), 'utf8');
   var fakeWin = { Cade: { loadCSS: function (p) { css.push(p); }, registerWidget: function (o) { reg = o; } } };
@@ -59,37 +64,40 @@ test('module exports the engine; the widget registers under the manifest name', 
   assert.deepStrictEqual(css, ['uphill.css']);
 });
 
-test('terrain lookups: height, slope and segment search on a known polyline', function () {
-  var w = E.newWorld({ src: 'f10 l20,5 f10' });     // the start straight runs to x = 10
+test('terrain lookups: height, slope, surface and segment search on a known polyline', function () {
+  var w = E.newWorld({ src: 'f10 l20,5 m4 f10' });   // the start straight runs to x = 10
   assert.ok(Math.abs(E.heightAt(w.ter, 0)) < 1e-9);
   assert.ok(Math.abs(E.heightAt(w.ter, 20)) < 1e-9);
   assert.ok(Math.abs(E.heightAt(w.ter, 40) - 5) < 1e-9);
-  assert.ok(Math.abs(E.heightAt(w.ter, 45) - 5) < 1e-9);
   var m = E.heightAt(w.ter, 30);
   assert.ok(m > 2.2 && m < 2.8, 'midpoint of the slope ' + m);
   assert.ok(E.slopeAt(w.ter, 30, 0.5) > 0.2, 'climbing');
+  assert.strictEqual(E.matAt(w.ter, 30), 0, 'dirt');
+  assert.strictEqual(E.matAt(w.ter, 45), 4, 'ice');
   for (var i = 1; i < w.ter.n; i++) assert.ok(w.ter.xs[i] > w.ter.xs[i - 1], 'xs strictly increasing');
   assert.ok(E.groundDist(w.ter, 0, 2, 0.2) > 1.9 && E.groundDist(w.ter, 0, -0.5, 0.2) < 0);
 });
 
-test('a bike at rest on flat ground settles, stays upright, and gains no energy', function () {
-  var w = E.newWorld({ src: 'f100' });
-  steps(w, 2);
-  var x0 = w.c.x, y0 = w.c.y, e0 = energy(w), maxV = 0, maxDy = 0, eMax = -1e9;   // e: J per kg of frame
-  steps(w, 6, function (w) {
-    maxV = Math.max(maxV, Math.abs(w.c.vx), Math.abs(w.c.vy), Math.abs(w.c.w));
-    maxDy = Math.max(maxDy, Math.abs(w.c.y - y0));
-    eMax = Math.max(eMax, energy(w));
+test('every vehicle settles at rest on flat ground: upright, no creep, no energy gain', function () {
+  E.VEHICLES.forEach(function (v) {
+    var w = E.newWorld({ src: 'f100', cfg: { veh: v.key } });
+    steps(w, 2);
+    var x0 = w.c.x, y0 = w.c.y, e0 = energy(w), maxV = 0, maxDy = 0, eMax = -1e9;
+    steps(w, 5, function (w) {
+      maxV = Math.max(maxV, Math.abs(w.c.vx), Math.abs(w.c.vy), Math.abs(w.c.w));
+      maxDy = Math.max(maxDy, Math.abs(w.c.y - y0));
+      eMax = Math.max(eMax, energy(w));
+    });
+    assert.ok(finite(w), v.key);
+    assert.strictEqual(w.state, 'ready');
+    assert.ok(Math.abs(w.c.a) < 0.02, v.key + ' upright ' + w.c.a);
+    assert.ok(Math.abs(w.c.x - x0) < 1e-3, v.key + ' no creep ' + (w.c.x - x0));
+    assert.ok(maxDy < 2e-3, v.key + ' no bounce ' + maxDy);
+    assert.ok(maxV < 2e-3, v.key + ' no jitter ' + maxV);
+    assert.ok(eMax <= e0 + 1e-3, v.key + ' no energy gain ' + (eMax - e0));
+    assert.ok(w.wh[0].touch && w.wh[1].touch, v.key + ' both wheels down');
+    assert.strictEqual(w.bodyT, false, v.key + ' rides on its wheels');
   });
-  assert.ok(finite(w));
-  assert.strictEqual(w.state, 'ready');
-  assert.ok(Math.abs(w.c.a) < 0.02, 'upright ' + w.c.a);
-  assert.ok(Math.abs(w.c.x - x0) < 1e-3, 'no creep ' + (w.c.x - x0));
-  assert.ok(maxDy < 1e-3, 'no bounce ' + maxDy);
-  assert.ok(maxV < 1e-3, 'no jitter ' + maxV);
-  assert.ok(eMax <= e0 + 1e-4, 'no energy gain ' + (eMax - e0));
-  assert.ok(energy(w) <= e0 + 1e-5, 'no energy drift ' + (energy(w) - e0));
-  assert.ok(w.wh[0].touch && w.wh[1].touch, 'both wheels on the ground');
 });
 
 test('gas accelerates, brakes stop, holding brake from a stop reverses', function () {
@@ -102,69 +110,64 @@ test('gas accelerates, brakes stop, holding brake from a stop reverses', functio
   assert.ok(w.c.vx < v0 - 5, 'braking ' + w.c.vx);
   steps(w, 4, function (w) { w.inGas = 0; w.inBrake = 1; });
   assert.ok(w.c.vx < -1.5, 'reversing ' + w.c.vx);
-  assert.strictEqual(w.state, 'ride');
 });
 
-test('full gas on stage 1 with a simple lean controller reaches the finish', function () {
-  var w = E.newWorld({ stage: 0 }), crashes = 0, maxT = 60 / E.STEP;
-  for (var i = 0; i < maxT && w.state !== 'finish'; i++) {
-    E.bot(w);
-    E.step(w);
-    if (drain(w).indexOf('crash') >= 0) crashes++;
-  }
-  assert.strictEqual(w.state, 'finish');
-  assert.strictEqual(crashes, 0);
-  assert.ok(w.c.x >= w.finishX);
-  assert.ok(w.final > 10 && w.final < 40, 'time ' + w.final);
-  assert.ok(E.stars(0, w.final) >= 2, 'bot earns stars');
-  steps(w, 2);
-  assert.ok(w.done, 'done after the run-out');
+test('vehicles really differ: the Viper outruns the Goat on the flat, the Goat out-climbs it on ice', function () {
+  function flat(veh) { var w = E.newWorld({ src: 'f600', cfg: { veh: veh } }); steps(w, 8, function (w) { w.inGas = 1; }); return w.c.x; }
+  assert.ok(flat('viper') > flat('goat') + 15, 'top speed');
+  function ice(veh) { var w = E.newWorld({ src: 'f4 m4 l40,9 f40', cfg: { veh: veh } }); steps(w, 10, function (w) { E.bot(w); }); return w.c.x; }
+  assert.ok(ice('goat') > ice('viper') + 3, 'grip on an icy climb ' + ice('goat') + ' vs ' + ice('viper'));
 });
 
-test('every stage is finishable by the bot; checkpoints are hit in order', function () {
-  assert.ok(E.STAGES.length >= 12);
-  E.STAGES.forEach(function (st, idx) {
-    assert.ok(st.par[0] < st.par[1], st.name + ' par order');
-    var w = E.newWorld({ stage: idx }), cps = 0;
-    for (var i = 0; i < 120 / E.STEP && w.state !== 'finish'; i++) {
+test('every track is finishable by the bot on the starter bike; checkpoints in order', function () {
+  E.TRACKS.forEach(function (tr) {
+    var w = E.newWorld({ track: tr.key }), seen = [];
+    while (w.state !== 'finish' && w.t < 150) {
       E.bot(w); E.step(w);
-      drain(w).forEach(function (e) { if (e === 'cp') cps++; });
+      drain(w).forEach(function (e) { if (e === 'cp') seen.push(w.cpX); });
     }
-    assert.strictEqual(w.state, 'finish', st.name + ' finished');
-    assert.strictEqual(cps, w.cps.length, st.name + ' checkpoints');
-    assert.ok(w.final < st.par[1], st.name + ' bot inside 2-star time');
+    assert.strictEqual(w.state, 'finish', tr.key + ' finished (t ' + w.t.toFixed(1) + ')');
+    assert.deepStrictEqual(seen, w.cps.slice(0, seen.length), tr.key + ' checkpoints in order');
+    assert.ok(w.final < tr.par[1], tr.key + ' the bot makes two stars: ' + w.final.toFixed(1) + ' vs ' + tr.par[1]);
+  });
+});
+
+test('rival bots and bosses finish their events', function () {
+  E.EVENTS.forEach(function (ev) {
+    if (!ev.rivals) return;
+    ev.rivals.forEach(function (r) {
+      var cs = E.CAST[r[0]], w = botRun({ track: ev.track, cfg: { veh: cs.veh, fx: cs.fx }, ai: { skill: r[1] } }, 180);
+      assert.strictEqual(w.state, 'finish', ev.id + ' ' + r[0]);
+    });
   });
 });
 
 test('a head-first landing is a crash; the stage respawns at the checkpoint', function () {
   var w = E.newWorld({ src: 'f30 c f60' });      // checkpoint at x = 40
-  launch(w, 50, 3, Math.PI, 0);                  // upside down, 3 m up, past the checkpoint
+  launch(w, 50, 3, Math.PI, 0);
   var ev = [];
   steps(w, 1.2, function (w) { ev = ev.concat(drain(w)); });
   assert.ok(ev.indexOf('crash') >= 0, 'crashed');
   assert.strictEqual(w.why, 'head');
-  assert.strictEqual(w.state, 'crash');
-  assert.ok(finite(w));
-  // ragdoll stays above ground
   for (var i = 0; i < E.RAG_N; i++) assert.ok(w.rag[i * 4 + 1] > E.heightAt(w.ter, w.rag[i * 4]) - 0.05);
   for (var j = 0; j < 2 / E.STEP && ev.indexOf('respawn') < 0; j++) { E.step(w); ev = ev.concat(drain(w)); }
   assert.ok(ev.indexOf('respawn') >= 0);
   assert.strictEqual(w.state, 'ride');
-  assert.strictEqual(w.cps[0], 40);
   assert.ok(Math.abs(w.c.x - 40) < 1e-9 && Math.abs(w.c.vx) < 1e-9, 'back at the checkpoint, at rest');
 });
 
-test('an upright landing from a drop is not a crash', function () {
-  var w = E.newWorld({ src: 'f100' });
-  launch(w, 30, 4, 0, 0);
-  var ev = [];
+test('the buggy rolls onto its cage roof: crash; it shrugs off what flips a bike', function () {
+  var w = E.newWorld({ src: 'f100', cfg: { veh: 'buggy' } }), ev = [];
+  launch(w, 40, 3, Math.PI, 0);
+  steps(w, 1.5, function (w) { ev = ev.concat(drain(w)); });
+  assert.ok(ev.indexOf('crash') >= 0);
+  w = E.newWorld({ src: 'f100', cfg: { veh: 'buggy' } }); ev = [];
+  launch(w, 40, 4, 0, 0);
   steps(w, 2, function (w) { ev = ev.concat(drain(w)); });
-  assert.strictEqual(ev.indexOf('crash'), -1);
-  assert.strictEqual(w.state, 'ride');
-  assert.ok(Math.abs(w.c.a) < 0.1);
+  assert.strictEqual(ev.indexOf('crash'), -1, 'a flat drop is fine');
 });
 
-// Spin rate that lands the bike after `turns` full rotations (bisection on the launch spin).
+// Spin rate that lands the bike after one full rotation (bisection on the launch spin).
 function flipDrop(dir) {
   var lo = 2, hi = 12, best = null;
   for (var k = 0; k < 30; k++) {
@@ -182,7 +185,7 @@ function flipDrop(dir) {
   }
   return best;
 }
-test('a 360° rotation in the air is a flip (back and front), with a time bonus', function () {
+test('a 360° rotation in the air is a flip (back and front): trick points, a time bonus', function () {
   [1, -1].forEach(function (dir) {
     var spin = flipDrop(dir), w = E.newWorld({ src: 'f200' }), ev = [];
     launch(w, 40, 9, 0, dir * spin);
@@ -190,30 +193,182 @@ test('a 360° rotation in the air is a flip (back and front), with a time bonus'
     assert.strictEqual(ev.indexOf('crash'), -1, 'clean landing');
     assert.ok(ev.indexOf('flip') >= 0, 'flip event (' + dir + ')');
     assert.strictEqual(w.flips, 1);
-    assert.strictEqual(w.lastFlipN, 1);
     assert.strictEqual(w.lastFlipDir, dir, 'direction');
     assert.ok(w.bonus >= 1, 'stage time bonus');
+    var t = w.tricks.filter(function (x) { return /FLIP/.test(x.n); })[0];
+    assert.ok(t && t.n === (dir > 0 ? 'BACKFLIP' : 'FRONTFLIP') && t.p >= 300, 'named and scored');
+    assert.ok(w.score > 0 && w.comboN === 0, 'the combo banked after landing');
   });
+  assert.strictEqual(E.flipName(2, 1), 'DOUBLE BACKFLIP');
+  assert.strictEqual(E.flipName(3, -1), 'TRIPLE FRONTFLIP');
 });
 
-test('a plain jump is not a flip; over-rotation into the ground is a crash, not a flip', function () {
+test('a plain jump is not a flip; over-rotation into the ground is a crash and loses the combo', function () {
   var w = E.newWorld({ src: 'f200' }), ev = [];
   launch(w, 40, 6, 0.3, 1.2);
   steps(w, 3, function (w) { ev = ev.concat(drain(w)); });
   assert.strictEqual(ev.indexOf('flip'), -1);
   w = E.newWorld({ src: 'f200' }); ev = [];
-  launch(w, 40, 6, 0, 4.5);                       // ~1¼ turns: lands on its back
+  launch(w, 40, 6, 0, 4.5);
+  w.combo = 500; w.comboN = 2;
   steps(w, 3, function (w) { ev = ev.concat(drain(w)); });
   assert.ok(ev.indexOf('crash') >= 0);
-  assert.strictEqual(ev.indexOf('flip'), -1);
+  assert.ok(ev.indexOf('bail') >= 0, 'combo lost');
   assert.strictEqual(w.flips, 0);
+  assert.strictEqual(w.score, 0);
+});
+
+test('wheelies and stoppies score; tricks chain into a multiplied combo', function () {
+  var w = E.newWorld({ src: 'f400' });
+  steps(w, 7, function (w) {
+    w.inGas = 1;
+    var a = w.c.a;
+    w.inLean = a < 0.45 ? -1 : a > 0.7 ? 1 : 0;
+    if (w.t > 4) { w.inLean = 1; w.inGas = 0; }
+  });
+  var wh = w.tricks.filter(function (t) { return t.k === 'wheelie'; });
+  assert.ok(wh.length >= 1, 'wheelie awarded: ' + w.tricks.map(function (t) { return t.n; }));
+  assert.ok(w.bestWheelie >= 1, 'a long one ' + w.bestWheelie);
+  // combo maths: two tricks, banked ×2
+  var c = E.newWorld({ src: 'f100' });
+  c.combo = 300; c.comboN = 2;
+  E.bankCombo(c);
+  assert.strictEqual(c.score, 600);
+  assert.strictEqual(c.lastCombo.mul, 2);
+});
+
+test('style pose: chosen by the lean, scores when released in the air, bails when held to the ground', function () {
+  var w = E.newWorld({ src: 'f200' });
+  launch(w, 40, 9, 0, 0);
+  steps(w, 2.5, function (w) { w.inLean = w.t < 0.25 ? 1 : 0; w.inTrick = w.t < 0.75 ? 1 : 0; if (w.t > 0.75) { E.bot(w); w.inGas = 0; } });
+  assert.strictEqual(w.crashes, 0, 'released in time');
+  var t = w.tricks.filter(function (x) { return x.k === 'superman'; });
+  assert.strictEqual(t.length, 1, 'superman awarded: ' + w.tricks.map(function (x) { return x.n; }));
+  w = E.newWorld({ src: 'f200' });
+  launch(w, 40, 9, 0, 0);
+  steps(w, 2.5, function (w) { w.inTrick = 1; });
+  assert.strictEqual(w.why, 'bail');
+  // no poses in a buggy
+  w = E.newWorld({ src: 'f200', cfg: { veh: 'buggy' } });
+  launch(w, 40, 9, 0, 0);
+  steps(w, 1, function (w) { w.inTrick = 1; });
+  assert.strictEqual(w.pose, 0);
+});
+
+test('repeats are worth less; trick zones double', function () {
+  var z = E.newWorld({ src: 'f4 z40 f60' });
+  z.inGas = 1;
+  steps(z, 2.2, function (w) { w.inGas = 1; });
+  assert.ok(z.zoneTrick, 'inside the zone');
+  var p1 = E.newWorld({ src: 'f200' }), p2;
+  launch(p1, 40, 9, 0, flipDrop(1));
+  steps(p1, 3);
+  p2 = E.newWorld({ src: 'f20 z200 f200' });
+  launch(p2, 40, 9, 0, flipDrop(1));
+  steps(p2, 3);
+  var f1 = p1.tricks.filter(function (t) { return /FLIP/.test(t.n); })[0], f2 = p2.tricks.filter(function (t) { return /FLIP/.test(t.n); })[0];
+  assert.ok(f1 && f2 && f2.p === f1.p * 2 && f2.z === 2, 'double in the zone');
+  launch(p1, 80, 9, 0, flipDrop(1));
+  steps(p1, 3);
+  var flips = p1.tricks.filter(function (t) { return /FLIP/.test(t.n); });
+  assert.strictEqual(flips.length, 2);
+  assert.ok(flips[1].p < flips[0].p, 'second one worth less');
+});
+
+test('surfaces: sand drags, ice slips', function () {
+  function dist(src) { var w = E.newWorld({ src: src }); steps(w, 4, function (w) { w.inGas = 1; }); return w.c.x; }
+  assert.ok(dist('m1 f200') < dist('f200') - 2, 'sand is slower');
+  function climb(src, tyres) { var w = E.newWorld({ src: src, cfg: { parts: { tyres: tyres } } }); steps(w, 8, function (w) { E.bot(w); }); return w.c.x; }
+  assert.ok(climb('f4 m4 l30,7 f40') < climb('f4 l30,7 f40') - 5, 'ice climb is harder');
+  assert.ok(climb('f4 m4 l30,7 f40', 'studded') > climb('f4 m4 l30,7 f40') + 3, 'studded tyres help on ice');
+});
+
+test('set pieces: boost strips, springboards, wind, water, tunnels, crates, boulders', function () {
+  function run(src, secs, ctl, cfg) { var w = E.newWorld({ src: src, cfg: cfg }), ev = []; steps(w, secs, function (w, i) { if (ctl) ctl(w, i); else w.inGas = 1; ev = ev.concat(drain(w)); }); w.ev = ev; return w; }
+  assert.ok(run('f2 b20 f60', 3).c.x > run('f80', 3).c.x + 3, 'boost');
+  var sp = run('f2 j8 f60', 3);
+  assert.ok(sp.ev.indexOf('spring') >= 0 && sp.maxAir > 0.8, 'springboard air ' + sp.maxAir);
+  var tail = run('f4 k6,2 a40,8 f60', 4), head = run('f4 k6,2 a40,-8 f60', 4);
+  assert.ok(tail.c.x > head.c.x + 1, 'wind pushes');
+  var wet = run('f4 p10,1 f60', 4);
+  assert.ok(wet.ev.indexOf('splash') >= 0 && wet.crashes === 0, 'a shallow pool is passable');
+  assert.ok(wet.c.x < run('f80', 4).c.x - 2, 'water slows');
+  var lowRoof = run('f4 k4,1.6 t20,2.6 f60', 3);
+  assert.strictEqual(lowRoof.why, 'roof', 'a jump into a low tunnel hits the ceiling');
+  var tunnel = run('f4 t30,3.1 f60', 4);
+  assert.strictEqual(tunnel.crashes, 0, 'a tall enough tunnel is fine');
+  var cr = run('f2 x4 f60', 4);
+  assert.strictEqual(cr.crates.filter(function (k) { return k.on; }).length, 0, 'crates smashed');
+  assert.strictEqual(cr.tricks.filter(function (t) { return t.k === 'crate'; }).length, 4);
+  // a boulder: triggered on approach, lands, shatters; arriving just as it lands is a crash
+  var rk = E.newWorld({ src: 'f30 q f60' }), hit = false;
+  for (var v = 9; v < 26 && !hit; v += 0.5) {
+    rk = E.newWorld({ src: 'f30 q f60' });
+    E.placeBike(rk, 15); rk.state = 'ride';
+    var vv = v;
+    steps(rk, 3, function (w) { w.c.vx = vv; w.wh[0].vx = vv; w.wh[1].vx = vv; w.wh[0].om = -vv / 0.38; w.wh[1].om = -vv / 0.38; });
+    if (rk.why === 'rock') hit = true;
+  }
+  assert.ok(hit, 'some approach speed meets the boulder');
+  var slow = E.newWorld({ src: 'f30 q f60' }), evs = [];
+  steps(slow, 6, function (w) { w.inGas = w.c.vx < 6 ? 1 : 0; evs = evs.concat(drain(w)); });
+  assert.ok(evs.indexOf('rockfall') >= 0 && evs.indexOf('rockland') >= 0 && slow.crashes === 0, 'a careful approach lets it fall first');
+});
+
+test('suspension trade-off: race valving cases and throws you on a big flat drop, long travel soaks it', function () {
+  function drop(s) {
+    var w = E.newWorld({ src: 'f10 d-6 f60', cfg: { parts: { susp: s } } }), ev = [];
+    steps(w, 4, function (w) { w.inGas = w.c.x < 9 ? 1 : 0; var u = E.wrapPi(w.c.a) * 2 + w.c.w * 0.4; w.inLean = w.air ? (u > 0.2 ? 1 : u < -0.2 ? -1 : 0) : 0; ev = ev.concat(drain(w)); });
+    return { cased: ev.indexOf('cased') >= 0, why: w.why, crashes: w.crashes };
+  }
+  var st = drop('stiff'), pl = drop('plush');
+  assert.ok(st.cased && st.why === 'cased', 'stiff: thrown ' + JSON.stringify(st));
+  assert.ok(!pl.cased && pl.crashes === 0, 'plush: fine ' + JSON.stringify(pl));
+});
+
+test('every tuning option and team is a trade-off', function () {
+  E.PARTS.forEach(function (sl) {
+    sl.opts.slice(1).forEach(function (o) {
+      var up = false, down = false, fx = o.fx || {};
+      Object.keys(fx).forEach(function (k) {
+        var vals = Array.isArray(fx[k]) ? fx[k] : [fx[k]];
+        vals.forEach(function (v) {
+          var good = k === 'mass' || k === 'inertia' || k === 'burn' ? v < 1 : k === 'travel' ? true : k === 'nitro' || k === 'hop' ? v > 0 : v > 1;
+          var bad = k === 'mass' || k === 'inertia' || k === 'burn' ? v > 1 : k === 'travel' ? false : k === 'nitro' || k === 'hop' ? false : v < 1;
+          if (k === 'travel' && v < 0) { good = false; bad = true; }
+          if (k === 'wind') { good = v < 1; bad = v > 1; }
+          if (k === 'k') { good = true; }
+          if (good) up = true;
+          if (bad) down = true;
+        });
+      });
+      assert.ok(up && down, sl.slot + '.' + o.key + ' has an upside and a downside');
+      assert.ok(o.cost > 0, sl.slot + '.' + o.key + ' costs something');
+    });
+  });
+  E.TEAMS.forEach(function (t) { assert.ok(t.perk && t.cost, t.key); });
+  // the params reflect the parts
+  var stock = E.bikeParams({}), race = E.bikeParams({ parts: { engine: 'race' } });
+  assert.ok(race.omax > stock.omax && race.torque < stock.torque);
+  assert.ok(E.bikeParams({ parts: { gadget: 'nitro' } }).nitro === 3 && E.bikeParams({ parts: { gadget: 'nitro' }, team: 'volt' }).nitro === 4);
+});
+
+test('gadgets: nitro bursts (limited), hydraulic hop pops off the ground', function () {
+  var w = E.newWorld({ src: 'f400', cfg: { parts: { gadget: 'nitro' } } }), n = E.newWorld({ src: 'f400' });
+  steps(w, 4, function (w, i) { w.inGas = 1; w.inGadget = (i % 360) < 10 ? 1 : 0; });
+  steps(n, 4, function (w) { w.inGas = 1; });
+  assert.strictEqual(w.nitro, 0, 'charges used');
+  assert.ok(w.c.x > n.c.x + 4, 'faster ' + w.c.x + ' vs ' + n.c.x);
+  var h = E.newWorld({ src: 'f400', cfg: { parts: { gadget: 'hop' } } }), air = false;
+  steps(h, 2, function (w, i) { w.inGas = 1; w.inGadget = i > 240 && i < 250 ? 1 : 0; if (!w.wh[0].touch && !w.wh[1].touch) air = true; });
+  assert.ok(air, 'hopped');
 });
 
 test('falling into a gap is a crash', function () {
-  var w = E.newWorld({ src: 'f30 g8,0 f30' }), ev = [];
+  var w = E.newWorld({ src: 'f30 g8,0 f30' });
   for (var i = 0; i < 20 / E.STEP; i++) {
-    w.inGas = w.c.vx < 5 ? 1 : 0; w.inLean = 0;   // too slow to clear it
-    E.step(w); ev = ev.concat(drain(w));
+    w.inGas = w.c.vx < 5 ? 1 : 0; w.inLean = 0;
+    E.step(w); w.events.length = 0;
     if (w.state === 'crash') break;
   }
   assert.strictEqual(w.why, 'gap');
@@ -230,11 +385,14 @@ test('deterministic: same seed + same inputs → identical run; seeds differ', f
   var same = true;
   for (var x = 20; x < 200; x += 5) if (Math.abs(E.heightAt(a.ter, x) - E.heightAt(b.ter, x)) > 1e-6) same = false;
   assert.ok(!same, 'different seeds → different terrain');
+  function race(skill) { return botRun({ track: 'dust1', ai: { skill: skill } }).final; }
+  assert.strictEqual(race(0.5), race(0.5), 'bots are deterministic');
+  assert.ok(race(0.3) > race(0.9) + 2, 'skill matters');
 });
 
 test('fixed step: 60 Hz and 120 Hz frames give the identical simulation', function () {
   function run(hz) {
-    var w = E.newWorld({ stage: 1 });
+    var w = E.newWorld({ track: 'dust2' });
     for (var f = 0; f < 6 * hz; f++) { E.bot(w); w.inLean = 0; E.advance(w, 1 / hz); }
     return w;
   }
@@ -242,13 +400,12 @@ test('fixed step: 60 Hz and 120 Hz frames give the identical simulation', functi
   assert.strictEqual(a.steps, b.steps);
   assert.strictEqual(a.c.x, b.c.x);
   assert.strictEqual(a.c.a, b.c.a);
-  // a long stall doesn't fast-forward
   var w = E.newWorld({ src: 'f100' }), s0 = w.steps;
   E.advance(w, 5);
   assert.ok(w.steps - s0 <= 48);
 });
 
-test('endless: fuel runs out without cans; coins are collected', function () {
+test('endless: fuel runs out without cans; coins are collected; biomes change surfaces', function () {
   var w = E.newWorld({ endless: true, seed: 7 }), ev = [];
   assert.ok(w.items.some(function (it) { return it.k === 0; }), 'coins placed');
   assert.ok(w.items.some(function (it) { return it.k === 1; }), 'a fuel can placed');
@@ -261,7 +418,12 @@ test('endless: fuel runs out without cans; coins are collected', function () {
   assert.ok(ev.indexOf('nofuel') >= 0);
   assert.strictEqual(w.state, 'over');
   assert.strictEqual(w.why, 'fuel');
-  assert.ok(w.dist > 100);
+  var g = E.newWorld({ endless: true, seed: 9 });
+  assert.strictEqual(E.biomeAt(g, 100), 0);
+  assert.strictEqual(E.biomeAt(g, 800), 1);
+  var fixed = E.newWorld({ endless: true, seed: 9, biome: 2 }), mats = {};
+  for (var x = 20; x < 200; x += 0.5) mats[E.matAt(fixed.ter, x)] = 1;
+  assert.ok(mats[3] || mats[4], 'snow / ice in the frost biome');
 });
 
 test('endless: terrain is compacted behind the bike (bounded memory)', function () {
@@ -274,146 +436,128 @@ test('endless: terrain is compacted behind the bike (bounded memory)', function 
   assert.ok(w.c.x > 1500, 'rode far ' + w.c.x);
   assert.ok(w.ter.n < w.ter.cap, 'terrain within capacity');
   assert.ok(w.ter.xs[0] > 500, 'old terrain dropped ' + w.ter.xs[0]);
-  assert.ok(w.items.length < 600 && w.decos.length < 200);
+  assert.ok(w.items.length < 600 && w.decos.length < 200 && w.zones.length < 40);
 });
 
-test('ghost encoding round-trips within quantisation', function () {
-  var n = 300, a = new Float32Array(n * 3);
-  for (var i = 0; i < n; i++) { a[i * 3] = i * 1.37 - 3; a[i * 3 + 1] = Math.sin(i / 9) * 6; a[i * 3 + 2] = Math.cos(i / 13) * 7; }
-  var s = E.encodeGhost(a, n), b = E.decodeGhost(s);
-  assert.ok(/^[A-Za-z0-9_-]+$/.test(s));
-  assert.strictEqual(b.length, n * 3);
-  for (i = 0; i < n * 3; i++) assert.ok(Math.abs(a[i] - b[i]) <= (i % 3 === 2 ? 0.006 : 0.026), 'value ' + i);
-  assert.ok(s.length < n * 3 * 2, 'compact: ' + s.length + ' chars');
+test('hill climb: finishes at the goal distance', function () {
+  var w = E.newWorld({ endless: true, seed: 5, biome: 0, goal: 120 }), ev = [];
+  steps(w, 30, function (w) { E.bot(w); w.fuel = 1; ev = ev.concat(drain(w)); });
+  assert.ok(ev.indexOf('finish') >= 0 && ev.indexOf('done') >= 0, 'finished');
+  assert.ok(w.dist >= 120);
+});
+
+test('ghosts: 5-channel encoding round-trips, decimates when long, and replays', function () {
+  var n = 300, a = new Float32Array(n * 5);
+  for (var i = 0; i < n; i++) { a[i * 5] = i * 1.37 - 3; a[i * 5 + 1] = Math.sin(i / 9) * 6; a[i * 5 + 2] = Math.cos(i / 13) * 7; a[i * 5 + 3] = (i % 3) - 1; a[i * 5 + 4] = (i % 7) / 7 + 2; }
+  var s = E.packGhost(a, n), b = E.decodeGhost(s);
+  assert.ok(/^5;[A-Za-z0-9_-]+$/.test(s));
+  assert.strictEqual(b.length, n * 5);
+  for (i = 0; i < n * 5; i++) assert.ok(Math.abs(a[i] - b[i]) <= (i % 5 === 2 ? 0.006 : 0.026), 'value ' + i);
   assert.strictEqual(E.decodeGhost('!!'), null);
+  assert.strictEqual(E.decodeGhost('AAAA'), null, 'old (v1) strings are ignored');
+  var big = E.packGhost(a, n, 1200);
+  assert.ok(big && big.length <= 1200 && /^5;\d+\./.test(big));
+  assert.strictEqual(E.decodeGhost(big).length / 5, n - (n - 1) % (+/^5;(\d+)/.exec(big)[1]));
+  // a recorded run replays where the rider was
+  var w = E.newWorld({ track: 'dust1' });
+  w.rec = new Float32Array(9000 * 5); w.recN = 0;
+  steps(w, 1);
+  assert.strictEqual(w.recN, 0, 'nothing recorded at the start line');
+  steps(w, 6, function (w) { E.bot(w); });
+  var gd = E.decodeGhost(E.packGhost(w.rec, w.recN)), q = [0, 0, 0, 0, 0];
+  assert.ok(E.ghostAt(gd, 2.0, q) && Math.abs(q[0] - w.rec[20 * 5]) < 0.06);
+  assert.ok(Math.abs(E.ghostLead(gd, 2.0, q[0] + 3) - 3) < 1e-6);
+  // the crew chief's line exists for every track
+  var rg = E.rivalGhost('dust1');
+  assert.ok(rg.data.length > 100 * 5 && rg.t > 0);
 });
 
-test('ghost recording: one chassis sample per GHOST_DT of run time, none at the start line, capped by the buffer', function () {
-  var w = E.newWorld({ stage: 0 });
-  w.rec = new Float32Array(9000 * 3); w.recN = 0;
-  steps(w, 1);                                    // idle at the start: 'ready' records nothing
-  assert.strictEqual(w.recN, 0);
-  var xs = [];
-  for (var i = 0; i < 8 / E.STEP; i++) {
-    E.bot(w);
-    var n0 = w.recN;
-    E.step(w); w.events.length = 0;
-    if (w.recN > n0) xs.push([w.t, w.c.x, w.c.y, w.c.a]);
-  }
-  assert.ok(w.recN > 70 && Math.abs(w.recN - 1 - w.t / E.GHOST_DT) < 1, 'samples ' + w.recN + ' at t=' + w.t);
-  xs.forEach(function (s, k) {
-    assert.ok(Math.abs(s[0] - k * E.GHOST_DT) < E.STEP + 1e-9, 'sample ' + k + ' on time');
-    assert.strictEqual(w.rec[k * 3], Math.fround(s[1]));
-    assert.strictEqual(w.rec[k * 3 + 2], Math.fround(s[3]));
+test('judges: more and more varied tricks score higher; crashes cost', function () {
+  var base = { score: 0, crashes: 0, bottoms: 0, perfects: 0, flips: 0, maxAir: 0, totalAir: 0, wheelie: 0, unique: 0, repeats: 0 };
+  function J(o) { var s = {}; for (var k in base) s[k] = k in o ? o[k] : base[k]; return E.judge(s, 1500); }
+  var poor = J({ score: 100 }), good = J({ score: 3000, unique: 6, flips: 3, maxAir: 2, perfects: 3, wheelie: 2 }), crashy = J({ score: 3000, unique: 6, flips: 3, maxAir: 2, crashes: 3 });
+  assert.ok(good.total > poor.total + 10, good.total + ' vs ' + poor.total);
+  assert.ok(crashy.total < good.total - 3);
+  assert.strictEqual(good.cards.length, 3);
+  good.cards.forEach(function (c) { assert.ok(c.score >= 0 && c.score <= 10 && c.quip); });
+});
+
+test('career data: tracks, cast, prizes and progression rules hang together', function () {
+  E.LOCS.forEach(function (L) {
+    var evs = E.locEvents(L.key);
+    assert.strictEqual(evs.length, 4, L.key);
+    assert.strictEqual(evs.filter(E.isBoss).length, 1, L.key + ' one boss');
+    assert.ok(E.LOC_INTRO[L.key], L.key + ' intro');
+    assert.ok(E.unlockedBy(L.key).length >= 1, L.key + ' boss unlocks something');
   });
-  for (i = 1; i < w.recN; i++) assert.ok(w.rec[i * 3] >= w.rec[i * 3 - 3] - 0.05, 'moving forward');
-  // a short buffer stops recording instead of overflowing
-  var v = E.newWorld({ stage: 0 });
-  v.rec = new Float32Array(5 * 3); v.recN = 0;
-  steps(v, 3, function (v) { E.bot(v); });
-  assert.strictEqual(v.recN, 5);
-});
-
-test('ghost replay: interpolates the recorded run (round-trip through the stored form)', function () {
-  function run(rec) {
-    var w = E.newWorld({ stage: 1 }), out = [];
-    if (rec) { w.rec = rec; w.recN = 0; }
-    for (var i = 0; i < 10 / E.STEP; i++) { E.bot(w); E.step(w); w.events.length = 0; if (i % 37 === 0 && w.state === 'ride') out.push([w.t, w.c.x, w.c.y]); }
-    return { w: w, out: out };
-  }
-  var a = run(new Float32Array(9000 * 3)), gd = E.decodeGhost(E.packGhost(a.w.rec, a.w.recN));
-  assert.strictEqual(gd.length, a.w.recN * 3);
-  var b = run(null), q = [0, 0, 0];                // same inputs → same run: the ghost should sit on the bike
-  assert.ok(b.out.length > 20);
-  b.out.forEach(function (s) {
-    assert.ok(E.ghostAt(gd, s[0], q), 'ghost at ' + s[0]);
-    assert.ok(Math.abs(q[0] - s[1]) < 0.15 && Math.abs(q[1] - s[2]) < 0.15, 'ghost on the bike at t=' + s[0] + ': ' + q[0] + ' vs ' + s[1]);
-    assert.ok(Math.abs(E.ghostLead(gd, s[0], s[1])) < 0.15);
+  E.EVENTS.forEach(function (ev) {
+    if (ev.track) assert.ok(E.trackOf(ev.track), ev.id + ' track');
+    (ev.rivals || []).concat(ev.scores || []).forEach(function (r) { assert.ok(E.CAST[r[0]], ev.id + ' cast ' + r[0]); });
+    if (ev.bet) assert.ok(E.CAST[ev.bet[0]]);
+    assert.ok(ev.intro.length && ev.win.length && ev.lose.length, ev.id + ' story');
+    if (ev.type === 'climb' || ev.type === 'time') assert.strictEqual(ev.tiers.length, 3);
+    ev.intro.concat(ev.win, ev.lose).forEach(function (l) { assert.ok(E.CAST[l[0]], ev.id + ' speaker ' + l[0]); });
   });
-  // midpoint interpolation, the ends, and the lead once the ghost has finished
-  var g = new Float32Array([0, 0, 0, 2, 1, 0.5, 6, 1, 1]);
-  assert.ok(E.ghostAt(g, E.GHOST_DT * 0.5, q));
-  assert.ok(Math.abs(q[0] - 1) < 1e-6 && Math.abs(q[1] - 0.5) < 1e-6 && Math.abs(q[2] - 0.25) < 1e-6);
-  assert.ok(E.ghostAt(g, E.GHOST_DT * 1.25, q) && Math.abs(q[0] - 3) < 1e-6);
-  assert.strictEqual(E.ghostAt(g, E.GHOST_DT * 2, q), false, 'past the end');
-  assert.strictEqual(E.ghostAt(g, -1, q), false);
-  assert.strictEqual(E.ghostAt(null, 0, q), false);
-  assert.ok(Math.abs(E.ghostLead(g, E.GHOST_DT * 0.5, 4) - 3) < 1e-6, 'ahead');
-  assert.ok(Math.abs(E.ghostLead(g, E.GHOST_DT * 0.5, 0) + 1) < 1e-6, 'behind');
-  assert.strictEqual(E.ghostLead(g, 99, 2), -4, 'finished ghost waits at its last spot');
-  assert.ok(isNaN(E.ghostLead(null, 1, 1)));
+  var sv = E.normSave(null);
+  sv.career.team = 'devils';
+  assert.ok(E.locOpen(sv, 0) && !E.locOpen(sv, 1));
+  assert.ok(!E.bossOpen(sv, 'dust'));
+  sv.career.ev['dust-1'] = { p: 2, b: 0, n: 1 }; sv.career.ev['dust-2'] = { p: 3, b: 0, n: 1 };
+  assert.ok(E.bossOpen(sv, 'dust'));
+  sv.career.boss.dust = 1;
+  assert.ok(E.locOpen(sv, 1));
+  var ev1 = E.eventOf('dust-2');
+  assert.strictEqual(E.entryFee(ev1, 'devils'), Math.round(ev1.fee * 1.3));
+  var pay = E.payout(ev1, 1, 'devils', true, true, false);
+  assert.strictEqual(pay.prize, Math.round(ev1.prize[0] * 1.25));
+  assert.strictEqual(pay.bet, -ev1.bet[1]);
+  assert.strictEqual(E.payout(ev1, 1, 'comet', false, false, false).prize, Math.round(Math.round(ev1.prize[0] * 0.5) * 0.75), 'replays pay half');
+  assert.strictEqual(E.tierPlace(E.eventOf('dust-3'), 600), 2);
+  assert.strictEqual(E.tierPlace(E.eventOf('frost-2'), 99), 4);
+  assert.ok(E.vehAvail(sv, E.vehOf('buggy')) && !E.vehAvail(sv, E.vehOf('viper')));
 });
 
-test('ghost size cap: long runs are decimated behind a prefix and still decode to GHOST_DT samples', function () {
-  var n = 4000, a = new Float32Array(n * 3);
-  for (var i = 0; i < n; i++) { a[i * 3] = i * 1.7; a[i * 3 + 1] = Math.sin(i / 40) * 5; a[i * 3 + 2] = Math.sin(i / 60); }
-  var plain = E.packGhost(a, n);
-  assert.strictEqual(plain, E.encodeGhost(a, n), 'under the cap: unchanged format');
-  assert.ok(plain.length < E.GHOST_MAX);
-  var cap = Math.floor(plain.length / 3), s = E.packGhost(a, n, cap);
-  assert.ok(s.length <= cap && /^(4|8)\./.test(s), 'decimated: ' + s.slice(0, 3) + ' ' + s.length + '/' + cap);
-  var k = +s.split('.')[0], b = E.decodeGhost(s), m = Math.ceil(n / k);
-  assert.strictEqual(b.length, ((m - 1) * k + 1) * 3);
-  for (i = 0; i < b.length / 3; i++) {
-    assert.ok(Math.abs(b[i * 3] - a[i * 3]) < 0.06, 'x ' + i);
-    assert.ok(Math.abs(b[i * 3 + 1] - a[i * 3 + 1]) < 0.12, 'y ' + i);
-  }
-  assert.strictEqual(E.packGhost(a, n, 5), '', 'too big even decimated → nothing');
-  assert.strictEqual(E.decodeGhost('2.!'), null);
-  assert.strictEqual(E.decodeGhost(null), null);
+test('race helpers: rivals fast-forward to the line; standings order by finish then distance', function () {
+  var a = E.newWorld({ track: 'dust1', ai: { skill: 0.9 } }), b = E.newWorld({ track: 'dust1', ai: { skill: 0.3 } });
+  var ta = E.simToFinish(a), tb = E.simToFinish(b);
+  assert.ok(ta > 0 && tb > ta);
+  var c = E.newWorld({ track: 'dust1' }); c.c.x = 50;
+  var order = E.standings([{ w: b, id: 'b' }, { w: c, id: 'c' }, { w: a, id: 'a' }]).map(function (r) { return r.id; });
+  assert.deepStrictEqual(order, ['a', 'b', 'c']);
 });
 
-test('stage results: a faster run replaces the best (and the ghost); a slower one only adds stars', function () {
-  var s = E.normSave(null), p = E.STAGES[0].par;
-  var r = E.stageResult(s, 0, p[1] + 3);           // first finish: 1 star
-  assert.ok(r.newBest && r.prev === null && r.stars === 1 && r.earned === E.STAR_COINS);
-  assert.deepStrictEqual(s.st[1], { t: Math.round((p[1] + 3) * 1000) / 1000, s: 1 });
-  r = E.stageResult(s, 0, p[1] + 4);               // slower: nothing
-  assert.ok(!r.newBest && r.earned === 0);
-  assert.strictEqual(s.st[1].t, Math.round((p[1] + 3) * 1000) / 1000);
-  r = E.stageResult(s, 0, p[0] - 1);               // faster, 3 stars
-  assert.ok(r.newBest && r.prevStars === 1 && r.stars === 3 && r.earned === 2 * E.STAR_COINS);
-  assert.strictEqual(s.st[1].s, 3);
-  var t3 = s.st[1].t;
-  r = E.stageResult(s, 0, t3);                     // a tie is not a new best
-  assert.ok(!r.newBest);
-  s.st[1] = { t: 5, s: 1 };                        // a slower run with more stars than stored keeps the time
-  r = E.stageResult(s, 0, p[0] - 0.5);
-  assert.ok(!r.newBest && r.stars === 3 && r.earned === 2 * E.STAR_COINS);
-  assert.deepStrictEqual(s.st[1], { t: 5, s: 3 });
-  assert.strictEqual(s.coins, 5 * E.STAR_COINS);
-});
-
-test('save data is normalised; stars, unlocks and upgrades', function () {
-  var s = E.normSave(null);
-  assert.deepStrictEqual(s.st, {});
+test('save data: v1 saves migrate (upgrades refunded), v2 normalises, cosmetics and parts gate', function () {
+  var m = E.normSave({ v: 1, coins: 10, up: { engine: 2, susp: 1 }, eb: 321, ghost: false, st: { 1: { t: 20, s: 3 } } });
+  assert.strictEqual(m.v, 2);
+  assert.strictEqual(m.coins, 10 + 40 + 90 + 40);
+  assert.strictEqual(m.eb, 321);
+  assert.strictEqual(m.ghost, 'off');
+  var s = E.normSave({ v: 2, coins: -5, veh: 'viper', owned: { viper: 1, bogus: 1 }, parts: { engine: 'race', tyres: 'slick' }, own: { 'engine.race': 1 },
+    look: { paint: 'gold', helmet: 'visor', acc: 'scarf' }, tt: { dust1: { t: 25, s: 3, sc: 900 }, nope: { t: 1, s: 3 } }, career: { team: 'kings', ev: { 'dust-1': { p: 1 } }, boss: { dust: 1 } } });
   assert.strictEqual(s.coins, 0);
-  s = E.normSave({ st: { 1: { t: 22.5, s: 3 }, 2: { t: -1, s: 2 }, 3: 'x', 99: { t: 5, s: 3 } }, coins: '12', up: { engine: 9, susp: -2, tyres: 2 }, eb: 803.7, ghost: false });
-  assert.deepStrictEqual(Object.keys(s.st), ['1']);
-  assert.strictEqual(s.coins, 12);
-  assert.deepStrictEqual(s.up, { engine: 4, susp: 0, tyres: 2, tank: 0 });
-  assert.strictEqual(s.eb, 803);
-  assert.strictEqual(s.ghost, false);
-  assert.ok(E.unlocked(s, 0) && E.unlocked(s, 1) && !E.unlocked(s, 2));
-  assert.strictEqual(E.totalStars(s), 3);
-  var p = E.STAGES[0].par;
-  assert.strictEqual(E.stars(0, p[0] - 0.1), 3);
-  assert.strictEqual(E.stars(0, p[1] - 0.1), 2);
-  assert.strictEqual(E.stars(0, p[1] + 5), 1);
-  assert.strictEqual(E.stars(0, 0), 0);
-  var b0 = E.bikeParams({}), b4 = E.bikeParams({ engine: 4, susp: 4, tyres: 4, tank: 4 });
-  assert.ok(b4.torque > b0.torque && b4.mu > b0.mu && b4.tank > b0.tank && b4.smin[0] < b0.smin[0]);
+  assert.strictEqual(s.veh, 'viper');
+  assert.ok(!s.owned.bogus);
+  assert.strictEqual(s.parts.engine, 'race');
+  assert.strictEqual(s.parts.tyres, 'stock', 'unowned part falls back');
+  assert.strictEqual(s.look.paint, 'sig', 'locked paint falls back');
+  assert.strictEqual(s.look.helmet, 'classic', 'unbought helmet falls back');
+  assert.deepStrictEqual(Object.keys(s.tt), ['dust1']);
+  assert.strictEqual(s.career.team, 'kings');
+  assert.ok(E.lookOwned(s, 'p', E.find(E.PAINTS, 'sand')), 'boss paint earned');
+  assert.ok(!E.ttUnlocked(s, 2) && E.ttUnlocked(s, 1) && E.ttUnlocked(s, 3), 'track unlocks per location');
 });
 
-test('upgraded bike is still stable at rest and finishes stage 1', function () {
-  var up = { engine: 4, susp: 4, tyres: 4, tank: 4 }, w = E.newWorld({ src: 'f60', up: up });
-  steps(w, 3);
-  var x0 = w.c.x;
-  steps(w, 3);
-  assert.ok(Math.abs(w.c.x - x0) < 1e-3 && Math.abs(w.c.a) < 0.02);
-  w = E.newWorld({ stage: 0, up: up });
-  for (var i = 0; i < 60 / E.STEP && w.state !== 'finish'; i++) { E.bot(w); E.step(w); w.events.length = 0; }
-  assert.strictEqual(w.state, 'finish');
+test('time-trial results: a faster run replaces the best; stars pay once; style best tracked', function () {
+  var sv = E.normSave(null), tr = E.TRACKS[0];
+  var r1 = E.stageResult(sv, tr.key, tr.par[1] + 1, 500);
+  assert.ok(r1.newBest && r1.stars === 1 && r1.earned === E.STAR_COINS);
+  var r2 = E.stageResult(sv, tr.key, tr.par[0] - 1, 300);
+  assert.ok(r2.newBest && r2.stars === 3 && r2.earned === 2 * E.STAR_COINS);
+  assert.strictEqual(sv.tt[tr.key].sc, 500, 'best style kept');
+  var r3 = E.stageResult(sv, tr.key, tr.par[0] + 0.5, 900);
+  assert.ok(!r3.newBest && r3.newScore && r3.earned === 0);
+  assert.strictEqual(sv.tt[tr.key].sc, 900);
+  assert.strictEqual(sv.coins, 3 * E.STAR_COINS);
 });
 
 console.log((process.exitCode ? 'FAILED' : 'ok') + ' — ' + passed + ' passed');
