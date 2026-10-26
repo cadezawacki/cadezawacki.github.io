@@ -25,7 +25,7 @@
   --bg:#eef1f4; --panel:#ffffff; --panel2:#f7f8fa; --panel3:#f0f2f5; --border:#e1e5ea; --border2:#cfd6de;
   --text:#1c2330; --muted:#677385; --faint:#9aa4b2;
   --accent: 20 184 166; --accentInk:#0d7a6f;
-  --hlL: 20 184 166; --hlR: 20 184 166; --mv: 150 130 220; --warn: 226 168 72; --bad: 232 128 116;
+  --hlL: 20 184 166; --hlR: 20 184 166; --mix: 146 96 232; --mv: 84 110 205; --rulw: 26px; --warn: 226 168 72; --bad: 232 128 116;
   --a1:.11; --a2:.19; --a3:.36;
   --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.08);
   --hatch: rgba(110,120,140,.10);
@@ -35,6 +35,7 @@
 html[data-mode="dark"]{
   --bg:#0d1014; --panel:#14181e; --panel2:#181d24; --panel3:#1d232b; --border:#252b34; --border2:#323a45;
   --text:#e2e7ee; --muted:#97a2b2; --faint:#646f80; --accentInk:#5fd8c9;
+  --mix: 178 140 252; --mv: 128 150 240;
   --a1:.15; --a2:.25; --a3:.45;
   --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
   --hatch: rgba(150,160,180,.07);
@@ -120,7 +121,8 @@ html[data-mode="dark"] .pill.diff{color:rgb(var(--warn))}
 html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
 .st{display:inline-flex;gap:4px;align-items:baseline;white-space:nowrap;color:var(--muted)}
 .st b{font:600 12.5px var(--mono);color:var(--text)}
-.st.add b{color:rgb(var(--hlR))}.st.del b{color:rgb(var(--hlL))}.st.mov b{color:rgb(var(--mv))}
+.st.add b{color:rgb(var(--hlR))}.st.del b{color:rgb(var(--hlL))}.st.mix b{color:rgb(var(--mix))}.st.mov b{color:rgb(var(--mv))}
+.st .lg{width:9px;height:9px;border-radius:2px;display:inline-block;align-self:center}
 .note{font-size:11.5px;padding:2px 8px;border-radius:7px;background:rgb(var(--warn)/.14);color:var(--text);white-space:nowrap}
 .dnav{display:flex;align-items:center;gap:2px;margin-left:auto}
 .dnav .lbl{font:12px var(--mono);color:var(--muted);padding:0 4px;min-width:52px;text-align:center}
@@ -135,7 +137,7 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
 .banner .btn{padding:4px 10px;font-size:12.5px}
 
 /* ---------- diff grid ---------- */
-#diff{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) var(--midw) minmax(0,1fr) 14px;background:var(--panel)}
+#diff{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) var(--midw) minmax(0,1fr) var(--rulw);background:var(--panel)}
 .side{display:flex;flex-direction:column;min-width:0;min-height:0;position:relative}
 .side[data-side="L"]{--hl:var(--hlL)}
 .side[data-side="R"]{--hl:var(--hlR)}
@@ -166,14 +168,21 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
 .fill{cursor:text}
 .fill{background:repeating-linear-gradient(135deg,transparent 0 5px,var(--hatch) 5px 6px);user-select:none}
 .g{padding:0 8px 0 4px;position:relative;display:flex;align-items:center;justify-content:flex-end;gap:4px}
-.g.chg{color:var(--text);background:rgb(var(--hl)/var(--a1));box-shadow:inset 3px 0 rgb(var(--hl))}
+.g{--k:var(--hl)}
+.g.kL{--k:var(--hlL)}.g.kR{--k:var(--hlR)}.g.kX,.g.kW{--k:var(--mix)}
+.g.chg{color:var(--text);background:rgb(var(--k)/var(--a1));box-shadow:inset 3px 0 rgb(var(--k))}
+.g.chg.kW{box-shadow:inset 3px 0 rgb(var(--k)/.45)}
 .g.mov{background:rgb(var(--mv)/var(--a1));box-shadow:inset 3px 0 rgb(var(--mv))}
 .g.soft{box-shadow:inset 3px 0 rgb(var(--hl)/.35)}
 .g.cur{box-shadow:inset 3px 0 rgb(var(--hl)),inset -2px 0 rgb(var(--hl))}
 .ln.chg{background:rgb(var(--hl)/var(--a1))}
 .ln.full{background:rgb(var(--hl)/var(--a2))}
 .ln.mov{background:rgb(var(--mv)/var(--a1))}
-.ln.mov::after{content:"moved";position:absolute;right:6px;top:0;font:10px/var(--lh) var(--font);color:rgb(var(--mv));opacity:.85;pointer-events:none}
+.ln[data-note]::after{content:attr(data-note);position:absolute;right:6px;top:0;font:10px/var(--lh) var(--font);color:rgb(var(--mix));opacity:.9;pointer-events:none;white-space:pre}
+.ln.mov[data-note]::after{color:rgb(var(--mv))}
+.gn{font:600 9.5px/1 var(--font);color:rgb(var(--mix));cursor:help}.g.mov .gn{color:rgb(var(--mv))}
+.ln.kW{background:rgb(var(--hl)/var(--a1))}
+.side[data-side="L"] .ln.kR,.side[data-side="R"] .ln.kL{background:rgb(var(--hl)/calc(var(--a1) * .45))}
 .ln.ign{color:var(--faint);background:repeating-linear-gradient(135deg,transparent 0 5px,var(--hatch) 5px 6px)}
 .ln .x{background:rgb(var(--hl)/var(--a3));border-radius:3px;box-shadow:0 0 0 .5px rgb(var(--hl)/.5)}
 .ln .xs{text-decoration:underline dotted rgb(var(--hl));text-decoration-thickness:2px;text-underline-offset:3px}
@@ -200,6 +209,8 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
 .m.in.softc{background:linear-gradient(90deg,rgb(var(--hlL)/var(--a1)),rgb(var(--hlR)/var(--a1)))}
 .m.first{border-top:1px solid rgb(var(--accent)/.25)}
 .m.last{border-bottom:1px solid rgb(var(--accent)/.25)}
+.m.in.kL{background:rgb(var(--hlL)/var(--a2))}.m.in.kR{background:rgb(var(--hlR)/var(--a2))}
+.m.in.kX{background:rgb(var(--mix)/var(--a2))}.m.in.kW{background:rgb(var(--mix)/var(--a1))}
 .m.cur{box-shadow:inset 2px 0 rgb(var(--hlL)),inset -2px 0 rgb(var(--hlR))}
 .m.foldm{background:var(--panel3)}
 .mb{height:18px;margin-top:1px;min-width:24px;border:1px solid var(--border2);background:var(--panel);border-radius:6px;font:700 11px/16px var(--mono);cursor:pointer;color:var(--muted);padding:0 4px;box-shadow:0 1px 1px rgba(0,0,0,.04);transition:all .12s}
@@ -208,8 +219,10 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
 
 /* overview ruler */
 .ruler{position:relative;margin-top:var(--hdrh);background:var(--panel2);border-left:1px solid var(--border);cursor:pointer;overflow:hidden}
-.rm{position:absolute;left:2px;right:2px;min-height:2px;border-radius:2px;background:rgb(var(--accent)/.85)}
-.rm.mv{background:rgb(var(--mv)/.8)}.rm.soft{background:rgb(var(--accent)/.3)}
+.ruler canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.rm{position:absolute;left:1px;right:1px;min-height:5px;border-radius:3px;transform:translateY(-1px)}
+.rm:hover{background:rgb(120 130 150/.22)}
+.rm.cur{box-shadow:0 0 0 1.5px var(--text)}
 .rview{position:absolute;left:0;right:0;background:rgb(120 130 150/.16);border-block:1px solid rgb(120 130 150/.35);pointer-events:none}
 
 /* overlays inside a side */
@@ -443,7 +456,8 @@ html[data-mode="dark"] .pill.only{color:rgb(var(--bad))}
     <h3>Comparing</h3>
     <ul>
       <li><b>Ignore</b> options only change what counts as “equal” — your text is never modified. Ignored differences are still shown with a dotted underline.</li>
-      <li><b>Comments</b> is language-aware (Python <code>#</code>/docstrings, JS/C# <code>//</code> <code>/* */</code>, VBA <code>'</code>/<code>Rem</code>, CSS, HTML, INI). <b>Line order</b> treats moved lines as equal (they're tinted lavender).</li>
+      <li><b>Comments</b> is language-aware (Python <code>#</code>/docstrings, JS/C# <code>//</code> <code>/* */</code>, VBA <code>'</code>/<code>Rem</code>, CSS, HTML, INI). <b>Line order</b> treats moved lines as equal (they're tinted blue).</li>
+      <li>Colours follow the kind of change: <b style="color:rgb(var(--hlL))">L1’s colour</b> = only in L1, <b style="color:rgb(var(--hlR))">L2’s colour</b> = only in L2 (pick them with the colour dot on each side, or <b>Color-coded</b>), <b style="color:rgb(var(--mix))">purple</b> = changed on both sides, <b style="color:rgb(var(--mv))">striped blue</b> = moved. The overview ruler on the right uses a left lane for L1-only and a right lane for L2-only content; hover a mark for details, click or drag to scroll. Lines that differ only in whitespace, indentation or case are labelled as such.</li>
       <li>Transform tools (⋯ on each side, or “Both sides”) <em>do</em> change text: prettify/normalize, scrub comments or docstrings, tabs ⇄ spaces, trim, sort, adopt whitespace or casing from the other side. All undoable.</li>
       <li><code>.bas .cls .frm</code> are VBA. <code>.cs</code> is auto-detected as VBA or C# from its content — override with the language dropdown.</li>
     </ul>
@@ -503,7 +517,7 @@ const arrEq = (a, b) => { if (a.length !== b.length) return false; for (let i = 
 
 const PALETTE = [
   ['teal', 'Teal', '20 184 166'], ['salmon', 'Salmon', '236 134 120'], ['sage', 'Sage', '104 178 126'],
-  ['amber', 'Amber', '224 166 70'], ['lavender', 'Lavender', '150 130 220'], ['sky', 'Sky', '96 156 224'],
+  ['amber', 'Amber', '224 166 70'], ['sky', 'Sky', '96 156 224'],
   ['rose', 'Rose', '224 118 160'], ['slate', 'Slate', '128 142 165']
 ];
 const colorOf = k => (PALETTE.find(p => p[0] === k) || PALETTE[0])[2];
@@ -1150,6 +1164,31 @@ function softIntra(row, fL, fR) {
   if (!row.xs) row.xs = intra(fL.lines[row.l], fR.lines[row.r], EXACT, 'word');
   return row.xs;
 }
+// What a row means at a glance (gutter, middle column, overview ruler):
+//   L / R  content only in that side — whole lines, or an edit that purely inserts/removes text in the line
+//   X      changed on both sides        W  only whitespace / indentation / case differs
+//   M      moved                        S  difference hidden by the Ignore rules
+// Also sets row.note for W rows — a short label shown at the end of the line.
+function rowKind(row) {
+  if (row.k !== undefined) return row.k;
+  let k = null;
+  switch (row.t) {
+    case 'del': k = 'L'; break;
+    case 'ins': k = 'R'; break;
+    case 'soft': case 'ign': k = 'S'; break;
+    case 'mov': k = S.opts.iorder ? 'S' : 'M'; break;
+    case 'mod': {
+      const fL = cur('L'), fR = cur('R'); const a = (fL && fL.lines[row.l]) || '', b = (fR && fR.lines[row.r]) || '';
+      const sq = t => t.replace(/\s+/g, '');
+      if (sq(a) === sq(b)) { k = 'W'; row.note = a.trim() === b.trim() ? 'indentation only' : 'whitespace only'; break; }
+      if (a.toLowerCase() === b.toLowerCase()) { k = 'W'; row.note = 'case only'; break; }
+      if (sq(a).toLowerCase() === sq(b).toLowerCase()) { k = 'W'; row.note = 'case + spacing only'; break; }
+      const x = row.x || (S.d.st.approx ? null : (row.x = intra(a, b, S.opts, S.opts.intra === 'char' ? 'char' : 'word')));
+      k = !x || x.full ? 'X' : !x.na && x.nb ? 'R' : x.na && !x.nb ? 'L' : 'X';
+    }
+  }
+  return (row.k = k);
+}
 const VIRT_MIN = 1200, VBUF = 90;
 let LH = 20;
 const lhPx = () => LH;
@@ -1186,18 +1225,19 @@ function rowHTML(vi) {
   }
   const i = v, row = d.rows[i]; const syn = S.opts.syntax;
   const c = row.c != null ? d.chunks[row.c] : null; const isCur = c && c === d.chunks[S.curChunk];
+  const k = rowKind(row), kc = k && c && !c.soft && k !== 'S' ? ' k' + k : '';
   const H = {}, G = {};
   for (const s of ['L', 'R']) {
     const ln = s === 'L' ? row.l : row.r; const f = files[s];
     if (ln == null || !f) {
       H[s] = `<div class="fill${row.t === 'raw' ? ' blank' : ''}" contenteditable="false" data-row="${i}"></div>`;
-      G[s] = `<div class="g${c && !c.soft ? ' chg' : ''}${isCur ? ' cur' : ''}">${c && c.r0 === i ? mgBtn(s, row.c) : ''}</div>`;
+      G[s] = `<div class="g${c && !c.soft ? ' chg' + kc : ''}${isCur ? ' cur' : ''}">${c && c.r0 === i ? mgBtn(s, row.c) : ''}</div>`;
       continue;
     }
     let cls = 'ln', gcls = 'g', rng = null, rcls = 'x';
     switch (row.t) {
-      case 'mod': cls += ' chg'; gcls += ' chg'; if (!row.x && files.L && files.R && S.opts.intra !== 'none') row.x = intra(files.L.lines[row.l], files.R.lines[row.r], S.opts, S.opts.intra === 'char' ? 'char' : 'word'); if (row.x) { if (row.x.full) cls += ' full'; else rng = s === 'L' ? row.x.a : row.x.b; } break;
-      case 'del': case 'ins': cls += ' chg full'; gcls += ' chg'; break;
+      case 'mod': cls += ' chg' + kc; gcls += ' chg' + kc; if (!row.x && files.L && files.R && S.opts.intra !== 'none') row.x = intra(files.L.lines[row.l], files.R.lines[row.r], S.opts, S.opts.intra === 'char' ? 'char' : 'word'); if (row.x) { if (row.x.full) cls += ' full'; else rng = s === 'L' ? row.x.a : row.x.b; } break;
+      case 'del': case 'ins': cls += ' chg full'; gcls += ' chg' + kc; break;
       case 'mov': cls += ' mov'; gcls += ' mov'; break;
       case 'ign': cls += ' ign'; break;
       case 'soft': if (files.L && files.R) { const x = softIntra(row, files.L, files.R); rng = s === 'L' ? x.a : x.b; rcls = 'xs'; } gcls += ' soft'; break;
@@ -1205,14 +1245,17 @@ function rowHTML(vi) {
     if (S.opts.intra === 'none' && rng && rcls === 'x') rng = null;
     if (isCur) { gcls += ' cur'; cls += ' curln'; }
     const text = f.lines[ln];
+    const mo = row.t === 'mov' && d.rows[row.mv];
+    const note = mo ? (row.l != null ? `moved → ${sideName('R')}:${mo.r + 1}` : `moved ← ${sideName('L')}:${mo.l + 1}`) : row.note;
+    const gn = note && k !== 'S' ? `<span class="gn" title="${esc(note)}">${mo ? '↕' : /^indent/.test(note) ? '⇥' : /^case/.test(note) ? 'Aa' : '␣'}</span>` : '';
     const html = text ? paint(text, syn ? synLine(f, ln) : null, rng, rcls) : '<br>';
-    H[s] = `<div class="${cls}" data-ln="${ln}" data-row="${i}">${html}</div>`;
-    G[s] = `<div class="${gcls}">${c && c.r0 === i ? mgBtn(s, row.c) : ''}${ln + 1}</div>`;
+    H[s] = `<div class="${cls}" data-ln="${ln}" data-row="${i}"${note && k !== 'S' ? ` data-note="${esc(note)}"` : ''}>${html}</div>`;
+    G[s] = `<div class="${gcls}">${c && c.r0 === i ? mgBtn(s, row.c) : ''}${gn}${ln + 1}</div>`;
   }
   let M = '<div class="m"></div>';
   if (c) {
     const first = c.r0 === i, last = c.r1 - 1 === i;
-    M = `<div class="m in${c.mv ? ' mvc' : ''}${c.soft && !c.mv ? ' softc' : ''}${first ? ' first' : ''}${last ? ' last' : ''}${isCur ? ' cur' : ''}">${first ? `<button class="mb toR" data-chunk="${row.c}" data-dir="R" title="Copy this change ${esc(sideName('L'))} → ${esc(sideName('R'))}">»</button><button class="mb toL" data-chunk="${row.c}" data-dir="L" title="Copy this change ${esc(sideName('R'))} → ${esc(sideName('L'))}">«</button>` : ''}</div>`;
+    M = `<div class="m in${c.mv ? ' mvc' : ''}${c.soft && !c.mv ? ' softc' : ''}${kc}${first ? ' first' : ''}${last ? ' last' : ''}${isCur ? ' cur' : ''}">${first ? `<button class="mb toR" data-chunk="${row.c}" data-dir="R" title="Copy this change ${esc(sideName('L'))} → ${esc(sideName('R'))}">»</button><button class="mb toL" data-chunk="${row.c}" data-dir="L" title="Copy this change ${esc(sideName('R'))} → ${esc(sideName('L'))}">«</button>` : ''}</div>`;
   }
   return (S.rc[vi] = [H.L, H.R, G.L, G.R, M]);
 }
@@ -1283,14 +1326,69 @@ function syncHeights() {
   for (let i = 0; i < n; i++) hs[i] = Math.max(cL[i].offsetHeight, cR[i] ? cR[i].offsetHeight : 0, LH);
   for (let i = 0; i < n; i++) if (hs[i] > LH + 0.5) for (const col of all) if (col[i]) col[i].style.height = hs[i] + 'px';
 }
+// summary of a chunk for the ruler tooltip
+function chunkInfo(c) {
+  const n = { L: 0, R: 0, X: 0, W: 0, M: 0 };
+  for (let i = c.r0; i < c.r1; i++) { const k = rowKind(S.d.rows[i]); if (k in n) n[k]++; }
+  const pl = (v, w) => `${v} line${v === 1 ? '' : 's'} ${w}`;
+  const parts = [n.L && pl(n.L, `only in ${sideName('L')}`), n.R && pl(n.R, `only in ${sideName('R')}`), n.X && pl(n.X, 'changed on both sides'),
+    n.W && pl(n.W, 'whitespace / case only'), n.M && pl(n.M, 'moved')].filter(Boolean);
+  const at = (s, r) => r.b > r.a ? `${sideName(s)} ${r.a + 1}${r.b - r.a > 1 ? '–' + r.b : ''}` : `${sideName(s)} —`;
+  return { n, mixed: n.X > 0 || (n.L > 0 && n.R > 0), tip: `${at('L', c.L)} · ${at('R', c.R)}\n${parts.join('\n') || 'ignored difference'}` };
+}
 function renderRuler() {
   const d = S.d; const total = Math.max(1, S.vis.length); let html = '';
   d.chunks.forEach((c, ci) => {
     const v0 = S.rowToVis[c.r0]; if (v0 < 0) return;
-    const top = v0 / total * 100, h = Math.max((c.r1 - c.r0) / total * 100, 0.4);
-    html += `<div class="rm${c.mv ? ' mv' : ''}${c.soft && !c.mv ? ' soft' : ''}" style="top:${top}%;height:${h}%" data-chunk="${ci}"></div>`;
+    const top = v0 / total * 100, h = (c.r1 - c.r0) / total * 100;
+    html += `<div class="rm${ci === S.curChunk ? ' cur' : ''}" style="top:${top}%;height:${h}%" data-chunk="${ci}" title="${esc(chunkInfo(c).tip)}"></div>`;
   });
-  E.ruler.innerHTML = html + '<div class="rview" id="rview"></div>'; E.rview = $('#rview'); updateViewport();
+  E.ruler.innerHTML = '<canvas></canvas>' + html + '<div class="rview" id="rview"></div>'; E.rview = $('#rview'); drawRuler(); updateViewport();
+}
+// Overview ruler: left lane = content only in L, right lane = only in R, full width purple = changed on both
+// sides (a modified line, or a hunk that removes and adds), striped = moved, faint = ignored by the rules.
+function drawRuler() {
+  const cv = E.ruler.querySelector('canvas'); const d = S.d; if (!cv || !d) return;
+  const W = E.ruler.clientWidth, H = E.ruler.clientHeight; if (!W || !H) return;
+  const dpr = window.devicePixelRatio || 1; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const cs = getComputedStyle(document.documentElement); const col = (v, a = 1) => `rgb(${cs.getPropertyValue(v).trim()} / ${a})`;
+  const total = Math.max(1, S.vis.length), y = vi => vi / total * H, MINH = total / H > 4 ? 1 : 2;
+  const pad = 3, gap = 2, lw = (W - 2 * pad - gap) / 2;
+  const lane = { L: [pad, lw], R: [pad + lw + gap, lw], F: [pad, W - 2 * pad], C: [W / 2 - 2, 4] };
+  const box = (ln, v0, v1) => { const [x, w] = lane[ln]; const t = y(v0); g.fillRect(x, t, w, Math.max(y(v1) - t, MINH)); };
+  const stripes = (ln, v0, v1) => {
+    const [x, w] = lane[ln]; const t = y(v0), h = Math.max(y(v1) - t, MINH);
+    g.save(); g.beginPath(); g.rect(x, t, w, h); g.clip(); g.fillStyle = col('--mv', .35); g.fillRect(x, t, w, h);
+    g.strokeStyle = col('--mv'); g.lineWidth = 1.5; g.beginPath();
+    for (let o = -w; o < h + w; o += 4) { g.moveTo(x, t + o + w); g.lineTo(x + w, t + o); } g.stroke(); g.restore();
+  };
+  // runs of consecutive visible rows with the same kind
+  const runs = []; let run = null;
+  for (let vi = 0; vi < S.vis.length; vi++) {
+    const v = S.vis[vi]; let k = null;
+    if (typeof v === 'number') {
+      const r = d.rows[v], c = r.c != null ? d.chunks[r.c] : null;
+      k = r.t === 'eq' ? null : c && c.soft ? 'S' : rowKind(r);
+      if (k === 'M') k = r.l != null ? 'ML' : 'MR';
+    }
+    if (run && run.k === k && run.v1 === vi) { run.v1 = vi + 1; continue; }
+    if (k) runs.push(run = { k, v0: vi, v1: vi + 1 }); else run = null;
+  }
+  // mixed hunks get a purple band behind their rows, so they read as one "both sides" change
+  g.fillStyle = col('--mix', .3);
+  for (const c of d.chunks) {
+    if (c.soft) continue; const v0 = S.rowToVis[c.r0]; if (v0 < 0) continue;
+    if (chunkInfo(c).mixed) box('F', v0, v0 + (c.r1 - c.r0));
+  }
+  // side lanes go on top of purple, so dense files still show which side gained content
+  const order = ['S', 'W', 'X', 'L', 'R', 'ML', 'MR'];
+  const style = { S: ['C', '--faint'], W: ['F', '--mix', .45], L: ['L', '--hlL'], R: ['R', '--hlR'], X: ['F', '--mix'] };
+  for (const k of order) for (const r of runs) {
+    if (r.k !== k) continue;
+    if (k === 'ML' || k === 'MR') { stripes(k[1], r.v0, r.v1); continue; }
+    const [ln, v, a] = style[k]; g.fillStyle = k === 'S' ? cs.getPropertyValue('--faint').trim() : col(v, a); box(ln, r.v0, r.v1);
+  }
 }
 function contentH() {
   if (!S.wrapOn) return Math.max(1, S.vis.length * LH);
@@ -1326,10 +1424,10 @@ function updateStats() {
   const pos = chunksReal.findIndex(([, i]) => i === S.curChunk);
   E.stats.innerHTML = `${pill}
     <span class="st" title="Lines in ${esc(sideName('L'))} / ${esc(sideName('R'))}">lines <b>${fmt(d.nA)}</b> / <b>${fmt(d.nB)}</b></span>
-    ${d.raw ? '' : `<span class="st add" title="Lines only in ${esc(sideName('R'))}">added <b>+${fmt(st.add)}</b></span>
-    <span class="st del" title="Lines only in ${esc(sideName('L'))}">removed <b>−${fmt(st.del)}</b></span>
-    <span class="st" title="Lines changed on both sides">modified <b>~${fmt(st.mod)}</b></span>
-    ${st.mov ? `<span class="st mov" title="Lines that moved position">moved <b>↕${fmt(st.mov)}</b></span>` : ''}
+    ${d.raw ? '' : `<span class="st add" title="Lines only in ${esc(sideName('R'))} (right lane of the overview ruler)"><i class="lg" style="background:rgb(var(--hlR))"></i>added <b>+${fmt(st.add)}</b></span>
+    <span class="st del" title="Lines only in ${esc(sideName('L'))} (left lane of the overview ruler)"><i class="lg" style="background:rgb(var(--hlL))"></i>removed <b>−${fmt(st.del)}</b></span>
+    <span class="st mix" title="Lines changed on both sides (purple in the overview ruler)"><i class="lg" style="background:rgb(var(--mix))"></i>modified <b>~${fmt(st.mod)}</b></span>
+    ${st.mov ? `<span class="st mov" title="Lines that moved position (striped in the overview ruler)"><i class="lg" style="background:repeating-linear-gradient(135deg,rgb(var(--mv)) 0 2px,rgb(var(--mv)/.3) 2px 4px)"></i>moved <b>↕${fmt(st.mov)}</b></span>` : ''}
     <span class="st opt" title="Characters added / removed (inline diff)">chars${st.approx ? ' ≈' : ''} <b style="color:rgb(var(--hlR))">+${fmt(st.ca)}</b> <b style="color:rgb(var(--hlL))">−${fmt(st.cd)}</b></span>
     <span class="st" title="Similarity">similar <b>${d.sim}%</b> <span class="simbar"><i style="width:${d.sim}%"></i></span></span>
     `}${ignored ? `<span class="st" title="Differences hidden by your Ignore options (shown with dotted underline / hatch)">ignored <b>${fmt(ignored)}</b></span>` : ''}
@@ -1773,7 +1871,8 @@ function nearestPos(s, ri) {
   return { l: 0, o: 0 };
 }
 function markCurrent() {
-  $$('.g.cur,.m.cur,.ln.curln').forEach(el => el.classList.remove('cur', 'curln'));
+  $$('.g.cur,.m.cur,.ln.curln,.rm.cur').forEach(el => el.classList.remove('cur', 'curln'));
+  E.ruler.querySelector(`.rm[data-chunk="${S.curChunk}"]`)?.classList.add('cur');
   S.rc = [];
   const c = S.d.chunks[S.curChunk]; if (!c) { updateStats(); return; }
   for (let i = c.r0; i < c.r1; i++) {
@@ -2283,11 +2382,13 @@ function applyColors() {
   const st = document.documentElement.style; st.setProperty('--hlL', colorOf(S.side.L.color)); st.setProperty('--hlR', colorOf(S.side.R.color));
   const sch = S.side.L.color === 'teal' && S.side.R.color === 'teal' ? 'teal' : S.side.L.color === 'salmon' && S.side.R.color === 'sage' ? 'coded' : '';
   $$('[data-scheme]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.scheme === sch)));
+  drawRuler();
 }
 function applyTheme() {
   const t = S.opts.theme; const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.mode = dark ? 'dark' : 'light'; document.documentElement.dataset.theme = t;
   $('#themeBtn').title = `Theme: ${t} (click to change)`;
+  drawRuler();
 }
 function syncOptUI() {
   $$('[data-opt]').forEach(b => b.setAttribute('aria-pressed', String(!!S.opts[b.dataset.opt])));
@@ -2438,11 +2539,11 @@ $('#ctx').oninput = () => { S.opts.ctx = clamp(+$('#ctx').value || 0, 0, 50); sa
 $('#intra').onchange = () => { S.opts.intra = $('#intra').value; saveOpts(); refresh({ keepCaret: false }); };
 $('#ws').onchange = () => { S.opts.ws = $('#ws').value; saveOpts(); S.statusCache.clear(); refresh({ keepCaret: false }); renderFiles(); };
 $('#tab').onchange = () => { S.opts.tab = +$('#tab').value; saveOpts(); syncOptUI(); if (S.opts.wrap) refresh({ keepCaret: false }); };
-E.ruler.addEventListener('mousedown', e => {
-  if (e.target.closest('.rm')) return;
-  const r = E.ruler.getBoundingClientRect(); const frac = (e.clientY - r.top) / r.height;
-  const p = E.pane.L; const content = S.vis.length * lhPx(); p.scrollTop = frac * content - p.clientHeight / 2;
-});
+let rulerDrag = false;
+const rulerJump = e => { const r = E.ruler.getBoundingClientRect(); const frac = clamp((e.clientY - r.top) / r.height, 0, 1); const p = E.pane.L; p.scrollTop = frac * contentH() - p.clientHeight / 2; };
+E.ruler.addEventListener('pointerdown', e => { if (e.button || e.target.closest('.rm')) return; rulerDrag = true; E.ruler.setPointerCapture(e.pointerId); rulerJump(e); e.preventDefault(); });
+E.ruler.addEventListener('pointermove', e => { if (rulerDrag) rulerJump(e); });
+for (const ev of ['pointerup', 'pointercancel']) E.ruler.addEventListener(ev, () => { rulerDrag = false; });
 
 document.addEventListener('keydown', e => {
   const inEd = document.activeElement && (document.activeElement.isContentEditable || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName));
@@ -2459,7 +2560,7 @@ document.addEventListener('keydown', e => {
 window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => e.preventDefault());
 let rsT = 0, lastStack = isStacked();
-new ResizeObserver(() => { clearTimeout(rsT); rsT = setTimeout(() => { if (S.wrapOn) syncHeights(); updateViewport(); if (lastStack !== isStacked()) { lastStack = isStacked(); updateHeaders(); } }, 80); }).observe(E.diff);
+new ResizeObserver(() => { clearTimeout(rsT); rsT = setTimeout(() => { if (S.wrapOn) syncHeights(); updateViewport(); drawRuler(); if (lastStack !== isStacked()) { lastStack = isStacked(); updateHeaders(); } }, 80); }).observe(E.diff);
 
 /* =========================================================================
    Demo
