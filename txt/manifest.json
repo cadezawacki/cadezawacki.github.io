@@ -2886,9 +2886,9 @@
       "id": "uphill",
       "type": "widget",
       "name": "Uphill Rush",
-      "description": "ASCII dirt-bike stunts — 12 stages, endless mode, flips and upgrades",
+      "description": "ASCII dirt-bike stunts — career with rivals, bosses and judges, 18 tracks, endless mode, tricks, combos and a garage of trade-offs",
       "icon": "🏍️",
-      "tags": "game,arcade,fun,train,bike,motorbike,motocross,dirt bike,hill climb,moto,racing,physics,stunts,flip,endless",
+      "tags": "game,arcade,fun,train,bike,motorbike,motocross,dirt bike,hill climb,moto,racing,physics,stunts,flip,endless,career,story,buggy,monster truck",
       "entry": "widgets/uphill/uphill.js",
       "css": "widgets/uphill/uphill.css"
     },
