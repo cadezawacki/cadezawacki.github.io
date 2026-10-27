@@ -1546,15 +1546,22 @@
     function locOpen(save, li) { return li === 0 || !!save.career.boss[LOCS[li - 1].key]; }
     function podiums(save, loc) {
       var n = 0;
-      locEvents(loc).forEach(function (e) { var r = save.career.ev[e.id]; if (!isBoss(e) && r && r.p >= 1 && r.p <= 3) n++; });
+      locEvents(loc).forEach(function (e) { if (!isBoss(e) && completed(e, save.career.ev[e.id])) n++; });
       return n;
     }
     function bossOpen(save, loc) { return podiums(save, loc) >= 2; }
-    // Money for a finished event. first: no earlier podium (full pot, else half).
+    // An event is completed by a podium — a boss only by winning (a lost
+    // two-rider duel is still "2nd", which is no podium).
+    function completed(ev, rec) { return !!rec && (isBoss(ev) ? rec.p === 1 : rec.p >= 1 && rec.p <= 3); }
+    // The prize for a place: the full pot until the event is completed, half on
+    // replays after that; the team's cut (or bonus) applies either way.
+    function potFor(ev, place, team, first) {
+      var tm = teamOf(team), pot = ev.prize[place - 1] || 0;
+      return Math.round(pot * (first ? 1 : 0.5) * (tm ? tm.prize : 1));
+    }
+    // Money for a finished event. first: not completed before.
     function payout(ev, place, team, first, betOn, won) {
-      var tm = teamOf(team) || { prize: 1, fees: 1 }, pot = ev.prize[place - 1] || 0;
-      if (!first) pot = Math.round(pot * 0.5);
-      pot = Math.round(pot * tm.prize);
+      var pot = potFor(ev, place, team, first);
       var bet = betOn && ev.bet ? (won ? ev.bet[1] : -ev.bet[1]) : 0;
       return { prize: pot, bet: bet, total: pot + bet };
     }
@@ -1742,7 +1749,7 @@
       stars: stars, normSave: normSave, totalStars: totalStars, lookOwned: lookOwned, buyable: buyable, vehAvail: vehAvail, partAvail: partAvail, partOwned: partOwned, ttUnlocked: ttUnlocked,
       encodeGhost: encodeGhost, decodeGhost: decodeGhost, packGhost: packGhost, ghostAt: ghostAt, ghostLead: ghostLead, rivalGhost: rivalGhost, stageResult: stageResult,
       bot: bot, simToFinish: simToFinish, standings: standings, runStats: runStats, judge: judge, bankCombo: bankCombo, flipName: flipName,
-      eventOf: eventOf, locEvents: locEvents, isBoss: isBoss, locIdx: locIdx, locOpen: locOpen, podiums: podiums, bossOpen: bossOpen, payout: payout, entryFee: entryFee, partCost: partCost, tierPlace: tierPlace, unlockedBy: unlockedBy, emptyCareer: emptyCareer,
+      eventOf: eventOf, locEvents: locEvents, isBoss: isBoss, locIdx: locIdx, locOpen: locOpen, podiums: podiums, bossOpen: bossOpen, payout: payout, potFor: potFor, completed: completed, entryFee: entryFee, partCost: partCost, tierPlace: tierPlace, unlockedBy: unlockedBy, emptyCareer: emptyCareer,
       wrapPi: wrapPi, clamp: clamp, rnd: rnd
     };
   })();
@@ -2951,6 +2958,7 @@
     halt();
     bankEndless();
     saveAttempt();
+    abandonEvent();
     w.camMode = S.save.cam;
     setView(w); E.resetCam(w);
     S.w = w; S.run = run; S.paused = false; S.shake = 0; S.banked = run.kind !== 'endless'; S.trickSeen = 0; resetPops();
@@ -3038,7 +3046,22 @@
     var r = S.run;
     if (r.kind === 'endless') startEndless();
     else if (r.kind === 'tt') startTT(r.track);
-    else { S.save.coins += r.fee; startEvent(r.ev.id, r.bet); }      // a restart doesn't charge the fee twice
+    else {                                          // an event restart is a new entry: the fee again
+      var fee = E.entryFee(r.ev, S.save.career.team);
+      if (S.save.coins < fee) { toMenu('brief'); S.evId = r.ev.id; refresh(); return; }
+      startEvent(r.ev.id, r.bet && S.save.coins - fee >= r.ev.bet[1]);
+    }
+  }
+  // Leaving an event before the finish (restart, retire, menu, closing the panel):
+  // the entry fee is gone, and so is a side bet.
+  function abandonEvent() {
+    var r = S && S.run;
+    if (!r || r.kind !== 'event' || r.settled) return;
+    r.settled = true;
+    if (r.bet && r.ev.bet) {
+      S.save.coins = Math.max(0, S.save.coins - r.ev.bet[1]); writeSave();
+      try { Cade.showToast('Side bet forfeited: −' + r.ev.bet[1] + ' coins', 'info', 3000); } catch (e) {}
+    }
   }
   // Endless coins go in the bank when the run ends (or the panel closes mid-run).
   function bankEndless() {
@@ -3125,7 +3148,8 @@
     } else {
       value = failed ? 0 : w.final; place = E.tierPlace(ev, value);
     }
-    var boss = E.isBoss(ev), prev = C.ev[ev.id], first = !prev || prev.p > 3;
+    r.settled = true;
+    var boss = E.isBoss(ev), prev = C.ev[ev.id], first = !E.completed(ev, prev);
     var won = place === 1, betWon = false;
     if (ev.bet && r.bet) {
       var rivalPlace = 99;
@@ -3138,7 +3162,7 @@
     var unlocks = [], champ = false;
     if (boss && won && !C.boss[ev.loc]) { C.boss[ev.loc] = 1; unlocks = E.unlockedBy(ev.loc); if (ev.loc === 'summit') { C.champ = true; champ = true; } }
     writeSave();
-    S.result = { ev: ev, place: place, rows: rows, cards: cards, value: value, pay: pay, fee: r.fee, picked: w.coins, bet: r.bet, betWon: betWon, unlocks: unlocks, champ: champ, failed: failed,
+    S.result = { ev: ev, place: place, rows: rows, cards: cards, value: value, pay: pay, fee: r.fee, picked: w.coins, replay: !first, bet: r.bet, betWon: betWon, unlocks: unlocks, champ: champ, failed: failed,
       ok: boss ? won : place <= 3, stats: E.runStats(w) };
     showOverlay('eresult');
   }
@@ -3290,17 +3314,18 @@
       if (!seen) { C.seen[S.locKey] = 1; writeSave(); h += dlg(E.LOC_INTRO[S.locKey]); }
       h += '<div class="uh-evs">';
       evs.forEach(function (ev) {
-        var r = C.ev[ev.id], boss = E.isBoss(ev), locked = boss && !E.bossOpen(sv, ev.loc), medal = r ? (r.p === 1 ? '🥇' : r.p === 2 ? '🥈' : r.p === 3 ? '🥉' : '·') : '';
-        var pot = Math.round(ev.prize[0] * (E.teamOf(C.team) ? E.teamOf(C.team).prize : 1));
+        var r = C.ev[ev.id], boss = E.isBoss(ev), locked = boss && !E.bossOpen(sv, ev.loc), done = E.completed(ev, r);
+        var medal = !r ? '' : boss ? (done ? '✓ beaten' : 'lost') : r.p === 1 ? '🥇' : r.p === 2 ? '🥈' : r.p === 3 ? '🥉' : 'off podium';
+        var pot = E.potFor(ev, 1, C.team, !done);
         h += '<button type="button" class="uh-ev' + (boss ? ' boss' : '') + (locked ? ' locked' : '') + '" data-act="brief" data-k="' + ev.id + '"' + (locked ? ' disabled' : '') + '>' +
           '<span class="uh-eic">' + TYPE_ICON[boss ? 'boss' : ev.type] + '</span><span class="uh-et"><b>' + esc(ev.name) + '</b><small>' + TYPE_NAME[ev.type] + (ev.track ? ' · ' + esc(E.trackOf(ev.track).name) : '') +
-          (locked ? ' · 🔒 podium in 2 events' : '') + '</small></span><span class="uh-epot">' + medal + ' <small>1st</small> ' + fmtN(pot) + '<small> · fee ' + E.entryFee(ev, C.team) + '</small></span></button>';
+          (locked ? ' · 🔒 podium in 2 events' : '') + (medal ? ' · best: ' + medal : '') + '</small></span><span class="uh-epot"><small>win</small> ' + fmtN(pot) + '<small> · fee ' + E.entryFee(ev, C.team) + '</small></span></button>';
       });
       return h + '</div></div>';
     }
     if (kind === 'brief') {
-      var ev = E.eventOf(S.evId), fee = E.entryFee(ev, C.team), tmb = E.teamOf(C.team), pf = tmb ? tmb.prize : 1, prev = C.ev[ev.id], first = !prev || prev.p > 3;
-      var pots = ev.prize.map(function (p, j) { return '<span>' + ['🥇', '🥈', '🥉'][j] + ' ' + fmtN(Math.round(p * pf * (first ? 1 : 0.5))) + '</span>'; }).join('');
+      var ev = E.eventOf(S.evId), fee = E.entryFee(ev, C.team), tmb = E.teamOf(C.team), pf = tmb ? tmb.prize : 1, prev = C.ev[ev.id], first = !E.completed(ev, prev);
+      var pots = ev.prize.map(function (p, j) { return '<span>' + ['🥇', '🥈', '🥉'][j] + ' ' + fmtN(E.potFor(ev, j + 1, C.team, first)) + '</span>'; }).join('');
       var goal = E.isBoss(ev) ? 'Win to beat the boss' + (ev.reward ? ' — unlocks ' + esc(ev.reward) : '') : ev.type === 'climb' ? 'Distance: 🥇 ' + ev.tiers[0] + ' m · 🥈 ' + ev.tiers[1] + ' m · 🥉 ' + ev.tiers[2] + ' m'
         : ev.type === 'time' ? 'Time: 🥇 ' + ev.tiers[0] + ' s · 🥈 ' + ev.tiers[1] + ' s · 🥉 ' + ev.tiers[2] + ' s' : 'Finish on the podium to complete the event';
       var field = '';
@@ -3314,7 +3339,7 @@
       var V0 = E.vehOf(sv.veh);
       return '<div class="uh-card uh-wide">' + head('loc', esc(ev.name.toUpperCase()), coinsTxt()) +
         '<div class="uh-badge">' + TYPE_ICON[E.isBoss(ev) ? 'boss' : ev.type] + ' ' + TYPE_NAME[ev.type] + (ev.track ? ' · ' + esc(E.trackOf(ev.track).name) : ' · ' + esc(E.LOCS[ev.biome].name)) + '</div>' +
-        dlg(ev.intro) + field + '<div class="uh-goal">' + goal + '</div><div class="uh-pots">' + pots + (first ? '' : '<small>replay: half pots</small>') + '</div>' + betHtml +
+        dlg(ev.intro) + field + '<div class="uh-goal">' + goal + '</div><div class="uh-pots">' + pots + (first ? '' : '<small>already completed: half pots</small>') + (pf !== 1 ? '<small>' + esc(tmb.name) + (pf < 1 ? ' takes ' + Math.round((1 - pf) * 100) + '%' : ' +' + Math.round((pf - 1) * 100) + '%') + '</small>' : '') + '</div>' + betHtml +
         '<div class="uh-note">Your machine: <b>' + esc(V0.name) + '</b> ' + btn('garage', 'garage', 'link inline') + '</div>' +
         '<div class="uh-menu row">' + btn('go', fee ? 'Enter · ' + fee + ' coins' : 'Start ▶', 'primary', sv.coins >= fee ? '' : ' disabled') + btn('loc', 'Back') + '</div>' +
         (sv.coins >= fee ? '' : '<div class="uh-note">Not enough coins for the entry fee — earn some in Time Trials or Endless.</div>') + '</div>';
@@ -3323,7 +3348,7 @@
       var w = S.w, r = S.run;
       return '<div class="uh-card"><div class="uh-title">PAUSED</div><div class="uh-sub">' +
         (w.mode === 'stage' ? fmtT(Math.max(0, w.t - w.bonus)) + ' · style ' + fmtN(w.score) : Math.floor(w.dist) + ' m · ' + w.coins + ' coins') + '</div>' +
-        '<div class="uh-menu">' + btn('resume', 'Resume', 'primary') + btn('restart', 'Restart') + btn(r.kind === 'event' ? 'quit' : 'menu', r.kind === 'event' ? 'Retire' : 'Menu') + '</div>' +
+        '<div class="uh-menu">' + btn('resume', 'Resume', 'primary') + btn('restart', r.kind === 'event' ? 'Restart · ' + E.entryFee(r.ev, S.save.career.team) + ' 🪙' : 'Restart', '', r.kind === 'event' && S.save.coins < E.entryFee(r.ev, S.save.career.team) ? ' title="Not enough coins to re-enter"' : '') + btn(r.kind === 'event' ? 'quit' : 'menu', r.kind === 'event' ? 'Retire' : 'Menu') + '</div>' +
         toggles() + '<div class="uh-note">' + (S.touch ? 'tap Resume when you are ready' : 'P / Enter to resume · R restart · Esc menu') + '</div></div>';
     }
     if (kind === 'result') {
@@ -3369,7 +3394,10 @@
       h += '<div class="uh-big">' + (ev.type === 'climb' ? R.value + ' m' : R.value ? fmtT(R.value) : '—') + '</div><div class="uh-note">🥇 ' + ev.tiers[0] + ' · 🥈 ' + ev.tiers[1] + ' · 🥉 ' + ev.tiers[2] + (ev.type === 'climb' ? ' m' : ' s') + '</div>';
     }
     var P = R.pay, net = P.total + R.picked - R.fee;
-    h += '<div class="uh-pay"><span>prize <b>' + fmtN(P.prize) + '</b></span>' + (R.bet ? '<span>side bet <b class="' + (R.betWon ? 'up' : 'dn') + '">' + (P.bet > 0 ? '+' : '') + P.bet + '</b></span>' : '') +
+    var tmr = E.teamOf(S.save.career.team), why = [];
+    if (P.prize && R.replay) why.push('replay: half pot');
+    if (P.prize && tmr && tmr.prize !== 1) why.push(esc(tmr.name) + (tmr.prize < 1 ? ' takes ' + Math.round((1 - tmr.prize) * 100) + '%' : ' +' + Math.round((tmr.prize - 1) * 100) + '%'));
+    h += '<div class="uh-pay"><span>prize <b>' + fmtN(P.prize) + '</b>' + (why.length ? ' <small>(' + why.join(', ') + ')</small>' : '') + '</span>' + (R.bet ? '<span>side bet <b class="' + (R.betWon ? 'up' : 'dn') + '">' + (P.bet > 0 ? '+' : '') + P.bet + '</b></span>' : '') +
       (R.picked ? '<span>pickups <b>+' + R.picked + '</b></span>' : '') + '<span>entry <b>−' + R.fee + '</b></span><span>net <b class="' + (net >= 0 ? 'up' : 'dn') + '">' + (net >= 0 ? '+' : '') + net + '</b></span></div>';
     h += dlg(R.ok ? ev.win : ev.lose);
     if (R.unlocks.length) h += '<div class="uh-new">UNLOCKED: ' + esc(R.unlocks.join(' · ')) + '</div>';
@@ -3474,6 +3502,7 @@
     bankEndless();
     S.paused = false;
     saveAttempt();
+    abandonEvent();
     if (S.w) { S.bgw = S.w; S.w = null; }
     S.rivals = [];
     showOverlay(kind || 'home');
@@ -3686,23 +3715,25 @@
     if (!S) return;
     var vw = window.innerWidth || 800, vh = window.innerHeight || 600, vv = window.visualViewport;
     if (vv && vv.height && vv.scale <= 1.01) vh = Math.min(vh, vv.height);
+    // shown alone (a shared ?widget= link): the panel is the whole window, so fill it
+    var solo = S.panel.classList.contains('cade-solo-panel');
     var narrow = vw < 600, float = S.touch && vw > vh && vh < 560;
     S.float = float;
     S.root.classList.toggle('uh-float', float);
     S.root.classList.toggle('uh-touch', S.touch);
-    var pw = narrow ? vw - 16 : Math.min(float ? 960 : 860, vw - 32);
-    S.panel.style.width = pw + 'px';
+    var pw = solo ? S.panel.clientWidth || vw : narrow ? vw - 16 : Math.min(float ? 960 : 860, vw - 32);
+    if (!solo) S.panel.style.width = pw + 'px';
     var body = S.panel.querySelector('.cade-panel-body'), bs = body ? getComputedStyle(body) : null;
     var padX = bs ? (parseFloat(bs.paddingLeft) || 0) + (parseFloat(bs.paddingRight) || 0) : 16;
     var padY = bs ? (parseFloat(bs.paddingTop) || 0) + (parseFloat(bs.paddingBottom) || 0) : 16;
     var cw = Math.max(200, Math.floor(pw - 2 - padX));
-    var r = S.panel.getBoundingClientRect(), top = r.height ? Math.max(0, Math.min(r.top, 160)) : (narrow ? 48 : 52);
+    var r = S.panel.getBoundingClientRect(), top = solo ? 0 : r.height ? Math.max(0, Math.min(r.top, 160)) : (narrow ? 48 : 52);
     var hd = S.head ? S.head.offsetHeight : 36;
     var extra = 0;
     if (S.touch && !float) extra += (S.padsEl.offsetHeight || 72) + 8;
     if (!S.touch) extra += (S.bar.offsetHeight || 22) + 8;
     var avail = vh - top - hd - padY - extra - 8 - S.safeB;
-    var ch = float ? avail : narrow ? Math.round(cw * 0.95) : Math.round(cw * 0.56);
+    var ch = float || solo ? avail : narrow ? Math.round(cw * 0.95) : Math.round(cw * 0.56);
     ch = Math.max(240, Math.min(ch, avail));
     S.cv.style.width = cw + 'px'; S.cv.style.height = ch + 'px';
     S.stageEl.style.width = cw + 'px'; S.stageEl.style.height = ch + 'px';
@@ -3719,6 +3750,7 @@
     if (!S) return;
     bankEndless();
     saveAttempt();
+    abandonEvent();
     var s = S;
     S = null;
     if (s.raf) cancelAnimationFrame(s.raf);

@@ -9,6 +9,12 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#111110">
 <meta name="color-scheme" content="light dark">
+<script>
+// A shared widget link (?widget=<module id>, see "Solo widget links" in the
+// main script) shows only that widget: flag it before the first paint so the
+// note app never flashes up behind it.
+(function () { try { var w = new URLSearchParams(location.search).get('widget'); if (w && /^[a-z0-9_-]{1,40}$/i.test(w)) { document.documentElement.classList.add('cade-solo'); document.documentElement.setAttribute('data-solo', w); } } catch (e) {} })();
+</script>
 
 <!-- iOS PWA (required for standalone / offline on Home Screen) -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2830,6 +2836,31 @@ body.origami-on .cade-panel-head .cade-panel-lockbtn, .cade-panel-head .cade-pan
 .cade-panel:hover > .cade-rz-se::after { opacity: 0.8; }
 .cade-panel.cade-resizing, .cade-panel.cade-resizing * { user-select: none; -webkit-user-select: none; }
 .cade-popped > .cade-rz { display: none; }
+/* Share a widget as a link (a button before pop-out; shown on game panels too). */
+.cade-panel-head .cade-panel-sharebtn {
+  display: inline-flex; align-items: center; cursor: pointer; opacity: 0.6; padding: 2px 5px; border-radius: 4px; line-height: 1; color: var(--text-muted);
+}
+.cade-panel-head .cade-panel-sharebtn svg { width: 14px; height: 14px; flex: none; }
+.cade-panel-head .cade-panel-sharebtn:hover, .cade-panel-head .cade-panel-sharebtn:focus-visible { opacity: 1; background: var(--surface-hover, rgba(127,127,127,0.15)); outline: none; }
+/* Solo widget link: nothing but the widget's panel (and toasts), filling the window. */
+html.cade-solo body > *:not(.cade-panel):not(.toast-container):not(.cade-solo-msg) { display: none !important; }
+html.cade-solo body { background: var(--surface); }
+html.cade-solo .cade-panel:not(.cade-solo-panel) { display: none !important; }
+html.cade-solo .cade-panel.cade-solo-panel:not(#cade-pop-x):not(#cade-pop-x) {
+  position: fixed !important; inset: 0 !important; z-index: 1 !important; display: flex; flex-direction: column;
+  width: auto !important; height: auto !important; max-width: none !important; max-height: none !important;
+  margin: 0 !important; border: 0; border-radius: 0; box-shadow: none; transform: none !important;
+  padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+}
+html.cade-solo .cade-solo-panel .cade-panel-head { cursor: default; }
+html.cade-solo .cade-solo-panel .cade-panel-minbtn, html.cade-solo .cade-solo-panel .cade-panel-popbtn,
+html.cade-solo .cade-solo-panel .cade-panel-x, html.cade-solo .cade-solo-panel .cade-panel-lockbtn { display: none !important; }
+html.cade-solo .cade-solo-panel > .cade-panel-body { flex: 1 1 auto; min-height: 0; }
+html.cade-solo .cade-solo-panel > .cade-rz { display: none; }
+.cade-solo-msg { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px;
+  text-align: center; font-family: var(--font-sans, system-ui, sans-serif); color: var(--text); background: var(--surface); }
+.cade-solo-msg button, .cade-solo-msg a { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2, transparent); color: var(--text); cursor: pointer; text-decoration: none; }
+.cade-solo-msg button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 /* Phone-width: full-width sheets — only the bottom edge resizes, with a visible handle bar. */
 @media (max-width: 599px) {
   .cade-rz-w, .cade-rz-e, .cade-rz-sw, .cade-rz-se { display: none; }
@@ -21365,7 +21396,7 @@ renderWorkspacePill();
 // 404 on reload — params survive a refresh and are shareable.)
 function _updateLocationForRoom() {
   try {
-    if (!activeRoom) return;
+    if (!activeRoom || document.documentElement.classList.contains('cade-solo')) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('fb')) return; // don't fight an in-flight sync-share link
     let wsLabel = 'all';
@@ -23008,6 +23039,82 @@ function _watchGamePanel(p) {
 // its own footer chip). The footer is used only while it's visible (not in zen).
 var _openingWidget = null; // var: read by registerWidget, which can run before this line
 var _panelDock = null, _dockObserver = null;
+// ---- Solo widget links ------------------------------------------------------
+// Every manifest widget's panel has a link button: it copies
+// txt.html?widget=<module id>, and that link opens the page showing only that
+// widget, filling the window — a game can be shared without the note app.
+// The app still boots underneath (widgets use its store, theme and panel
+// helpers) but stays hidden: the head script set html.cade-solo before the
+// first paint, the CSS hides everything but the widget's panel, and the
+// address bar keeps the clean link (no ?ws=&room= written while solo).
+const _solo = document.documentElement.classList.contains('cade-solo') ? { id: document.documentElement.getAttribute('data-solo') } : null;
+function _shareableModule(name) {
+  if (!name) return null;
+  for (const m of _manifestById.values()) if (m.type === 'widget' && m.name === name) return m;
+  return null;
+}
+function _widgetLink(id) { return location.origin + location.pathname + '?widget=' + encodeURIComponent(id); }
+function _addShareBtn(p, m) {
+  const b = document.createElement('span');
+  b.className = 'cade-panel-sharebtn'; b.setAttribute('role', 'button'); b.tabIndex = 0;
+  b.title = 'Copy a link that opens just ' + m.name; b.setAttribute('aria-label', b.title);
+  b.innerHTML = _SHARE_SVG;
+  const head = p.querySelector('.cade-panel-head');
+  head.insertBefore(b, head.querySelector('.cade-panel-popbtn'));
+  b.addEventListener('pointerdown', e => e.stopPropagation());   // a button, not a header drag
+  b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); b.click(); } });
+  b.addEventListener('click', e => { e.stopPropagation(); _shareWidget(m); });
+}
+async function _shareWidget(m) {
+  const url = _widgetLink(m.id), title = m.name;
+  let coarse = false;
+  try { coarse = window.matchMedia('(pointer: coarse)').matches; } catch {}
+  if (coarse && navigator.share) { try { await navigator.share({ url, title }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+  try { await navigator.clipboard.writeText(url); showToast('Link copied — it opens just ' + title, 'success', 3000); return; } catch {}
+  try { window.prompt('Link to just ' + title + ':', url); } catch {}
+}
+function _makeSoloPanel(p) {
+  p.classList.add('cade-solo-panel');
+  try { document.title = (p.querySelector('.cade-panel-title') || {}).textContent || document.title; } catch {}
+}
+function _soloMsg(html, actions) {
+  let el = document.querySelector('.cade-solo-msg');
+  if (!el) { el = document.createElement('div'); el.className = 'cade-solo-msg'; document.body.appendChild(el); }
+  el.innerHTML = html;
+  (actions || []).forEach(a => {
+    const b = document.createElement(a.href ? 'a' : 'button');
+    b.textContent = a.label;
+    if (a.primary) b.className = 'primary';
+    if (a.href) b.href = a.href; else b.addEventListener('click', a.run);
+    el.appendChild(b);
+  });
+  return el;
+}
+function _soloOpen(stub) {
+  const msg = document.querySelector('.cade-solo-msg');
+  if (msg) msg.remove();
+  try { stub.open(); } catch (e) { console.error('Widget open failed:', e); }
+}
+function _soloBoot() {
+  if (!_solo || _solo.booted) return;
+  _solo.booted = true;
+  const full = location.origin + location.pathname;
+  const m = _manifestById.get(_solo.id);
+  const stub = m && m.type === 'widget' ? WIDGETS.find(w => w.__moduleId === m.id) : null;
+  if (!stub) {
+    _soloMsg('<div>This link points to a widget that isn’t here' + (m ? '' : ' (' + escapeHtml(_solo.id) + ')') + '.</div>', [{ label: 'Open Cade.txt', href: full, primary: true }]);
+    return;
+  }
+  _soloOpen(stub);
+  // The widget closed itself (its own Close / Esc): offer it again rather than a blank page.
+  new MutationObserver(() => {
+    if (document.querySelector('.cade-solo-panel') || document.querySelector('.cade-solo-msg')) return;
+    const minimized = document.querySelector('.cade-panel.cade-minimized');
+    if (minimized) { try { _restorePanel(minimized); } catch {} return; }
+    _soloMsg('<div>' + escapeHtml(m.icon || '') + ' ' + escapeHtml(m.name) + ' was closed.</div>',
+      [{ label: 'Open again', primary: true, run: () => _soloOpen(stub) }, { label: 'Open Cade.txt', href: full }]);
+  }).observe(document.body, { childList: true, subtree: false, attributes: false });
+}
 function _isMinimized(p) { return !!(p && p.classList && p.classList.contains('cade-minimized')); }
 function _syncGameOpen() {
   document.body.classList.toggle('game-open', !!document.querySelector('.cade-game-panel:not(.cade-minimized)'));
@@ -23097,6 +23204,8 @@ window.__cadePanelMin = { minimize: _minimizePanel, restore: _restorePanel, isMi
 // Shared draggable, closeable floating panel.
 // Popped-out panels (see “Pop out” below _mkPanel) and the button's icon.
 const _popped = new Map(); // panel → { win, obs, bodyObs, closing }
+const _SHARE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg>';
 const _POP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></svg>';
 function _mkPanel(id, title, bodyHtml) {
@@ -23111,6 +23220,9 @@ function _mkPanel(id, title, bodyHtml) {
     '<span class="cade-panel-x" title="Close">×</span></div><div class="cade-panel-body">' + bodyHtml + '</div>';
   p.querySelector('.cade-panel-title').textContent = title;
   p.__cadeWidget = _openingWidget || null;
+  const shareMod = _shareableModule(p.__cadeWidget);
+  if (shareMod) _addShareBtn(p, shareMod);
+  if (_solo && shareMod && shareMod.id === _solo.id) _makeSoloPanel(p);
   document.body.appendChild(p);
   p.querySelector('.cade-panel-minbtn').addEventListener('click', e => { e.stopPropagation(); _minimizePanel(p); });
   const pop = p.querySelector('.cade-panel-popbtn');
@@ -26444,7 +26556,7 @@ function loadConfigModule(m) {
 window.bootModules = bootModules;
 // Kick off after the current synchronous boot completes (editor/WIDGETS/scripts/
 // Settings all exist by now). Non-blocking — built-ins render instantly.
-setTimeout(() => { try { bootModules(); } catch (e) { console.error(e); } }, 0);
+setTimeout(() => { try { bootModules().then(_soloBoot, _soloBoot); } catch (e) { console.error(e); } }, 0);
 
 
 </script>
