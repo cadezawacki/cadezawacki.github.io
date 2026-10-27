@@ -511,7 +511,16 @@ test('career data: tracks, cast, prizes and progression rules hang together', fu
   var pay = E.payout(ev1, 1, 'devils', true, true, false);
   assert.strictEqual(pay.prize, Math.round(ev1.prize[0] * 1.25));
   assert.strictEqual(pay.bet, -ev1.bet[1]);
-  assert.strictEqual(E.payout(ev1, 1, 'comet', false, false, false).prize, Math.round(Math.round(ev1.prize[0] * 0.5) * 0.75), 'replays pay half');
+  assert.strictEqual(E.payout(ev1, 1, 'comet', false, false, false).prize, Math.round(ev1.prize[0] * 0.5 * 0.75), 'replays pay half');
+  // what the menus show is what gets paid
+  [true, false].forEach(function (first) { ['', 'comet', 'devils'].forEach(function (tm) {
+    assert.strictEqual(E.payout(ev1, 2, tm, first, false, false).prize, E.potFor(ev1, 2, tm, first));
+  }); });
+  // losing a two-rider boss duel is "2nd" but not a completion: the next try still pays the full pot
+  var boss = E.eventOf('dust-b');
+  assert.ok(!E.completed(boss, { p: 2 }) && E.completed(boss, { p: 1 }));
+  assert.ok(E.completed(ev1, { p: 3 }) && !E.completed(ev1, { p: 4 }) && !E.completed(ev1, null));
+  assert.strictEqual(E.potFor(boss, 1, '', !E.completed(boss, { p: 2 })), boss.prize[0]);
   assert.strictEqual(E.tierPlace(E.eventOf('dust-3'), 600), 2);
   assert.strictEqual(E.tierPlace(E.eventOf('frost-2'), 99), 4);
   assert.ok(E.vehAvail(sv, E.vehOf('buggy')) && !E.vehAvail(sv, E.vehOf('viper')));
