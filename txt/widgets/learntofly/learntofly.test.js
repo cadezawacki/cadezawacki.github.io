@@ -215,7 +215,7 @@ test('settle: itemised pay, scarf bonus, goals pay once, records, day count', fu
   assert.strictEqual(card.base, base);
   var gids = card.goals.map(function (g) { return g.id; }).sort();
   assert.deepStrictEqual(gids, ['a50', 'd100', 's25']);
-  assert.strictEqual(card.total, base + 50 + 60 + 50);
+  assert.strictEqual(card.total, base + 50 + 60 + 50 + (card.missionOk ? card.mission.reward : 0));
   assert.strictEqual(s.cash, card.total);
   assert.strictEqual(s.day, 2);
   assert.ok(card.records.dist && s.best.dist === 120);
@@ -291,6 +291,138 @@ test('New Game+: fresh gear, +25% pay, keeps the record', function () {
   var w = E.newSave(); w.day = 20;
   E.settle(w, { dist: 10050, maxAlt: 0, maxSpeed: 0, time: 0, coins: 0, coinCash: 0, landing: 'smooth', wall: true });
   assert.ok(w.won && w.wonDay === 20 && w.bestWinDay === 20 && w.goals.wall);
+});
+
+// ---- the revamp: controls, the new sky, stunts, contracts, secrets ----
+function airborne(gearUp, x, y, vx, vy, th) {
+  var f = E.newFlight(gearUp || up(), 1);
+  f.phase = 'air'; f.x = x || 200; f.y = (y == null ? E.groundY(f.x) + 60 : y); f.vx = vx == null ? 30 : vx; f.vy = vy || 0; f.th = th || 0; f.contactT = 5;
+  return f;
+}
+function run(f, secs, inp) { for (var i = 0; i < Math.round(secs / E.STEP); i++) { E.stepFlight(f, typeof inp === 'function' ? inp(f, i) : inp || NONE); f.events.length = 0; f.hitQ.length = 0; } return f; }
+
+test('controls: pointing turns the nose to the target; a tap nudges less than a hold', function () {
+  var f = run(airborne(null, 200, null, 30, 0, 0), 0.6, { up: false, down: false, boost: false, aim: 0.9 });
+  assert.ok(Math.abs(E.wrapA(f.th - 0.9)) < 0.05, 'nose on the aim ' + f.th);
+  f = run(airborne(null, 200, null, 30, 0, 0), 0.6, { up: false, down: false, boost: false, aim: -0.5 });
+  assert.ok(Math.abs(E.wrapA(f.th + 0.5)) < 0.05, 'and down ' + f.th);
+  // 0.1 s held from rest turns less than 0.1 s at full rate (the ramp), but a long hold reaches it
+  var a = airborne(null, 200, null, 30, 0, 0), a0 = a.th; run(a, 0.1, { up: true, down: false, boost: false });
+  assert.ok(a.th - a0 < 2 * 0.1 * 0.8, 'a tap is gentle ' + (a.th - a0));
+});
+
+test('flaps: with no rocket Boost flaps, three times a flight; with fuel it burns the rocket', function () {
+  var f = airborne(up(), 200, null, 25, -5, 0);
+  run(f, 3, function (ff, i) { var press = i % 60 < 3; return { up: false, down: false, boost: press }; });
+  assert.strictEqual(f.flaps, 0, 'all used');
+  var g = airborne(up(), 200, null, 25, -5, 0), vy0 = g.vy;
+  E.stepFlight(g, { up: false, down: false, boost: true });
+  assert.ok(g.vy > vy0 + E.TS * 3, 'a flap lifts ' + vy0 + ' → ' + g.vy);
+  var r = airborne(up(0, 0, 0, 2, 2), 200, null, 25, 0, 0);
+  run(r, 0.5, { up: false, down: false, boost: true });
+  assert.strictEqual(r.flaps, E.FLAPS, 'no flaps while there is fuel');
+  assert.ok(r.fuel < r.g.fuel && r.boostUsed);
+});
+
+test('the new sky: rings speed you up, fish refuel, thermals lift, storms push down', function () {
+  var f = airborne(up(0, 0, 0, 1, 1), 300, 80, 30, 0, 0), V0 = E.speedOf(f);
+  f.fuel = 0.2;
+  f.items.push({ kind: 'ring', x: 300.5, y: 80, v: 15, ph: 0, hit: false, hitT: 0 }, { kind: 'fish', x: 300.6, y: 80, v: 5, ph: 0, hit: false, hitT: 0 });
+  f.nextChunk = 99;
+  E.stepFlight(f, NONE);
+  assert.ok(f.rings === 1 && f.fish === 1 && f.coinCash === 20, 'collected');
+  assert.ok(E.speedOf(f) > V0 + 5, 'ring boost ' + V0 + ' → ' + E.speedOf(f));
+  assert.ok(f.fuel > 0.7, 'fish fuel ' + f.fuel);
+  function sink(kind) {
+    var g = airborne(up(), 1000, null, 25, 0, 0.05), gy = E.groundY(1000);
+    g.nextChunk = 999;
+    if (kind) g.items.push(kind === 'thermal' ? { kind: 'thermal', x: 990, y: 0, w: 40, h: 200 } : { kind: 'storm', x: 990, y: gy + 60, w: 40, h: 18 });
+    g.y = gy + 60;
+    run(g, 1);
+    return g.y;
+  }
+  var still = sink(''), up2 = sink('thermal'), down2 = sink('storm');
+  assert.ok(up2 > still + 1 && down2 < still - 1, 'thermal ' + up2 + ', calm ' + still + ', storm ' + down2);
+});
+
+test('stunts: a loop and a skim off the snow are counted (and pay)', function () {
+  var f = airborne(up(3, 3, 3), 300, null, 45, 0, 0);
+  f.y = E.groundY(300) + 200;
+  run(f, 4, { up: true, down: false, boost: false });
+  assert.ok(f.loops >= 1, 'looped ' + f.loops);
+  var s = airborne(up(3, 3, 3), 600, null, 40, -6, -0.05);
+  s.y = E.groundY(600) + 0.4;
+  run(s, 0.3);
+  assert.ok(s.skips >= 1, 'skipped ' + s.skips);
+  var save = E.newSave(), card = E.settle(save, { dist: 100, maxAlt: 0, maxSpeed: 0, time: 0, coins: 0, coinCash: 0, landing: 'smooth', wall: false, loops: 2, skips: 1 });
+  var st = card.lines.filter(function (l) { return l.key === 'stunts'; })[0];
+  assert.ok(st && st.amt === 2 * 60 + 40, 'stunt pay');
+});
+
+test('secrets: landmarks, the moon, oddities; each pays once; hats', function () {
+  var y = airborne(null, E.YETI_X - 5, E.groundY(E.YETI_X - 5) + 2, 10, 0, 0); E.stepFlight(y, NONE);
+  assert.ok(y.eggs.indexOf('yeti') >= 0);
+  var ig = airborne(null, E.IGLOO_X, E.groundY(E.IGLOO_X) + 1, 5, 0, 0); E.stepFlight(ig, NONE);
+  assert.ok(ig.eggs.indexOf('leet') >= 0);
+  var m = airborne(null, 2000, E.groundY(2000) + 3100, 40, 0, 0); E.stepFlight(m, NONE);
+  assert.ok(m.eggs.indexOf('moon') >= 0 && m.ufo, 'moon, and the lights appear');
+  var w = run(airborne(null, 500, null, -20, 0, Math.PI), 1);
+  assert.ok(w.eggs.indexOf('wrongway') >= 0, 'backwards');
+  // the UFO beams you along
+  var u = airborne(null, 3000, E.groundY(3000) + 1300, 40, 0, 0); E.stepFlight(u, NONE);
+  var x0 = u.x; u.ufo.x = u.x + 0.5; u.ufo.y = u.y; E.stepFlight(u, NONE);
+  assert.ok(u.x > x0 + 200 && u.eggs.indexOf('ufo') >= 0, 'abducted');
+  var sv = E.newSave(), res = { dist: 100, maxAlt: 0, maxSpeed: 0, time: 0, coins: 0, coinCash: 0, landing: 'smooth', wall: false, eggs: ['yeti', 'ufo'] };
+  var c1 = E.settle(sv, res), c2 = E.settle(sv, res);
+  assert.strictEqual(c1.eggSum, 500 + 600);
+  assert.strictEqual(c2.eggSum, 0, 'paid once');
+  assert.ok(E.hatOwned(sv, 'antenna') && !E.hatOwned(sv, 'party') && !E.hatOwned(sv, 'crown') && !E.hatOwned(sv, 'tophat'));
+  assert.ok(E.findEgg(sv, 'konami') && !E.findEgg(sv, 'konami') && E.hatOwned(sv, 'party'));
+  E.EGGS.forEach(function (e) { if (e.id !== 'season') sv.eggs[e.id] = 1; });
+  assert.ok(E.hatOwned(sv, 'crown'), 'every (non-seasonal) secret → crown');
+  // five faceplants in a row
+  var p = E.newSave(), crashes = { dist: 30, maxAlt: 0, maxSpeed: 0, time: 0, coins: 0, coinCash: 0, landing: 'crash', wall: false };
+  for (var i = 0; i < 4; i++) E.settle(p, JSON.parse(JSON.stringify(crashes)));
+  assert.ok(!p.eggs.faceplant);
+  assert.strictEqual(E.settle(p, JSON.parse(JSON.stringify(crashes))).eggs[0].id, 'faceplant');
+  // New Game+ keeps secrets and hats
+  sv.hat = 'party'; sv.won = true;
+  var ng = E.newGamePlus(sv);
+  assert.ok(ng.eggs.yeti && ng.hat === 'party');
+});
+
+test('seasons: Halloween / Christmas guests only in season', function () {
+  assert.strictEqual(E.seasonOf(new Date(2026, 9, 28)), 'halloween');
+  assert.strictEqual(E.seasonOf(new Date(2026, 11, 20)), 'xmas');
+  assert.strictEqual(E.seasonOf(new Date(2026, 6, 4)), '');
+  var plain = [], spooky = [], i;
+  for (i = 1; i < 40; i++) { E.chunkItems(5, i, plain, ''); E.chunkItems(5, i, spooky, 'halloween'); }
+  assert.ok(!plain.some(function (it) { return it.kind === 'pumpkin'; }) && spooky.some(function (it) { return it.kind === 'pumpkin'; }));
+  // the classic items don't move when the season changes
+  var a = plain.filter(function (it) { return it.kind === 'coin'; }), b = spooky.filter(function (it) { return it.kind === 'coin'; });
+  assert.ok(same(a, b));
+});
+
+test('contracts: one a day, deterministic, sized to progress, paid when done', function () {
+  var s = E.newSave(); s.seed = 9;
+  var m1 = E.missionFor(s), m2 = E.missionFor(s);
+  assert.deepStrictEqual(m1, m2);
+  var kinds = {};
+  for (var d = 1; d < 60; d++) { s.day = d; s.best.dist = 2000; kinds[E.missionFor(s).id] = 1; }
+  assert.ok(Object.keys(kinds).length >= 5, 'variety ' + Object.keys(kinds));
+  s.best.dist = 50;
+  for (d = 1; d < 40; d++) { s.day = d; assert.ok(['loop', 'skips', 'rings', 'balloons', 'noboost'].indexOf(E.missionFor(s).id) < 0, 'nothing advanced on day ' + d); }
+  var m = { key: 'coins', n: 3, reward: 50 };
+  assert.ok(E.missionDone(m, { coins: 3 }) && !E.missionDone(m, { coins: 2 }));
+});
+
+test('saves: secrets, hats and flags survive; junk does not', function () {
+  var s = E.normSave({ eggs: { yeti: 1, bogus: 1 }, hat: 'antenna', last: 120, plants: 3 });
+  assert.ok(s.eggs.yeti && !s.eggs.bogus);
+  assert.strictEqual(s.hat, '', 'a hat you have not earned is taken off');
+  s = E.normSave({ eggs: { ufo: 1 }, hat: 'antenna', last: 'x' });
+  assert.strictEqual(s.hat, 'antenna');
+  assert.strictEqual(s.last, 0);
 });
 
 console.log(passed + ' passed' + (process.exitCode ? ' (with failures)' : ''));

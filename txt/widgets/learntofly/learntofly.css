@@ -154,3 +154,21 @@
   .ltf-lnk { min-height: 40px; padding: 0 6px; }
   .ltf-go { padding: 12px; }
 }
+
+/* the day's sponsor contract, the Secrets tab's hats */
+.ltf-contract { padding: 5px 8px; border: 1px dashed var(--accent); border-radius: var(--radius-md, 6px); color: var(--text); font-size: 11px; }
+.ltf-contract span { color: var(--accent); font-weight: 700; letter-spacing: 0.08em; margin-right: 4px; }
+.ltf-contract b { color: var(--accent); }
+.ltf-g i { font-style: normal; color: var(--text-faint); }
+.ltf-g b.nm { color: var(--text); font-weight: 600; }
+.ltf-hats { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding-top: 4px; font-size: 11px; color: var(--text-muted); }
+.ltf-hats > span { margin-right: 2px; }
+.ltf-hat {
+  font: inherit; font-size: 11px; padding: 3px 7px; border-radius: 999px; cursor: pointer; color: var(--text);
+  border: 1px solid var(--border); background: var(--surface-2); -webkit-tap-highlight-color: transparent;
+}
+.ltf-hat b { color: var(--accent); }
+.ltf-hat.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.ltf-hat:disabled { opacity: 0.45; cursor: default; }
+.ltf-tab .x { color: var(--text-faint); }
+@media (pointer: coarse) { .ltf-hat { min-height: 34px; } }

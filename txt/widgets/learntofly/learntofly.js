@@ -1,11 +1,17 @@
 /* Learn to Fly — teach a penguin to fly, for Cade.txt.
  * The penguin slides down a launch ramp on a snowy cliff and glides off it.
- * Pitch with ←/→ (or ↑/↓, or the on-screen buttons / left & right halves of
- * the play field): diving gains speed, pulling up trades it for height, pull
- * too hard and the wing stalls. A rocket (once bought) burns fuel on Space /
- * Boost. Every flight pays cash for distance, height, speed, airtime and coins;
- * cash buys a better ramp, sled, glider, rocket, fuel tank and a lucky scarf.
- * Milestones pay a bonus once; smash through the ice wall at 10 km to win.
+ * Pitch with ↑/↓ (W/S, ←/→, a gamepad, the on-screen buttons — or point:
+ * hold the mouse / a finger on the sky and the nose turns towards it). Taps
+ * nudge, a held key turns faster. Diving gains speed, pulling up trades it for
+ * height, pull too hard and the wing stalls. Space / Boost fires the rocket
+ * (once bought); with no fuel left it flaps instead (three flaps a flight).
+ * The sky has coins, speed rings, fish (fuel), balloons, birds, thermals that
+ * lift and storm clouds that push down; loops and snow skips pay as stunts.
+ * Every flight pays cash for distance, height, speed, airtime, coins and
+ * stunts, plus the day's sponsor contract; cash buys a better ramp, sled,
+ * glider, rocket, fuel tank and a lucky scarf. Milestones pay a bonus once;
+ * smash through the ice wall at 10 km to win. A dozen secrets hide in the
+ * world and the hangar (some award hats).
  * Drawn entirely in monospace glyphs (cached in a glyph atlas) on a canvas.
  * Physics runs on a fixed 120 Hz step with an accumulator, so flights are the
  * same at 60 or 120 Hz; rendering interpolates. The loop runs only while a
@@ -30,6 +36,10 @@
   var ROCKET_TORQUE = 0.7;         // the rocket rides on the back, above the centre of mass: boosting tips the nose down (rad/s)
   var ATM_H = 800;                 // the air thins with height (exaggerated): high flight is fast flight
   var CRASH_V = 15 * TS, ROUGH_V = 7 * TS;   // touchdown speed into the snow: faceplant / rough landing
+  var FLAPS = 3, FLAP_V = 3.4 * TS;          // no rocket (or no fuel): Boost flaps instead, a few times a flight
+  var RAMP_IN = 0.25;                        // seconds a held pitch key takes to reach full rate (taps nudge)
+  var RING_R = 3.2, THERMAL_LIFT = 2.6 * TS * TS, STORM_SINK = 3.2 * TS * TS;
+  var YETI_X = 4200, IGLOO_X = 1337;         // landmarks on the snow (secrets)
 
   // Upgrades: tier 0 is what you start with; prices escalate.
   // glider: lift (1/m), drag = parasitic drag (1/m), idr = induced drag factor.
@@ -109,6 +119,41 @@
     { id: 'c10', kind: 'coins', at: 10, bonus: 150 },
     { id: 'c30', kind: 'coins', at: 30, bonus: 600 },
     { id: 'wall', kind: 'dist', at: WALL_X, bonus: 0, final: true }
+  ];
+
+  // Secrets: each pays once and some unlock a hat. hint is what the Secrets tab
+  // shows before it is found.
+  var EGGS = [
+    { id: 'yeti', name: 'Yeti sighting', hint: 'Something big lives out past 4 km. Land near it.', bonus: 500 },
+    { id: 'leet', name: '1337 igloo', hint: 'A very elite igloo. Slide up to it.', bonus: 337 },
+    { id: 'ufo', name: 'Abducted', hint: 'Fly above 1.2 km and look for lights.', bonus: 600, hat: 'antenna' },
+    { id: 'moon', name: 'Moonshot', hint: 'Reach for the moon (3 km up).', bonus: 1500 },
+    { id: 'goldfish', name: 'Golden fish', hint: 'One fish in fifty is special.', bonus: 1000 },
+    { id: 'bullseye', name: 'Bullseye', hint: 'Stop dead on a 500 m marker.', bonus: 400 },
+    { id: 'wrongway', name: 'Wrong way!', hint: 'Penguins can fly backwards. Briefly.', bonus: 150 },
+    { id: 'loops', name: 'Loop de loop de loop', hint: 'Three loops in one flight.', bonus: 450 },
+    { id: 'skipper', name: 'Stone skipper', hint: 'Skip off the snow five times in one flight.', bonus: 350 },
+    { id: 'faceplant', name: 'Gravity always wins', hint: 'Faceplant five days running.', bonus: 200 },
+    { id: 'konami', name: 'Up up down down', hint: 'An old code works in the hangar.', bonus: 300, hat: 'party' },
+    { id: 'noot', name: 'Noot noot', hint: 'Type what a penguin says, in the hangar.', bonus: 100 },
+    { id: 'season', name: 'Seasonal visitor', hint: 'Only some times of year: hit the holiday guest.', bonus: 500 }
+  ];
+  var HATS = [
+    { id: 'party', name: 'Party hat', ch: 94, how: 'secret: an old code' },
+    { id: 'antenna', name: 'Antenna', ch: 89, how: 'secret: get abducted' },
+    { id: 'tophat', name: 'Top hat', ch: 35, how: 'smash the ice wall' },
+    { id: 'crown', name: 'Crown', ch: 87, how: 'find every other secret' }
+  ];
+  // The sponsor's contract for a day: one of these, sized to how far you've come.
+  var MISSIONS = [
+    { id: 'coins', at: function (b) { return Math.max(3, Math.min(15, Math.round(b / 120))); }, txt: 'Grab {n} coins', key: 'coins' },
+    { id: 'rings', at: function (b) { return Math.max(1, Math.min(6, Math.round(b / 400))); }, txt: 'Fly through {n} ring{s}', key: 'rings', from: 150 },
+    { id: 'loop', at: function () { return 1; }, txt: 'Fly a loop', key: 'loops', from: 120 },
+    { id: 'skips', at: function () { return 2; }, txt: 'Skip off the snow {n} times', key: 'skips', from: 200 },
+    { id: 'smooth', at: function (b) { return Math.max(60, Math.round(b * 0.8 / 10) * 10); }, txt: 'Land smoothly past {n} m', key: 'smoothDist' },
+    { id: 'noboost', at: function (b) { return Math.max(60, Math.round(b * 0.6 / 10) * 10); }, txt: 'Fly {n} m without the rocket', key: 'noBoostDist', needs: 'rocket' },
+    { id: 'alt', at: function (b) { return Math.max(30, Math.round(b * 0.12 / 5) * 5); }, txt: 'Climb {n} m high', key: 'maxAlt' },
+    { id: 'balloons', at: function (b) { return b > 1500 ? 2 : 1; }, txt: 'Pop {n} balloon{s}', key: 'balloons', from: 300 }
   ];
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -206,7 +251,8 @@
   }
 
   // ---- sky items: coins, balloons and birds, generated per 100 m chunk ----
-  function chunkItems(seed, ci, out) {
+  // season: '' | 'halloween' | 'xmas' — the balloons and birds dress up.
+  function chunkItems(seed, ci, out, season) {
     if (ci < 1) return;
     var x0 = ci * CHUNK;
     if (x0 >= WALL_X - CHUNK && x0 < WALL_X + CHUNK) return;
@@ -229,8 +275,42 @@
       x = x0 + r() * CHUNK; y = groundY(x) + 8 + r() * hmax;
       out.push({ kind: 'bird', x: x, y: y, v: 0, ph: r() * 6.28, hit: false, hitT: 0 });
     }
+    // (drawn from a second stream, so the classic coins / balloons / birds above stay put)
+    var r2 = rng(hash2(seed ^ 0x51ED, ci));
+    if (x0 > 120 && r2() < 0.22) {                    // a speed ring, at the height you'd be gliding through
+      x = x0 + 20 + r2() * 60; y = groundY(x) + 8 + Math.pow(r2(), 1.4) * hmax * 0.7;
+      out.push({ kind: 'ring', x: x, y: y, v: 15 + Math.floor(x0 / 1000) * 4, ph: 0, hit: false, hitT: 0 });
+    }
+    if (r2() < 0.16) {                                // a fish: rocket fuel (or a flap back)
+      x = x0 + r2() * CHUNK; y = groundY(x) + 5 + r2() * hmax * 0.6;
+      out.push({ kind: x0 > 1500 && r2() < 0.02 ? 'gfish' : 'fish', x: x, y: y, v: 5, ph: r2() * 6.28, hit: false, hitT: 0 });
+    }
+    if (x0 > 300 && r2() < 0.17) {                    // a thermal: rising air off the snow (w wide, h tall)
+      x = x0 + r2() * 70; out.push({ kind: 'thermal', x: x, y: 0, w: 16 + r2() * 18, h: 60 + r2() * (80 + x0 * 0.03), v: 0, ph: 0, hit: false, hitT: 0 });
+    } else if (x0 > 900 && r2() < 0.12) {             // a storm cloud: sinking air and gloom
+      x = x0 + r2() * 70; y = groundY(x) + 25 + r2() * hmax * 0.8;
+      out.push({ kind: 'storm', x: x, y: y, w: 26 + r2() * 20, h: 18, v: 0, ph: r2() * 6, hit: false, hitT: 0 });
+    }
+    if (season && r2() < 0.35) {                      // the holiday guest
+      x = x0 + r2() * CHUNK; y = groundY(x) + 12 + r2() * hmax * 0.8;
+      out.push({ kind: season === 'xmas' ? 'sleigh' : 'pumpkin', x: x, y: y, v: 40, ph: r2() * 6.28, hit: false, hitT: 0 });
+    }
+  }
+  // The season a date falls in (the holiday guests and decorations).
+  function seasonOf(d) {
+    var m = d.getMonth(), day = d.getDate();
+    if ((m === 9 && day >= 24) || (m === 10 && day <= 1)) return 'halloween';
+    if (m === 11 && day >= 12 && day <= 31) return 'xmas';
+    return '';
+  }
+  // Is (x, y) inside an air-mass item (thermal column or storm cloud)?
+  function inAir(it, x, y) {
+    if (it.kind === 'thermal') return x >= it.x && x <= it.x + it.w && y < groundY(x) + it.h;
+    return x >= it.x && x <= it.x + it.w && y > it.y - it.h / 2 && y < it.y + it.h / 2;
   }
   function itemY(it, t) {
+    if (it.kind === 'fish' || it.kind === 'gfish') return it.y + Math.sin(t * 3 + it.ph) * 0.8;
+    if (it.kind === 'pumpkin' || it.kind === 'sleigh' || it.kind === 'ufo') return it.y + Math.sin(t * 1.6 + it.ph) * 1.2;
     if (it.kind === 'bird') return it.y + Math.sin(t * 2.6 + it.ph) * 1.4;
     if (it.kind === 'balloon') return it.y + Math.sin(t * 1.3 + it.ph) * 1.0;
     return it.y;
@@ -245,7 +325,10 @@
       fuel: g.fuel, boosting: false, landed: false, contactT: 9, landKind: '',
       t: 0, ft: 0, air: 0, restT: 0, maxAlt: 0, maxSpeed: 0, maxX: 0, coins: 0, coinCash: 0,
       balloons: 0, birds: 0, bounces: 0, stall: false, wall: false, wallUp: !(opts && opts.noWall), wallT: 0, acc: 0, steps: 0,
-      zoom: 1, pzoom: 1, cg: CLIFF, pcg: CLIFF, items: [], nextChunk: 1, hitQ: [], events: []
+      zoom: 1, pzoom: 1, cg: CLIFF, pcg: CLIFF, items: [], nextChunk: 1, hitQ: [], events: [],
+      season: (opts && opts.season) || '', flaps: FLAPS, boostPrev: false, holdT: 0,
+      rings: 0, fish: 0, loops: 0, loopRot: 0, skips: 0, wrongT: 0, boostUsed: false, noBoostX: 0,
+      ufo: null, eggs: [], lift: 0
     };
     f.zoom = f.pzoom = zoomTarget(f);
     return f;
@@ -262,19 +345,32 @@
   }
   function hitR(f) { return Math.max(1.6, 13 / f.zoom); }
 
-  function finishFlight(f) { if (f.phase !== 'done') { f.phase = 'done'; f.boosting = false; f.events.push('done'); } }
+  function finishFlight(f) {
+    if (f.phase === 'done') return;
+    f.phase = 'done'; f.boosting = false;
+    // stopped dead on a 500 m marker
+    var d = f.x - Math.round(f.x / 500) * 500;
+    if (f.x > 400 && d > -1 && d < 1) egg(f, 'bullseye');
+    f.events.push('done');
+  }
+  // A secret found in flight (paid once, at settle).
+  function egg(f, id) { if (f.eggs.indexOf(id) < 0) { f.eggs.push(id); f.events.push('egg'); } }
 
   // One fixed physics step. `inp` = { up, down, boost } held this step.
   function stepFlight(f, inp) {
     if (f.phase === 'done') return;
     var g = f.g, dt = STEP, ev = f.events, up = !!(inp && inp.up), down = !!(inp && inp.down);
-    var wantBoost = !!(inp && inp.boost) && f.fuel > 0 && g.thrust > 0;
+    var aim = inp && inp.aim != null && inp.aim === inp.aim ? +inp.aim : null;
+    var press = !!(inp && inp.boost), edge = press && !f.boostPrev;
+    f.boostPrev = press;
+    var wantBoost = press && f.fuel > 0 && g.thrust > 0;
+    f.holdT = up !== down ? f.holdT + dt : 0;
     f.px = f.x; f.py = f.y; f.pth = f.th; f.pzoom = f.zoom; f.pcg = f.cg;
     f.steps++; f.t += dt;
     if (wantBoost !== f.boosting) { f.boosting = wantBoost; ev.push(wantBoost ? 'boost' : 'boostoff'); }
     var thrust = 0;
     if (f.boosting) {
-      thrust = g.thrust; f.fuel = Math.max(0, f.fuel - dt);
+      thrust = g.thrust; f.fuel = Math.max(0, f.fuel - dt); f.boostUsed = true;
       if (f.fuel <= 0) { f.boosting = false; ev.push('boostoff'); ev.push('empty'); }
     }
 
@@ -298,7 +394,15 @@
       // pitch: the controls rotate the penguin; hands off, the nose drifts back to
       // a slightly nose-up glide along the flight path (and lies flat on the snow)
       if (thrust && f.contactT > 0.12) f.th = wrapA(f.th - ROCKET_TORQUE * dt);
-      if (up !== down) f.th = wrapA(f.th + (up ? PITCH_RATE : -PITCH_RATE) * dt);
+      // flap: Boost with nothing to burn (and still in the air)
+      if (edge && !wantBoost && f.flaps > 0 && f.contactT > 0.2) {
+        f.flaps--; f.vy = Math.max(f.vy, 0) + FLAP_V; f.vx *= 0.97; ev.push('flap');
+      }
+      var pth0 = f.th;
+      if (aim !== null) {                         // pointing: turn towards it, a little faster than the keys
+        var err = wrapA(aim - f.th), mx = PITCH_RATE * 1.25 * dt;
+        f.th = wrapA(f.th + (err > mx ? mx : err < -mx ? -mx : err));
+      } else if (up !== down) f.th = wrapA(f.th + (up ? 1 : -1) * PITCH_RATE * (0.45 + 0.55 * Math.min(1, f.holdT / RAMP_IN)) * dt);
       else if (f.contactT < 0.12) f.th = wrapA(f.th + wrapA(Math.atan(groundSlope(f.x)) - f.th) * Math.min(1, 9 * TS * dt));
       else f.th = wrapA(f.th + wrapA(gam + TRIM - f.th) * Math.min(1, WEATHERVANE * (0.4 + V / (40 * TS)) * dt));
       var ax = 0, ay = -G;
@@ -311,7 +415,23 @@
         ax += -uy * L - ux * D; ay += ux * L - uy * D;
       }
       if (thrust) { ax += thrust * Math.cos(f.th); ay += thrust * Math.sin(f.th); }
+      // thermals lift, storm clouds push down (and drag)
+      f.lift = 0;
+      for (var ii = 0; ii < f.items.length; ii++) {
+        var am = f.items[ii];
+        if ((am.kind !== 'thermal' && am.kind !== 'storm') || !inAir(am, f.x, f.y)) continue;
+        if (am.kind === 'thermal') { var fade = 1 - clamp((f.y - groundY(f.x)) / am.h, 0, 1); ay += THERMAL_LIFT * (0.35 + 0.65 * fade); f.lift = 1; }
+        else { ay -= STORM_SINK; ax -= f.vx * 0.25; f.lift = -1; }
+      }
       f.vx += ax * dt; f.vy += ay * dt;
+      // loops: a full turn of the nose in the air (either way)
+      if (f.contactT > 0.3) {
+        f.loopRot += wrapA(f.th - pth0);
+        if (f.loopRot > 2 * Math.PI || f.loopRot < -2 * Math.PI) {
+          f.loopRot -= (f.loopRot > 0 ? 2 : -2) * Math.PI; f.loops++; ev.push('loop');
+          if (f.loops === 3) egg(f, 'loops');
+        }
+      }
       f.x += f.vx * dt; f.y += f.vy * dt;
       // the snow: land, bounce or skid; friction while in contact
       var gy = groundY(f.x);
@@ -329,13 +449,15 @@
             else { f.landKind = 'smooth'; ev.push('smooth'); }
           } else if (imp > ROUGH_V && f.contactT > 0.25) { vt *= 0.85; f.bounces++; ev.push('bounce'); }
           if (imp > 4 * TS) bounce = imp * 0.3;
+          // a skim: off the snow at a shallow angle and still fast — a stone skip
+          if (bounce && f.contactT > 0.25 && vt > 14 * TS && imp < vt * 0.35) { f.skips++; bounce = Math.max(bounce, 3 * TS); ev.push('skip'); if (f.skips === 5) egg(f, 'skipper'); }
         }
         if (!bounce) {                          // sliding: snow friction (normal force ~ g cos slope)
           var dec = g.gmu * G * ny * dt;
           vt = Math.abs(vt) <= dec ? 0 : vt - (vt > 0 ? dec : -dec);
         }
         f.vx = vt * tx + bounce * nx; f.vy = vt * ty + bounce * ny;
-        f.contactT = 0;
+        f.contactT = 0; f.loopRot = 0;
       } else f.air += dt;
       V = speedOf(f);
       if (f.contactT < 0.12 && V < 0.5 * TS) { f.restT += dt; if (f.restT > 0.3) finishFlight(f); }
@@ -346,6 +468,13 @@
       var agl = f.y - gy;
       if (agl > f.maxAlt) f.maxAlt = agl;
       if (f.x > f.maxX) f.maxX = f.x;
+      if (!f.boostUsed) f.noBoostX = f.maxX;
+      // oddities: backwards flight, the landmarks, the moon, the lights in the sky
+      if (f.vx < -2 * TS && f.contactT > 0.3) { f.wrongT += dt; if (f.wrongT > 0.6) egg(f, 'wrongway'); } else f.wrongT = 0;
+      if (agl < 4 && Math.abs(f.x - YETI_X) < 14) egg(f, 'yeti');
+      if (agl < 4 && Math.abs(f.x - IGLOO_X) < 10) egg(f, 'leet');
+      if (agl > 3000) egg(f, 'moon');
+      if (!f.ufo && agl > 1200) { f.ufo = { kind: 'ufo', x: f.x + 70 + Math.abs(f.vx) * 1.2, y: f.y + 8, v: 0, ph: 0, hit: false, hitT: 0 }; f.items.push(f.ufo); ev.push('ufo'); }
       // the ice wall: smash through it (it soaks up most of the speed) — that's the win
       if (f.wallUp && !f.wall && f.x >= WALL_X) { f.wall = true; f.wallT = f.t; f.vx *= 0.3; f.vy *= 0.3; ev.push('wall'); }
       if (f.wall && f.t - f.wallT > 2.2) finishFlight(f);
@@ -365,19 +494,33 @@
       var behind = f.x - 0.45 * VIEW_W / f.zoom - 60, k = 0;
       for (i = 0; i < items.length; i++) if (items[i].x >= behind) items[k++] = items[i];
       items.length = k;
-      while (f.nextChunk * CHUNK < ahead) chunkItems(f.seed, f.nextChunk++, items);
+      while (f.nextChunk * CHUNK < ahead) chunkItems(f.seed, f.nextChunk++, items, f.season);
+      if (f.ufo && items.indexOf(f.ufo) < 0 && !f.ufo.hit) items.push(f.ufo);
     }
     var R = hitR(f), ev = f.events;
     for (i = 0; i < items.length; i++) {
       var it = items[i];
-      if (it.hit) continue;
+      if (it.hit || it.kind === 'thermal' || it.kind === 'storm') continue;
+      var Ri = it.kind === 'ring' ? Math.max(R, RING_R) : it.kind === 'ufo' ? Math.max(R, 6) : R;
       var dx = it.x - f.x;
-      if (dx > R || dx < -R) continue;
-      var dy = itemY(it, f.t) - f.y, rr = it.kind === 'coin' ? R : R * 0.8;
+      if (dx > Ri || dx < -Ri) continue;
+      var dy = itemY(it, f.t) - f.y, rr = it.kind === 'coin' || it.kind === 'ring' || it.kind === 'ufo' ? Ri : R * 0.8;
       if (dx * dx + dy * dy > rr * rr) continue;
       it.hit = true; it.hitT = f.t; f.hitQ.push(it);
       if (it.kind === 'coin') { f.coins++; f.coinCash += it.v; ev.push('coin'); }
-      else if (it.kind === 'balloon') {
+      else if (it.kind === 'ring') {
+        f.rings++; f.coinCash += it.v;
+        var V0 = speedOf(f) || 1; f.vx += f.vx / V0 * 6 * TS; f.vy += f.vy / V0 * 6 * TS; ev.push('ring');
+      } else if (it.kind === 'fish' || it.kind === 'gfish') {
+        f.fish++; f.coinCash += it.kind === 'gfish' ? 1000 : it.v;
+        if (f.g.fuel > 0) f.fuel = Math.min(f.g.fuel, f.fuel + 0.6); else f.flaps = Math.min(FLAPS + 2, f.flaps + 1);
+        ev.push('fish');
+        if (it.kind === 'gfish') egg(f, 'goldfish');
+      } else if (it.kind === 'ufo') {             // beamed up, set down further along
+        f.x += 250; f.y += 60; f.vy = Math.max(f.vy, 0); ev.push('abduct'); egg(f, 'ufo');
+      } else if (it.kind === 'pumpkin' || it.kind === 'sleigh') {
+        f.balloons++; f.coinCash += it.v; f.vy = Math.max(f.vy, 0) + 9 * TS; ev.push('season'); egg(f, 'season');
+      } else if (it.kind === 'balloon') {
         f.balloons++; f.coinCash += it.v;
         f.vy = Math.max(f.vy, 0) + 11 * TS; ev.push('balloon');
       } else {
@@ -405,13 +548,16 @@
       dist: Math.max(0, Math.round(f.maxX * 10) / 10), maxAlt: Math.round(f.maxAlt * 10) / 10,
       maxSpeed: Math.round(f.maxSpeed * 10) / 10, time: Math.round(f.ft * 10) / 10,
       coins: f.coins, coinCash: f.coinCash, balloons: f.balloons, birds: f.birds,
-      landing: f.landKind || 'smooth', wall: f.wall
+      landing: f.landKind || 'smooth', wall: f.wall,
+      rings: f.rings, fish: f.fish, loops: f.loops, skips: f.skips, flaps: FLAPS - f.flaps, boostUsed: f.boostUsed,
+      noBoostDist: Math.round(f.noBoostX * 10) / 10, smoothDist: (f.landKind || 'smooth') === 'smooth' ? Math.round(f.maxX * 10) / 10 : 0,
+      eggs: f.eggs.slice()
     };
   }
 
   // Run a whole flight headless. `pilot(f)` returns the input for each step (or null).
   function simulate(up, seed, pilot, opts) {
-    var f = newFlight(up, seed, opts), none = { up: false, down: false, boost: false };
+    var f = newFlight(up, seed, opts), none = { up: false, down: false, boost: false, aim: null };
     while (f.phase !== 'done' && f.steps < 100000) { stepFlight(f, pilot ? pilot(f) || none : none); f.events.length = 0; f.hitQ.length = 0; }
     return summary(f);
   }
@@ -421,7 +567,7 @@
     var up = {};
     for (var i = 0; i < UPGRADES.length; i++) up[UPGRADES[i].id] = 0;
     return { v: 1, cash: 0, day: 1, up: up, goals: {}, best: { dist: 0, alt: 0, speed: 0, time: 0 },
-      won: false, wonDay: 0, bestWinDay: 0, ngp: 0, flights: 0, seed: 1 };
+      won: false, wonDay: 0, bestWinDay: 0, ngp: 0, flights: 0, seed: 1, eggs: {}, hat: '', last: 0, plants: 0 };
   }
   // Clamp whatever came out of storage into a valid save (older / hand-edited data).
   function normSave(o) {
@@ -439,12 +585,40 @@
       s.up[u.id] = Math.floor(num(o.up && o.up[u.id], 0, 0, u.tiers.length - 1));
     }
     if (o.goals && typeof o.goals === 'object') for (var j = 0; j < GOALS.length; j++) if (o.goals[GOALS[j].id]) s.goals[GOALS[j].id] = 1;
+    if (o.eggs && typeof o.eggs === 'object') for (var e = 0; e < EGGS.length; e++) if (o.eggs[EGGS[e].id]) s.eggs[EGGS[e].id] = 1;
+    s.hat = typeof o.hat === 'string' && hatOwned(s, o.hat) ? o.hat : '';
+    s.last = num(o.last, 0, 0, 1e7);
+    s.plants = Math.floor(num(o.plants, 0, 0, 1e6));
     if (o.best && typeof o.best === 'object') {
       s.best.dist = num(o.best.dist, 0, 0, 1e7); s.best.alt = num(o.best.alt, 0, 0, 1e7);
       s.best.speed = num(o.best.speed, 0, 0, 1e5); s.best.time = num(o.best.time, 0, 0, 1e5);
     }
     return s;
   }
+  function hatOwned(save, id) {
+    if (id === 'tophat') return !!save.won || !!save.bestWinDay;
+    if (id === 'crown') { for (var i = 0; i < EGGS.length; i++) if (EGGS[i].id !== 'season' && !save.eggs[EGGS[i].id]) return false; return true; }
+    for (var j = 0; j < EGGS.length; j++) if (EGGS[j].hat === id) return !!save.eggs[EGGS[j].id];
+    return false;
+  }
+  function eggOf(id) { for (var i = 0; i < EGGS.length; i++) if (EGGS[i].id === id) return EGGS[i]; return null; }
+  // Mark a secret found; returns it the first time (its bonus is paid by the caller), else null.
+  function findEgg(save, id) {
+    var e = eggOf(id);
+    if (!e || save.eggs[id]) return null;
+    save.eggs[id] = 1;
+    return e;
+  }
+  // The day's sponsor contract (deterministic per save + day).
+  function missionFor(save) {
+    var b = Math.max(40, save.best.dist), pool = MISSIONS.filter(function (m) {
+      return b >= (m.from || 0) && (!m.needs || save.up[m.needs] > 0);
+    });
+    var m = pool[hash2(save.seed ^ 0xC0FFEE, save.day) % pool.length], n = m.at(b);
+    var reward = Math.max(40, Math.round((30 + b * 0.25) / 10) * 10);
+    return { id: m.id, key: m.key, n: n, reward: reward, text: m.txt.replace('{n}', n).replace('{s}', n === 1 ? '' : 's') };
+  }
+  function missionDone(m, res) { return (+res[m.key] || 0) >= m.n; }
   function priceOf(save, id) {
     var u = UPG[id], lv = save.up[id] | 0;
     return lv + 1 < u.tiers.length ? u.tiers[lv + 1].price : 0;
@@ -475,6 +649,8 @@
       { key: 'time', label: 'Flight time', amt: Math.round(res.time) },
       { key: 'coins', label: 'Coins', amt: res.coinCash | 0 }
     ];
+    var stunt = 60 * (res.loops | 0) + 40 * (res.skips | 0);
+    if (stunt) lines.push({ key: 'stunts', label: 'Stunts', amt: stunt });
     var base = 0, i;
     for (i = 0; i < lines.length; i++) base += lines[i].amt;
     var mult = tierOf(save.up, 'scarf').mult * (1 + 0.25 * save.ngp);
@@ -485,7 +661,11 @@
       if (save.goals[gl.id] || goalValue(res, gl.kind) < gl.at) continue;
       save.goals[gl.id] = 1; goals.push(gl); gsum += gl.bonus;
     }
-    var total = base + bonus + gsum, b = save.best, rec = {};
+    // the sponsor's contract and any secrets found on the way
+    var mis = missionFor(save), misOk = missionDone(mis, res), eggs = [], esum = 0;
+    if (res.landing === 'crash') { save.plants++; if (save.plants >= 5) (res.eggs = (res.eggs || []).concat('faceplant')); } else save.plants = 0;
+    (res.eggs || []).forEach(function (id) { var e = findEgg(save, id); if (e) { eggs.push(e); esum += e.bonus; } });
+    var total = base + bonus + gsum + (misOk ? mis.reward : 0) + esum, b = save.best, rec = {};
     if (res.dist > b.dist) { b.dist = res.dist; rec.dist = true; }
     if (res.maxAlt > b.alt) { b.alt = res.maxAlt; rec.alt = true; }
     if (res.maxSpeed > b.speed) { b.speed = res.maxSpeed; rec.speed = true; }
@@ -493,14 +673,16 @@
     var won = !!res.wall && !save.won;
     if (won) { save.won = true; save.wonDay = save.day; if (!save.bestWinDay || save.day < save.bestWinDay) save.bestWinDay = save.day; }
     save.cash += total;
+    save.last = res.dist;
     save.day++; save.flights++;
     return { day: save.day - 1, lines: lines, base: base, mult: mult, bonus: bonus, goals: goals, goalSum: gsum,
-      total: total, records: rec, won: won };
+      mission: mis, missionOk: misOk, eggs: eggs, eggSum: esum, total: total, records: rec, won: won };
   }
   // New Game+: start over (upgrades, cash, goals) with a permanent +25% cash bonus.
   function newGamePlus(save) {
     var s = newSave();
     s.ngp = Math.min(99, save.ngp + 1); s.bestWinDay = save.bestWinDay; s.seed = (save.seed + 7919) >>> 0;
+    s.eggs = save.eggs; s.hat = save.hat;                // secrets and hats are for keeps
     return s;
   }
   function flightSeed(save) { return hash2(save.seed, save.day) || 1; }
@@ -513,7 +695,9 @@
     newFlight: newFlight, stepFlight: stepFlight, advance: advance, summary: summary, simulate: simulate,
     speedOf: speedOf, altOf: altOf, hitR: hitR, zoomTarget: zoomTarget, wrapA: wrapA,
     newSave: newSave, normSave: normSave, priceOf: priceOf, canBuy: canBuy, buy: buy, settle: settle,
-    newGamePlus: newGamePlus, flightSeed: flightSeed
+    newGamePlus: newGamePlus, flightSeed: flightSeed,
+    FLAPS: FLAPS, EGGS: EGGS, HATS: HATS, MISSIONS: MISSIONS, YETI_X: YETI_X, IGLOO_X: IGLOO_X,
+    seasonOf: seasonOf, inAir: inAir, findEgg: findEgg, eggOf: eggOf, hatOwned: hatOwned, missionFor: missionFor, missionDone: missionDone
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = ENGINE;
 
@@ -526,6 +710,7 @@
   var KEY = 'cade-ltf-', SAVE_KEY = KEY + 'save', SOUND_KEY = KEY + 'sound';
   var VW = VIEW_W, CW = 8, RH = 12;
   var S = null;   // the live session (one panel at a time)
+  if (window.__CADE_UNIT__) window.__CADE_UNIT__.learntofly = { live: function () { return S; } };   // test-only peek
 
   // palette slots, filled from the theme (readTheme)
   var C_TEXT = 0, C_MUTED = 1, C_FAINT = 2, C_ACC = 3, C_SNOW = 4, C_SNOWTX = 5, C_FAR = 6, C_NEAR = 7,
@@ -796,11 +981,15 @@
       glyph(c, C_FLAME, fl % 3 ? 61 : 45, rx - CW * 2, by, true);
       if (fl % 2) glyph(c, C_GOLD, 46, rx - CW * 2.9, by, true);
     }
-    var wing = WINGS[up.glider | 0];
-    if (wing) drawStr(c, C_ACC, wing, col(2), by - RH * 1.02, 'center', true);
+    var wing = WINGS[up.glider | 0], flapping = S.flapT > 0;
+    if (wing) drawStr(c, C_ACC, wing, col(2), by - RH * (flapping ? 1.25 + 0.25 * Math.sin(S.flapT * 40) : 1.02), 'center', true);
     else if (f.phase !== 'ramp') {                                      // no wings yet: flap those flippers
-      var flap = (S.inp.up || S.inp.down) && f.contactT > 0.2 ? Math.sin(t * 28) : 0;
+      var flap = ((S.inp.up || S.inp.down || S.inp.aim != null) && f.contactT > 0.2) || flapping ? Math.sin(t * 28) : 0;
       glyph(c, C_TEXT, flap > 0.3 ? 92 : flap < -0.3 ? 47 : 45, col(1.5), by - RH * 0.72, true);
+    }
+    var hat = S.save.hat;
+    if (hat) {
+      for (k = 0; k < HATS.length; k++) if (HATS[k].id === hat) glyph(c, hat === 'party' ? C_RED : hat === 'crown' ? C_GOLD : hat === 'antenna' ? C_ACC : C_TEXT, HATS[k].ch, col(4), by - RH * 0.82, true);
     }
     c.restore();
     if (dizzy || (f.phase === 'done' && f.landKind === 'crash')) {      // stars circle a faceplanted head
@@ -885,6 +1074,9 @@
       c.translate((Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh);
     }
     c.fillStyle = S.col.bg; c.fillRect(-10, -10, VW + 20, VH + 20);
+    // climb high enough and the sky turns to space
+    var alt = Math.max(0, v.y - groundY(v.x)), space = clamp((alt - 500) / 2500, 0, 0.88);
+    if (space > 0) { c.fillStyle = 'rgba(8,10,26,' + space.toFixed(3) + ')'; c.fillRect(-10, -10, VW + 20, VH + 20); }
     // parallax offsets are render state: they follow the camera's on-screen motion
     var dl = 0;
     if (S.lastLeft !== null && dt > 0) {
@@ -894,12 +1086,15 @@
     S.lastLeft = v.left;
     var gl = Y(v, v.cg);                                   // the ground line near the penguin, on screen
 
-    if (S.dark) {
+    if (S.dark || space > 0.25) {
+      if (!S.dark) c.globalAlpha = Math.min(1, (space - 0.25) * 2);
       for (i = 0; i < STARS.length; i++) {
         var st = STARS[i], sx = ((st.x - S.farOff * 0.3) % 640 + 640) % 640 - 100, sy = st.y - 40;
-        if (sx > -4 && sx < VW + 4 && sy < gl - RH * 6) glyph(c, C_STAR, st.c, sx, sy, false, st.c === 46 ? 1 : 0.75);
+        if (sx > -4 && sx < VW + 4 && sy < gl - RH * 6) glyph(c, S.dark ? C_STAR : C_CLOUD, st.c, sx, sy, false, st.c === 46 ? 1 : 0.75);
       }
+      c.globalAlpha = 1;
     }
+    if (alt > 1500) drawMoon(c, alt);
     // clouds drift down past you as you climb
     var cy = 260 * Math.log(1 + Math.max(0, v.bottom) / 40) / Math.LN2;
     for (i = 0; i < CLOUDS.length; i++) {
@@ -913,6 +1108,7 @@
     drawTerrain(c, v);
     if (X(v, 0) > -CW && X(v, f.rp.x0) < VW + CW) drawRamp(c, v, f.rp);
     drawMarkers(c, v);
+    drawLandmarks(c, v, t);
     drawWall(c, v, f);
     if (S.f) drawItems(c, v, f);
 
@@ -938,7 +1134,22 @@
     }
     c.globalAlpha = 1;
 
-    drawPenguin(c, f, X(v, v.x), Y(v, v.y), v.th, S.f ? t : 0);
+    S.penX = X(v, v.x); S.penY = Y(v, v.y);
+    if (S.f && S.aimAt && S.phase === 'fly') {           // where the pointer is steering: a dotted line
+      var ax = S.aimAt.x - S.penX, ay = S.aimAt.y - S.penY, al = Math.sqrt(ax * ax + ay * ay) || 1;
+      c.globalAlpha = 0.5;
+      for (i = 2; i < 6; i++) glyph(c, C_ACC, 46, S.penX + ax / al * i * CW * 1.4, S.penY + ay / al * i * CW * 1.4);
+      c.globalAlpha = 1;
+    }
+    if (S.f && S.phase === 'fly' && speedOf(f) > 95 && !S.rm) {   // speed lines
+      c.globalAlpha = clamp((speedOf(f) - 95) / 60, 0.15, 0.6);
+      for (i = 0; i < 7; i++) {
+        var lx = ((i * 97 - t * 900) % (VW + 60) + VW + 60) % (VW + 60) - 30, ly = 46 + ((i * 53) % (VH - 70));
+        drawStr(c, C_FAINT, '----', lx, ly, 'left');
+      }
+      c.globalAlpha = 1;
+    }
+    drawPenguin(c, f, S.penX, S.penY, v.th, S.f ? t : 0);
 
     // falling snow (screen space, cheap)
     if (!S.rm && S.flakes) {
@@ -1039,8 +1250,34 @@
     glyph(c, C_RED, 124, fx, fy - RH * 2.4);
   }
 
+  // The moon, once you're high enough to care (it grows as you climb).
+  var MOON = ["   _.._", " .' .-'`", "/  /", "|  |", "\\  \\", " '._'-._", "    `''"];
+  function drawMoon(c, alt) {
+    var sc = clamp(0.8 + (alt - 1500) / 2500, 0.8, 1.6), x = VW * 0.72, y = 48 + 30 * (1 - clamp((alt - 1500) / 2000, 0, 1));
+    for (var r = 0; r < MOON.length; r++) drawStr(c, C_GOLD, MOON[r], x, y + r * RH * 0.8 * sc, 'left', false, sc * 0.8);
+  }
+  // Landmarks on the snow: the 1337 igloo and the yeti (both hide secrets).
+  var YETI = [' .--. ', '(o  o)', '/|__|\\', ' ^  ^ '], YETI_W = [' .--. ', '(o  o)/', '/|__| ', ' ^  ^ '];
+  var IGLOO = ['  ____  ', ' /_|__\\ ', '/_|_|_|\\', '|_|__|_|'];
+  function drawLandmarks(c, v, t) {
+    var r;
+    if (inView(v, IGLOO_X)) {
+      var gx = X(v, IGLOO_X), gy = Y(v, groundY(IGLOO_X));
+      for (r = 0; r < IGLOO.length; r++) drawStr(c, C_ICE, IGLOO[r], gx, gy - RH * (IGLOO.length - r - 0.4), 'center');
+      drawStr(c, C_MUTED, '1337', gx, gy - RH * (IGLOO.length + 0.8), 'center', false, 0.8);
+    }
+    if (inView(v, YETI_X)) {
+      var yx = X(v, YETI_X), yy = Y(v, groundY(YETI_X)), wave = ((t * 2) | 0) % 2 ? YETI_W : YETI;
+      for (r = 0; r < YETI.length; r++) drawStr(c, C_TEXT, wave[r], yx, yy - RH * (YETI.length - r - 0.4), 'center');
+    }
+  }
+  function inView(v, x) { var sx = X(v, x); return sx > -CW * 12 && sx < VW + CW * 12; }
   function drawMarkers(c, v) {
     var z = v.z, M = z > 0.9 ? 100 : z > 0.2 ? 500 : 1000, right = v.left + VW / z;
+    // flags for your best flight and yesterday's
+    var sv = S.save;
+    flag(c, v, sv.best.dist, 'BEST', C_GOLD);
+    if (sv.last > 5 && Math.abs(sv.last - sv.best.dist) > 4) flag(c, v, sv.last, 'LAST', C_MUTED);
     for (var d = Math.max(M, Math.ceil(v.left / M) * M); d <= right && d <= WALL_X; d += M) {
       var sx = X(v, d), sy = Y(v, groundY(d));
       if (sy < -RH * 3 || sy > S.VH + RH * 3) continue;
@@ -1051,6 +1288,13 @@
     }
   }
 
+  function flag(c, v, d, label, ci) {
+    if (!(d > 1)) return;
+    var sx = X(v, d), sy = Y(v, groundY(d));
+    if (sx < -CW * 4 || sx > VW + CW * 4 || sy < -RH * 3 || sy > S.VH + RH * 3) return;
+    glyph(c, ci, 124, sx, sy - RH * 0.55); glyph(c, ci, 124, sx, sy - RH * 1.5);
+    drawStr(c, ci, label, sx + CW * 0.5, sy - RH * 2.2, 'left', false, 0.8);
+  }
   // The ice wall at 10 km: sky-high blocks of ice, rubble once it's smashed.
   function drawWall(c, v, f) {
     var sx = X(v, WALL_X);
@@ -1071,6 +1315,7 @@
       var it = items[i];
       if (it.hit) continue;
       var sx = X(v, it.x);
+      if (it.kind === 'thermal' || it.kind === 'storm') { drawAir(c, v, it, t); continue; }
       if (sx < -CW * 2 || sx > VW + CW * 2) continue;
       var sy = Y(v, itemY(it, t));
       if (sy < -RH * 2 || sy > VH + RH * 2) continue;
@@ -1080,10 +1325,49 @@
         glyph(c, C_GOLD, ((t * 6 + it.ph) | 0) % 6 === 0 ? 83 : 36, sx, sy);
       }
       else if (it.kind === 'balloon') {
-        drawStr(c, C_RED, '/~\\', sx, sy - RH * 0.5, 'center');
-        drawStr(c, C_RED, '\\_/', sx, sy + RH * 0.5, 'center');
+        var bc = f.season === 'halloween' ? C_FLAME : C_RED;
+        drawStr(c, bc, '/~\\', sx, sy - RH * 0.5, 'center');
+        drawStr(c, bc, '\\_/', sx, sy + RH * 0.5, 'center');
         glyph(c, C_MUTED, 124, sx, sy + RH * 1.4);
-      } else drawStr(c, C_MUTED, Math.sin(t * 9 + it.ph) > 0 ? '\\v/' : '-v-', sx, sy, 'center');
+      } else if (it.kind === 'ring') {
+        var rr = Math.max(RH * 0.95, 3.2 * v.z), np = 12;
+        for (var q = 0; q < np; q++) { var a2 = q / np * Math.PI * 2; glyph(c, C_ACC, 111, sx + Math.cos(a2) * rr * 0.45, sy + Math.sin(a2) * rr, false, 0.8); }
+      } else if (it.kind === 'fish' || it.kind === 'gfish') {
+        drawStr(c, it.kind === 'gfish' ? C_GOLD : C_ICE, '><>', sx, sy, 'center');
+        if (it.kind === 'gfish' && ((t * 8) | 0) % 3 === 0) glyph(c, C_GOLD, 42, sx + CW * 2, sy - RH * 0.6, false, 0.7);
+      } else if (it.kind === 'ufo') {
+        drawStr(c, C_ACC, '_/O\\_', sx, sy - RH * 0.4, 'center');
+        drawStr(c, C_MUTED, '(=====)', sx, sy + RH * 0.4, 'center');
+        if (((t * 6) | 0) % 2) drawStr(c, C_GOLD, ': : :', sx, sy + RH * 1.3, 'center');
+      } else if (it.kind === 'pumpkin') drawStr(c, C_FLAME, '(^v^)', sx, sy, 'center');
+      else if (it.kind === 'sleigh') { drawStr(c, C_RED, '\\_=/', sx, sy, 'center'); drawStr(c, C_GOLD, '*', sx + CW * 3, sy - RH * 0.4, 'center'); }
+      else if (f.season === 'halloween') drawStr(c, C_TEXT, Math.sin(t * 12 + it.ph) > 0 ? '^v^' : '-v-', sx, sy, 'center');   // bats
+      else drawStr(c, C_MUTED, Math.sin(t * 9 + it.ph) > 0 ? '\\v/' : '-v-', sx, sy, 'center');
+    }
+  }
+
+  // Air masses: a thermal's rising '^' in a column; a storm cloud with the odd flash.
+  function drawAir(c, v, it, t) {
+    var x0 = X(v, it.x), x1 = X(v, it.x + it.w);
+    if (x1 < -CW || x0 > VW + CW) return;
+    var k, cols = Math.max(2, Math.round((x1 - x0) / (CW * 2.5)));
+    if (it.kind === 'thermal') {
+      for (k = 0; k < cols; k++) {
+        var wx = it.x + (k + 0.5) / cols * it.w, g = groundY(wx);
+        for (var j = 0; j < 4; j++) {
+          var hy = ((t * 9 + j * it.h / 4 + k * 7) % it.h), sy = Y(v, g + hy);
+          if (sy < -RH || sy > S.VH) continue;
+          c.globalAlpha = 0.55 * (1 - hy / it.h);
+          glyph(c, C_NEAR, 94, X(v, wx), sy);
+        }
+      }
+      c.globalAlpha = 1;
+    } else {
+      var cy = Y(v, it.y), rows = ['~~~~~~~~', '~~~~~~~~~~', '~~~~~~~~'];
+      if (cy < -RH * 3 || cy > S.VH + RH * 3) return;
+      var sc = clamp((x1 - x0) / (10 * CW), 0.6, 3);
+      for (k = 0; k < 3; k++) drawStr(c, C_MUTED, rows[k], (x0 + x1) / 2, cy + (k - 1) * RH * 0.8 * sc, 'center', false, sc);
+      if (((t * 5 + it.ph) | 0) % 7 === 0) { glyph(c, C_GOLD, 47, (x0 + x1) / 2, cy + RH * 1.4 * sc, false, sc); glyph(c, C_GOLD, 92, (x0 + x1) / 2 + CW * sc * 0.6, cy + RH * 2.2 * sc, false, sc); }
     }
   }
 
@@ -1107,11 +1391,23 @@
     n = writeNum(Math.max(0, v.y - groundY(v.x)), 0, true); x = drawNum(c, C_TEXT, n, 102, yv); glyph(c, C_MUTED, 109, x + 4, yv + 1, false, 0.85);
     n = writeNum(speedOf(f), 0); x = drawNum(c, C_TEXT, n, 198, yv); drawStr(c, C_MUTED, 'm/s', x + 1.5, yv + 1, 'left', false, 0.85);
     n = writeNum(f.ft, 1); x = drawNum(c, C_TEXT, n, 294, yv); glyph(c, C_MUTED, 115, x + 4, yv + 1, false, 0.85);
-    if (g.fuel > 0) {
-      var cells = 14, fr = f.fuel / g.fuel, on = Math.ceil(fr * cells - 0.001), cw = CW * L;
+    if (g.fuel > 0 && f.fuel > 0) {
+      var cells = 9, fr = f.fuel / g.fuel, on = Math.ceil(fr * cells - 0.001), cw = CW * L;
       x = drawStr(c, C_MUTED, 'FUEL [', 6, y2, 'left', false, L);
       for (var i = 0; i < cells; i++) glyph(c, i < on ? (f.boosting ? C_FLAME : fr < 0.25 ? C_RED : C_ACC) : C_FAINT, i < on ? 35 : 45, x + i * cw + cw / 2, y2, false, L);
       glyph(c, C_MUTED, 93, x + cells * cw + cw / 2, y2, false, L);
+    }
+    else {
+      x = drawStr(c, C_MUTED, 'FLAPS ', 6, y2, 'left', false, L);
+      for (var fi = 0; fi < Math.max(FLAPS, f.flaps); fi++) glyph(c, fi < f.flaps ? C_ACC : C_FAINT, fi < f.flaps ? 94 : 45, x + fi * CW * L + CW * L / 2, y2, false, L);
+    }
+    // angle of attack: a little gauge; the ends are the stall
+    if (f.phase === 'air' && speedOf(f) > 1) {
+      var aoa = wrapA(f.th - Math.atan2(f.vy, f.vx)), cells = 9, pos = clamp(Math.round((aoa / ALPHA_S + 1) / 2 * (cells - 1)), -1, cells), gx = 176;
+      drawStr(c, C_MUTED, 'AOA', gx - CW * L * 4, y2, 'left', false, L);
+      for (var ci2 = 0; ci2 < cells; ci2++) glyph(c, ci2 === pos ? (f.stall ? C_RED : C_ACC) : ci2 === 0 || ci2 === cells - 1 ? C_RED : C_FAINT, ci2 === pos ? 35 : ci2 === 4 ? 124 : 45, gx + ci2 * CW * L, y2, false, L);
+      if (pos < 0 || pos >= cells) glyph(c, C_RED, 33, gx + (pos < 0 ? -1 : cells) * CW * L, y2, false, L);
+      if (f.lift) drawStr(c, f.lift > 0 ? C_ACC : C_RED, f.lift > 0 ? 'LIFT^' : 'SINKv', gx + (cells + 0.5) * CW * L, y2, 'left', false, L);
     }
     if (f.wallUp && !f.wall) {                      // how far to the ice wall
       n = writeNum(Math.max(0, WALL_X - Math.max(0, v.x)) / 1000, 1); NB[n++] = 32; NB[n++] = 107; NB[n++] = 109;
@@ -1134,6 +1430,10 @@
     if (!running()) return;
     var dt = S.last ? Math.min(0.1, (ts - S.last) / 1000) : 0;
     S.last = ts;
+    pollPad();
+    if (!S.raf && !running()) return;              // the gamepad paused it
+    mergeInput();
+    if (S.flapT > 0) S.flapT -= dt;
     var f = S.f, alpha = advance(f, dt, S.inp);
     handleEvents(f);
     liveGoals(f);
@@ -1169,8 +1469,26 @@
         case 'launch':
           snd.tone(300, 0.28, 'sawtooth', 0.025, 900);
           Cade.haptic && Cade.haptic(10);
-          say(f.g.fuel > 0 ? (S.coarse ? 'FLY! BOOST + pull UP' : 'FLY! space + pull up') : 'FLY!', C_ACC, 1.3);
+          say(f.g.fuel > 0 ? (S.coarse ? 'FLY! BOOST + pull UP' : 'FLY! space + pull up') : (S.coarse ? 'FLY! tap BOOST to flap' : 'FLY! space to flap'), C_ACC, 1.3);
+          if (f.season) say(f.season === 'halloween' ? 'HAPPY HALLOWEEN!' : 'HO HO HO!', C_FLAME, 1.4, true);
+          if (S.mission) say('CONTRACT: ' + S.mission.text.toUpperCase(), C_GOLD, 1.8, true);
           break;
+        case 'flap':
+          S.flapT = 0.25; snd.tone(520, 0.08, 'triangle', 0.035, 760);
+          burst(f.x - 1, f.y, 4, 6, "',`", C_TEXT, 4, 0.6);
+          break;
+        case 'ring': say('RING! SPEED UP', C_ACC, 0.9, true); snd.tone(880, 0.07, 'sine', 0.04, 1760); break;
+        case 'fish': say(f.g.fuel > 0 ? '+ FUEL' : '+ FLAP', C_ICE, 0.8, true); snd.tone(700, 0.06, 'sine', 0.035, 1000); break;
+        case 'loop': say(f.loops > 1 ? 'LOOP x' + f.loops + '!' : 'LOOP!', C_GOLD, 1.1, true); snd.tone(660, 0.09, 'triangle', 0.04); snd.tone(990, 0.12, 'triangle', 0.035, 0, 0.08); break;
+        case 'skip': say(f.skips > 1 ? 'SKIP x' + f.skips + '!' : 'SKIP!', C_GOLD, 1, true); snd.tone(400, 0.06, 'square', 0.03, 800); burst(f.x, f.y + 0.3, 6, 10, ".'*", C_SNOW, 10, 0.5); break;
+        case 'ufo': say('...LIGHTS IN THE SKY?', C_ACC, 1.6, true); break;
+        case 'abduct': S.flash = 0.5; say('ABDUCTED!', C_ACC, 1.4); [200, 300, 450, 675].forEach(function (fq, j) { snd.tone(fq, 0.12, 'sine', 0.04, 0, j * 0.09); }); break;
+        case 'season': say(f.season === 'halloween' ? 'SPOOKY BOOST!' : 'SANTA BOOST!', C_FLAME, 1, true); snd.tone(330, 0.15, 'triangle', 0.04, 660); break;
+        case 'egg': {
+          var eg = eggOf(f.eggs[f.eggs.length - 1]);
+          if (eg && !S.save.eggs[eg.id]) { say('SECRET: ' + eg.name.toUpperCase() + '!', C_GOLD, 2, true); [784, 988, 1175, 1568].forEach(function (fq, j) { snd.tone(fq, 0.1, 'square', 0.03, 0, j * 0.07); }); }
+          break;
+        }
         case 'boost': snd.tone(110, 0.25, 'sawtooth', 0.03, 220); break;
         case 'empty': say('OUT OF FUEL', C_FLAME, 1.2, true); snd.tone(220, 0.15, 'square', 0.03, 110); break;
         case 'stall':
@@ -1259,9 +1577,11 @@
     h += '<div class="ltf-card ltf-shop">';
     h += '<div class="ltf-top"><span class="ltf-day">DAY ' + sv.day + (sv.ngp ? ' <i>NG+' + (sv.ngp > 1 ? sv.ngp : '') + '</i>' : '') + '</span>' +
       '<span class="ltf-cash" title="Cash">' + money(sv.cash) + '</span></div>';
-    h += '<div class="ltf-tabs" role="tablist">' +
-      '<button type="button" role="tab" data-tab="up" aria-selected="' + (S.tab === 'up') + '"' + (S.tab === 'up' ? ' class="on"' : '') + '>Upgrades</button>' +
-      '<button type="button" role="tab" data-tab="goals" aria-selected="' + (S.tab === 'goals') + '"' + (S.tab === 'goals' ? ' class="on"' : '') + '>Goals ' + done + '/' + total + '</button></div>';
+    var mis = missionFor(sv), found = 0;
+    for (i = 0; i < EGGS.length; i++) if (sv.eggs[EGGS[i].id]) found++;
+    h += '<div class="ltf-contract" title="Today\'s sponsor contract: do it on today\'s flight for the bonus"><span>CONTRACT</span> ' + esc(mis.text) + ' <b>+' + money(mis.reward) + '</b></div>';
+    function tabBtn(id, label) { return '<button type="button" role="tab" data-tab="' + id + '" aria-selected="' + (S.tab === id) + '"' + (S.tab === id ? ' class="on"' : '') + '>' + label + '</button>'; }
+    h += '<div class="ltf-tabs" role="tablist">' + tabBtn('up', 'Upgrades') + tabBtn('goals', 'Goals ' + done + '/' + total) + tabBtn('eggs', 'Secrets ' + found + '/' + EGGS.length) + '</div>';
     if (S.tab === 'up') {
       h += '<div class="ltf-list">';
       for (i = 0; i < UPGRADES.length; i++) {
@@ -1275,6 +1595,20 @@
           '<div class="ltf-st"><span class="ltf-pips" aria-label="level ' + lv + ' of ' + max + '">[' + pips + ']</span> ' + statLine(u.id, up) + '</div></div>' +
           '<button type="button" class="ltf-buy' + (why === 'cash' ? ' poor' : '') + '" data-buy="' + u.id + '"' + (why ? ' disabled' : '') +
           ' title="' + esc(tip) + '" aria-label="' + esc(u.name + ': ' + tip + (why ? '' : ' for ' + money(pr))) + '">' + lab + '</button></div>';
+      }
+      h += '</div>';
+    } else if (S.tab === 'eggs') {
+      h += '<div class="ltf-list ltf-goals">';
+      for (i = 0; i < EGGS.length; i++) {
+        var eg = EGGS[i], got = !!sv.eggs[eg.id];
+        h += '<div class="ltf-g' + (got ? ' ok' : '') + '"><span class="ltf-ck">' + (got ? '[*]' : '[?]') + '</span><span>' + (got ? '<b class="nm">' + esc(eg.name) + '</b>' : '<i>' + esc(eg.hint) + '</i>') + '</span><b>' + (got ? '+' : '') + money(eg.bonus) + '</b></div>';
+      }
+      h += '</div><div class="ltf-hats"><span>Hat</span>' +
+        '<button type="button" class="ltf-hat' + (!sv.hat ? ' on' : '') + '" data-hat="">none</button>';
+      for (i = 0; i < HATS.length; i++) {
+        var ht = HATS[i], own = hatOwned(sv, ht.id);
+        h += '<button type="button" class="ltf-hat' + (sv.hat === ht.id ? ' on' : '') + '" data-hat="' + ht.id + '"' + (own ? '' : ' disabled') +
+          ' title="' + esc(own ? ht.name : 'Locked — ' + ht.how) + '"><b>' + String.fromCharCode(ht.ch) + '</b> ' + (own ? esc(ht.name) : '???') + '</button>';
       }
       h += '</div>';
     } else {
@@ -1296,20 +1630,23 @@
   }
   function helpHtml(first) {
     var keys = S.coarse ?
-      '<div><b>hold left</b> side / <b>&#9650; Up</b> &nbsp;nose up</div><div><b>hold right</b> side / <b>&#9660; Down</b> &nbsp;nose down</div><div><b>Boost</b> &nbsp;rocket (once you own one)</div>' :
-      '<div><b>&larr; / &uarr;</b> &nbsp;nose up</div><div><b>&rarr; / &darr;</b> &nbsp;nose down</div><div><b>Space</b> &nbsp;rocket boost (once you own one)</div><div><b>P / Esc</b> &nbsp;pause</div>';
+      '<div><b>touch the sky</b> &nbsp;the nose turns towards your finger</div><div><b>&#9650; Up / &#9660; Down</b> &nbsp;pitch</div><div><b>Boost</b> &nbsp;rocket &mdash; or a flap when there&rsquo;s no fuel</div>' :
+      '<div><b>&uarr; / &darr;</b> (W/S) &nbsp;nose up / down &mdash; tap to nudge, hold to turn</div><div><b>hold the mouse</b> &nbsp;the nose turns towards the pointer</div>' +
+      '<div><b>Space</b> &nbsp;rocket boost &mdash; or a flap when there&rsquo;s no fuel</div><div><b>gamepad</b> &nbsp;stick points, A boosts</div><div><b>P / Esc</b> &nbsp;pause</div>';
     return '<div class="ltf-card ltf-help">' +
       '<pre class="ltf-art" aria-hidden="true">    /-----\\\n [#](__(")>\n    (_____/</pre>' +
       '<div class="ltf-title">LEARN TO FLY</div>' +
       '<p>Teach a penguin to fly! Slide down the ramp, glide as far as you can, earn cash, buy better gear.</p>' +
       '<div class="ltf-keys">' + keys + '</div>' +
       '<p class="ltf-tip">Dive to pick up speed, pull up to trade it for height &mdash; pull too hard and you <b>stall</b>. A rocket tips your nose down: <b>pull up while you boost</b>. Touch down flat to keep sliding.</p>' +
-      '<p class="ltf-tip">Goal: smash through the <b>ice wall at 10 km</b>.</p>' +
+      '<p class="ltf-tip">Fly through <b>rings</b> for speed, grab <b>fish</b> for fuel, ride <b>thermals</b> (^^^) up and dodge <b>storm clouds</b>. Loops and skips off the snow pay as stunts; each day has a sponsor <b>contract</b>.</p>' +
+      '<p class="ltf-tip">Goal: smash through the <b>ice wall at 10 km</b>. And there are secrets&hellip;</p>' +
       (first ? '' : '<button type="button" class="ltf-go" data-act="close-help">Back</button>') + '</div>';
   }
   function resultsHtml() {
     var cd = S.card, r = S.res, rows = [], i;
-    var vals = { dist: fmtDist(r.dist), alt: fmtDist(r.maxAlt), speed: Math.round(r.maxSpeed) + ' m/s', time: r.time.toFixed(1) + ' s', coins: 'x' + r.coins };
+    var vals = { dist: fmtDist(r.dist), alt: fmtDist(r.maxAlt), speed: Math.round(r.maxSpeed) + ' m/s', time: r.time.toFixed(1) + ' s', coins: 'x' + (r.coins + (r.rings || 0)),
+      stunts: (r.loops ? r.loops + 'L' : '') + (r.loops && r.skips ? ' ' : '') + (r.skips ? r.skips + 'S' : '') };
     function line(a, c2) {
       var pad = 30 - a.length - c2.length;
       return esc(a) + new Array(Math.max(1, pad) + 1).join(' ') + '<b>' + esc(c2) + '</b>';
@@ -1320,6 +1657,8 @@
     }
     for (i = 0; i < cd.lines.length; i++) rows.push(line2(cd.lines[i].label, vals[cd.lines[i].key], money(cd.lines[i].amt)));
     if (cd.bonus) rows.push(line((S.save.ngp ? 'Bonus x' : 'Scarf x') + cd.mult.toFixed(2), '+' + money(cd.bonus)));
+    rows.push('<span class="' + (cd.missionOk ? 'g' : 'x') + '">' + line((cd.missionOk ? '[x] ' : '[ ] ') + cd.mission.text.slice(0, 20), cd.missionOk ? '+' + money(cd.mission.reward) : '-') + '</span>');
+    for (i = 0; i < cd.eggs.length; i++) rows.push('<span class="g">' + line('* ' + cd.eggs[i].name.slice(0, 20), '+' + money(cd.eggs[i].bonus)) + '</span>');
     if (cd.goals.length) {
       rows.push('<i>' + new Array(31).join('-') + '</i>');
       var gl = cd.goals.filter(function (g) { return !g.final; }), shown = gl.length > 4 ? 3 : gl.length, rest = 0;
@@ -1341,6 +1680,7 @@
       '<div class="ltf-sub">' + land + '</div>' +
       '<pre class="ltf-tab">' + rows.join('\n') + '</pre>' +
       (rec.length ? '<div class="ltf-new">** new best ' + rec.join(', ') + ' **</div>' : '') +
+      (cd.eggs.length ? '<div class="ltf-new">secret found!' + (cd.eggs.some(function (e) { return e.hat; }) ? ' a new hat is in the Secrets tab' : '') + '</div>' : '') +
       '<div class="ltf-note">Cash ' + money(S.save.cash) + (near ? ' · next: ' + goalName(near).toLowerCase() : '') + '</div></div>';
   }
   function victoryHtml() {
@@ -1372,7 +1712,8 @@
     if (mode === 'fly') {
       var boost = S.f && S.f.g.fuel > 0;
       h = '<button type="button" class="ltf-pk" data-k="up" aria-label="Nose up">&#9650; <span>Up</span></button>' +
-        (boost ? '<button type="button" class="ltf-pk boost" data-k="boost" aria-label="Rocket boost"><span>Boost</span><i class="ltf-fuel"><i></i></i></button>' : '') +
+        (boost ? '<button type="button" class="ltf-pk boost" data-k="boost" aria-label="Rocket boost (a flap when the fuel is gone)"><span>Boost</span><i class="ltf-fuel"><i></i></i></button>' :
+          '<button type="button" class="ltf-pk boost" data-k="boost" aria-label="Flap"><span>Flap</span></button>') +
         '<button type="button" class="ltf-pk" data-k="down" aria-label="Nose down"><span>Down</span> &#9660;</button>';
     } else {
       var lab = mode === 'launch' ? 'Launch!' : mode === 'continue' ? 'Continue' : mode === 'resume' ? 'Resume' : mode === 'start' ? 'Let\u2019s fly!' : 'Back to the hangar';
@@ -1410,7 +1751,7 @@
   function syncLabel() {
     var sv = S.save;
     S.cv.setAttribute('aria-label', 'Learn to Fly — day ' + sv.day + ', ' + money(sv.cash) + ', best ' + fmtDist(sv.best.dist) +
-      '. Left / up arrow: nose up; right / down arrow: nose down; space: rocket boost.');
+      '. Up / down arrows: nose up / down (or hold the pointer on the sky to steer); space: rocket boost, or a flap.');
   }
 
   function toHangar() {
@@ -1423,8 +1764,9 @@
   function launch() {
     if (!S || S.phase !== 'hangar') return;
     S.snd.ensure();
-    S.f = newFlight(S.save.up, flightSeed(S.save), { noWall: S.save.won });
-    S.phase = 'fly'; S.paused = false; S.endT = 0; S.puffT = 0; S.stallT = -9;
+    S.f = newFlight(S.save.up, flightSeed(S.save), { noWall: S.save.won, season: S.season });
+    S.mission = missionFor(S.save);
+    S.phase = 'fly'; S.paused = false; S.endT = 0; S.puffT = 0; S.stallT = -9; S.flapT = 0;
     S.live = GOALS.filter(function (g) { return !g.final && !S.save.goals[g.id]; });
     clearInput(); clearFx(); S.msg = null; S.msgQ.length = 0;
     showCard(null); setPad('fly'); syncHead();
@@ -1472,17 +1814,72 @@
   var KEY2CODE = { ' ': 'Space', arrowleft: 'ArrowLeft', arrowup: 'ArrowUp', arrowright: 'ArrowRight', arrowdown: 'ArrowDown',
     a: 'KeyA', w: 'KeyW', d: 'KeyD', s: 'KeyS', p: 'KeyP', enter: 'Enter', escape: 'Escape' };
   function keyCode(e) { return e.code || KEY2CODE[(e.key || '').toLowerCase()] || ''; }
-  function syncInput() {
-    var i = S.inp, h = S.held;
-    i.up = S.keys.up; i.down = S.keys.down; i.boost = S.keys.boost;
+  // Everything that steers, merged: keys, the pad, the pointer (aim) and a gamepad.
+  function mergeInput() {
+    var i = S.inp, h = S.held, gp = S.gp;
+    i.up = S.keys.up || gp.up; i.down = S.keys.down || gp.down; i.boost = S.keys.boost || gp.boost;
     for (var id in h) { if (h[id] === 'up') i.up = true; else if (h[id] === 'down') i.down = true; else if (h[id] === 'boost') i.boost = true; }
-    syncPad();
+    // pointing: the nose turns towards where the pointer is, relative to the penguin on screen
+    i.aim = S.aimAt && S.penX != null ? Math.atan2(-(S.aimAt.y - S.penY), S.aimAt.x - S.penX) : gp.aim;
   }
+  function syncInput() { mergeInput(); syncPad(); }
   function clearInput() {
     S.keys.up = S.keys.down = S.keys.boost = false;
-    S.held = {};
-    S.inp.up = S.inp.down = S.inp.boost = false;
+    S.held = {}; S.aimAt = null; S.aimId = null;
+    S.inp.up = S.inp.down = S.inp.boost = false; S.inp.aim = null;
     syncPad();
+  }
+  // Gamepad: left stick points the nose (or d-pad up / down), A / a trigger boosts,
+  // Start pauses; between flights A presses the big button.
+  function readPad() {
+    var pads = null;
+    try { pads = navigator.getGamepads ? navigator.getGamepads() : null; } catch (e) { pads = null; }
+    if (!pads) return null;
+    for (var i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected !== false) return pads[i];
+    return null;
+  }
+  function btnOn(p, i) { var b = p.buttons[i]; return !!b && (b.pressed || b.value > 0.5); }
+  function pollPad() {
+    var gp = S.gp, p = readPad();
+    if (!p) { gp.up = gp.down = gp.boost = false; gp.aim = null; return; }
+    var ax = p.axes[0] || 0, ay = p.axes[1] || 0, mag = Math.sqrt(ax * ax + ay * ay);
+    gp.aim = mag > 0.55 ? Math.atan2(-ay, ax) : null;
+    gp.up = btnOn(p, 12); gp.down = btnOn(p, 13);
+    gp.boost = btnOn(p, 0) || btnOn(p, 7) || btnOn(p, 5);
+    var st = btnOn(p, 9);
+    if (st && !gp.start && S.phase === 'fly' && !S.paused) pause();
+    gp.start = st;
+  }
+  function pollMenus() {
+    if (!S || (S.phase === 'fly' && !S.paused)) return;
+    var p = readPad();
+    if (!p) return;
+    var a = btnOn(p, 0) || btnOn(p, 9);
+    if (a && !S.gp.menuA) { if (S.paused) resume(); else padAction(); }
+    S.gp.menuA = a;
+  }
+  // Secret codes, typed in the hangar.
+  var KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
+  function secretKey(code, key) {
+    var buf = S.codeBuf;
+    buf.push(code); if (buf.length > 10) buf.shift();
+    S.typed = (S.typed + (key && key.length === 1 ? key.toLowerCase() : '')).slice(-8);
+    if (buf.length === 10 && buf.join() === KONAMI.join()) { S.codeBuf.length = 0; hangarEgg('konami'); return true; }
+    if (/noot$/.test(S.typed)) { S.typed = ''; hangarEgg('noot'); return true; }
+    return false;
+  }
+  function hangarEgg(id) {
+    var e = findEgg(S.save, id), snd = S.snd;
+    snd.ensure();
+    if (id === 'noot') { snd.tone(392, 0.12, 'square', 0.05); snd.tone(392, 0.12, 'square', 0.05, 0, 0.18); }
+    if (e) {
+      S.save.cash += e.bonus;
+      if (e.hat) S.save.hat = e.hat;
+      persist();
+      [523, 659, 784, 1047, 1319].forEach(function (fq, j) { snd.tone(fq, 0.1, 'triangle', 0.04, 0, j * 0.07); });
+      Cade.showToast && Cade.showToast('Secret found: ' + e.name + ' — +' + money(e.bonus) + (e.hat ? ' and a hat' : ''), 'success', 3000);
+    } else Cade.showToast && Cade.showToast(id === 'noot' ? 'NOOT NOOT!' : 'You already know that one ;)', 'info', 1800);
+    if (S.phase === 'hangar') { showCard('shop'); draw(1, 0); }
   }
   function onKey(e) {
     if (!S || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1506,6 +1903,7 @@
       if (k) { e.preventDefault(); if (!S.keys[k]) { S.keys[k] = true; syncInput(); } }
       return;
     }
+    if (S.phase === 'hangar' && secretKey(code, e.key)) { e.preventDefault(); return; }
     // between flights Space / Enter does the big button's job — unless a button
     // in the panel has focus (it activates itself)
     if (code === 'Space' || code === 'Enter' || code === 'NumpadEnter') {
@@ -1519,9 +1917,10 @@
     var k = KEYMAP[keyCode(e)];
     if (k && S.keys[k]) { S.keys[k] = false; syncInput(); }
   }
-  function sideAt(e) {
+  // a pointer on the play field, in the canvas' logical units
+  function aimPoint(e) {
     var r = S.cv.getBoundingClientRect();
-    return e.clientX - r.left < r.width / 2 ? 'up' : 'down';
+    return { x: (e.clientX - r.left) / r.width * VW, y: (e.clientY - r.top) / r.height * S.VH };
   }
 
   // ---- layout ----
@@ -1531,16 +1930,21 @@
     var r = S.panel.getBoundingClientRect();
     if (!r.height) return vh - (vw <= 560 ? 190 : 210);
     var chrome = r.height - (S.stage.offsetHeight || 0);
+    // a shared link: the panel is capped at the window, so add the chrome up instead
+    if (S.panel.classList.contains('cade-solo-panel')) {
+      var hd = S.panel.querySelector('.cade-panel-head');
+      chrome = (hd ? hd.offsetHeight : 40) + (S.pad.offsetHeight || 56) + 36;
+    }
     return vh - Math.min(Math.max(0, r.top), 140) - chrome - 10;
   }
   function layout() {
     var vw = window.innerWidth || 800, vh = window.innerHeight || 600, vv = window.visualViewport;
     if (vv && vv.height && vv.scale <= 1.01) vh = Math.min(vh, vv.height);
-    var phone = vw <= 560;
-    var s = Math.min((vw - (phone ? 34 : 48)) / VW, phone ? 1.25 : 1.4), ah = availH(vw, vh);
+    var phone = vw <= 560, solo = S.panel.classList.contains('cade-solo-panel');   // a shared link: the whole window
+    var s = Math.min((vw - (phone ? 34 : 48)) / VW, phone ? 1.25 : solo ? 2.6 : 1.4), ah = availH(vw, vh);
     var vh2 = Math.floor(ah / s);
     if (vh2 < 288) { s = Math.max(0.55, Math.min(s, ah / 288)); vh2 = 288; }
-    vh2 = Math.min(vh2, phone ? 540 : 340);
+    vh2 = Math.min(vh2, phone ? 540 : solo ? 420 : 340);
     var cw = Math.floor(VW * s), ch = Math.floor(vh2 * s), dpr = Math.min(2, window.devicePixelRatio || 1);
     S.cv.style.width = cw + 'px'; S.cv.style.height = ch + 'px';
     S.stage.style.width = cw + 'px'; S.stage.style.height = ch + 'px';
@@ -1562,6 +1966,8 @@
     document.removeEventListener('keydown', s.onKey, true);
     document.removeEventListener('keyup', s.onKeyUp, true);
     document.removeEventListener('visibilitychange', s.onVis);
+    clearInterval(s.gpT);
+    window.removeEventListener('gamepadconnected', s.onPad);
     window.removeEventListener('blur', s.onBlur);
     window.removeEventListener('resize', s.onResize);
     if (window.visualViewport) window.visualViewport.removeEventListener('resize', s.onResize);
@@ -1604,7 +2010,9 @@
       save: ld.save, firstRun: ld.fresh, snd: new Snd(sget(SOUND_KEY) === '1'),
       rm: false, coarse: !!(mm && mm('(pointer: coarse)').matches),
       phase: 'hangar', f: null, hf: null, paused: false, raf: 0, last: 0, endT: 0, puffT: 0,
-      keys: { up: false, down: false, boost: false }, held: {}, inp: { up: false, down: false, boost: false },
+      keys: { up: false, down: false, boost: false }, held: {}, inp: { up: false, down: false, boost: false, aim: null },
+      gp: { up: false, down: false, boost: false, aim: null, start: false, menuA: false }, aimAt: null, aimId: null, penX: null, penY: null,
+      codeBuf: [], typed: '', season: seasonOf(new Date()), mission: null, flapT: 0, gpT: 0,
       pal: new Array(NPAL), col: null, atl: null, cloudT: null, k: 1, VH: 288, v: {},
       tx: new Float32Array(64), ty: new Float32Array(64),
       cloudOff: 0, farOff: 0, nearOff: 0, lastLeft: null, shake: 0, flash: 0,
@@ -1649,6 +2057,10 @@
     };
     window.addEventListener('resize', S.onResize);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', S.onResize);
+    // a gamepad: poll its A / Start between flights (in flight the frame loop reads it)
+    S.onPad = function () { if (S && !S.gpT) S.gpT = setInterval(pollMenus, 100); };
+    window.addEventListener('gamepadconnected', S.onPad);
+    if (readPad()) S.onPad();
     try {
       S.themeObs = new MutationObserver(function () {
         if (!S) return;
@@ -1684,14 +2096,17 @@
       S.snd.ensure();
       if (S.phase !== 'fly' || S.paused) return;
       try { S.cv.setPointerCapture(e.pointerId); } catch (x) {}
-      S.held[e.pointerId] = sideAt(e); syncInput();
+      S.aimId = e.pointerId; S.aimAt = aimPoint(e); syncInput();
     });
     S.cv.addEventListener('pointermove', function (e) {
-      if (!S || S.held[e.pointerId] == null || S.held[e.pointerId] === 'boost') return;
-      var sd = sideAt(e);
-      if (sd !== S.held[e.pointerId]) { S.held[e.pointerId] = sd; syncInput(); }
+      if (!S || S.aimId !== e.pointerId) return;
+      S.aimAt = aimPoint(e);
     });
-    function release(e) { if (S && S.held[e.pointerId] != null) { delete S.held[e.pointerId]; syncInput(); } }
+    function release(e) {
+      if (!S) return;
+      if (S.aimId === e.pointerId) { S.aimId = null; S.aimAt = null; syncInput(); }
+      if (S.held[e.pointerId] != null) { delete S.held[e.pointerId]; syncInput(); }
+    }
     ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (t) { S.cv.addEventListener(t, release); S.pad.addEventListener(t, release); });
     S.cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     // the pad: held flight controls, or the one big action button
@@ -1721,8 +2136,10 @@
       var b = e.target.closest ? e.target.closest('button') : null;
       if (!b) return;
       S.snd.ensure();
-      var id = b.getAttribute('data-buy'), tab = b.getAttribute('data-tab'), act = b.getAttribute('data-act');
-      if (id) {
+      var id = b.getAttribute('data-buy'), tab = b.getAttribute('data-tab'), act = b.getAttribute('data-act'), hatId = b.getAttribute('data-hat');
+      if (hatId != null) {
+        if (!hatId || hatOwned(S.save, hatId)) { S.save.hat = hatId; persist(); showCard('shop'); draw(1, 0); }
+      } else if (id) {
         if (buy(S.save, id)) {
           persist();
           S.snd.tone(1047, 0.07, 'square', 0.03); S.snd.tone(1568, 0.12, 'square', 0.025, 0, 0.07);
@@ -1770,9 +2187,9 @@
 
   Cade.registerWidget({
     name: NAME,
-    description: 'Slide a penguin off a ramp, glide, upgrade your gear, smash the 10 km ice wall',
+    description: 'Slide a penguin off a ramp and glide — rings, thermals, stunts, daily contracts, secrets — upgrade your gear, smash the 10 km ice wall',
     icon: '\uD83D\uDC27',
-    tags: 'game,arcade,fun,penguin,fly,glide,glider,rocket,upgrade,shop,learn to fly,flash,distance,ascii',
+    tags: 'game,arcade,fun,penguin,fly,glide,glider,rocket,upgrade,shop,learn to fly,flash,distance,ascii,secrets,easter eggs',
     open: open,
     _engine: ENGINE   // pure engine, for headless checks (node)
   });
