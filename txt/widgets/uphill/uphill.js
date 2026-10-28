@@ -3732,7 +3732,7 @@
     var extra = 0;
     if (S.touch && !float) extra += (S.padsEl.offsetHeight || 72) + 8;
     if (!S.touch) extra += (S.bar.offsetHeight || 22) + 8;
-    var avail = vh - top - hd - padY - extra - 8 - S.safeB;
+    var avail = vh - top - hd - padY - extra - 8 - S.safeB - (solo ? 16 : 0);
     var ch = float || solo ? avail : narrow ? Math.round(cw * 0.95) : Math.round(cw * 0.56);
     ch = Math.max(240, Math.min(ch, avail));
     S.cv.style.width = cw + 'px'; S.cv.style.height = ch + 'px';

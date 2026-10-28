@@ -2866,9 +2866,9 @@
       "id": "learntofly",
       "type": "widget",
       "name": "Learn to Fly",
-      "description": "Slide a penguin off a ramp, glide, upgrade your gear, smash the 10 km ice wall",
+      "description": "Slide a penguin off a ramp and glide — rings, thermals, stunts, daily contracts, secrets — upgrade your gear, smash the 10 km ice wall",
       "icon": "🐧",
-      "tags": "game,arcade,fun,penguin,fly,glide,glider,rocket,upgrade,shop,learn to fly,flash,distance,ascii",
+      "tags": "game,arcade,fun,penguin,fly,glide,glider,rocket,upgrade,shop,learn to fly,flash,distance,ascii,secrets,easter eggs",
       "entry": "widgets/learntofly/learntofly.js",
       "css": "widgets/learntofly/learntofly.css"
     },

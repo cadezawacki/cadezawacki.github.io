@@ -2846,9 +2846,12 @@ body.origami-on .cade-panel-head .cade-panel-lockbtn, .cade-panel-head .cade-pan
 html.cade-solo body > *:not(.cade-panel):not(.toast-container):not(.cade-solo-msg) { display: none !important; }
 html.cade-solo body { background: var(--surface); }
 html.cade-solo .cade-panel:not(.cade-solo-panel) { display: none !important; }
+/* full width, as tall as its content (widgets that size themselves from their
+   panel's chrome keep working) and never taller than the window */
 html.cade-solo .cade-panel.cade-solo-panel:not(#cade-pop-x):not(#cade-pop-x) {
-  position: fixed !important; inset: 0 !important; z-index: 1 !important; display: flex; flex-direction: column;
-  width: auto !important; height: auto !important; max-width: none !important; max-height: none !important;
+  position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: auto !important; z-index: 1 !important;
+  display: flex; flex-direction: column; overflow: auto;
+  width: auto !important; height: auto !important; max-width: none !important; max-height: 100% !important;
   margin: 0 !important; border: 0; border-radius: 0; box-shadow: none; transform: none !important;
   padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
 }
