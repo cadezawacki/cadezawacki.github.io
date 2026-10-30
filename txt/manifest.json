@@ -2899,6 +2899,16 @@
       "css": "widgets/uphill/uphill.css"
     },
     {
+      "id": "duskdash",
+      "type": "widget",
+      "name": "Dusk Dash",
+      "description": "Race the sunset over endless hills — hold to dive, let go to fly; perfect slides, fever, power-ups and a wardrobe of looks",
+      "icon": "🌅",
+      "tags": "game,arcade,fun,tiny wings,hills,glide,dive,slide,fly,one button,hold,sunset,endless,power-ups,ascii",
+      "entry": "widgets/duskdash/duskdash.js",
+      "css": "widgets/duskdash/duskdash.css"
+    },
+    {
       "id": "snippets",
       "type": "widget",
       "name": "Snippets",
