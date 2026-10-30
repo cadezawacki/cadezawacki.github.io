@@ -1,0 +1,173 @@
+/* Dusk Dash widget styles (loaded on demand via Cade.loadCSS). */
+#duskdash-panel { top: calc(var(--menubar-h, 36px) + 12px); right: 12px; max-width: calc(100vw - 24px); }
+#duskdash-panel .cade-panel-body { padding: 10px; overflow: hidden; overscroll-behavior: contain; }
+#duskdash-panel .cade-panel-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* A one-button game is tapped hard and fast: nothing in the panel may select,
+   magnify, open a callout or zoom (double-tap or pinch). The hold surfaces take
+   no browser gestures at all; the rest only allow plain taps (manipulation). */
+#duskdash-panel, #duskdash-panel * {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+#duskdash-panel { touch-action: manipulation; }
+#duskdash-panel .dd-stage, #duskdash-panel .dd-cv, #duskdash-panel .dd-pad, #duskdash-panel .dd-hold { touch-action: none; }
+#duskdash-panel button { touch-action: manipulation; }
+
+/* Help / sound / pause in the panel header, before the core minimize button. */
+.dd-hb { display: inline-flex; flex: none; gap: 4px; cursor: default; }
+.dd-hb button {
+  width: 30px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--radius-md, 6px); background: var(--surface-2); color: var(--text-muted); cursor: pointer;
+}
+.dd-hb button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.dd-hb button.on { color: var(--accent); }
+.dd-hb button:disabled { opacity: 0.35; cursor: default; }
+.dd-hb button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.dd { display: flex; flex-direction: column; gap: 8px; width: var(--dd-w, auto); margin: 0 auto; }
+.dd-stage { position: relative; margin: 0 auto; line-height: 0; }
+.dd-cv {
+  display: block; width: 100%; height: 100%; cursor: pointer;
+  border-radius: 8px; background: var(--bg); box-shadow: 0 0 0 1px var(--border);
+}
+/* Cards over the play field. The dimmer lives on the stage so it takes the
+   theme background at partial opacity in both themes. */
+.dd-stage.dim::after, .dd-stage.home::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1;
+  background: var(--bg); opacity: 0.55; border-radius: 8px; pointer-events: none;
+}
+.dd-stage.home::after { opacity: 0.3; }
+.dd-ovl {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center; padding: 10px;
+  overflow: auto; overscroll-behavior: contain; touch-action: pan-y; line-height: 1.35; border-radius: 8px;
+}
+.dd-card {
+  display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 344px; margin: auto; padding: 12px;
+  color: var(--text); font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md, 6px); box-shadow: var(--shadow-lg);
+}
+.dd-card p { margin: 0; color: var(--text-muted); line-height: 1.45; }
+.dd-card p b { color: var(--text); }
+.dd-title { font-weight: 700; font-size: 15px; letter-spacing: 0.16em; text-align: center; white-space: nowrap; }
+.dd-title::before, .dd-title::after { content: '--'; color: var(--accent); letter-spacing: 0; margin: 0 0.5em; font-weight: 500; }
+.dd-sub { text-align: center; color: var(--text-muted); }
+.dd-big { text-align: center; font-size: 26px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.dd-note { text-align: center; color: var(--text-faint); font-size: 11px; }
+.dd-new { text-align: center; color: var(--accent); font-weight: 700; font-size: 11px; letter-spacing: 0.04em; }
+.dd-art { margin: 0 auto; font: inherit; font-weight: 700; line-height: 1.2; white-space: pre; color: var(--accent); }
+.dd-tab {
+  margin: 0 auto; font: inherit; line-height: 1.5; white-space: pre; color: var(--text-muted);
+  font-variant-numeric: tabular-nums; max-width: 100%; overflow-x: auto;
+}
+.dd-tab b { color: var(--text); font-weight: 700; }
+.dd-tab i { font-style: normal; color: var(--text-faint); }
+.dd-tab .g, .dd-tab .g b { color: var(--accent); }
+.dd-keys { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: var(--radius-md, 6px); color: var(--text-muted); }
+.dd-keys b { color: var(--text); }
+.dd-pws span { color: var(--text-faint); }
+.dd-tip { font-size: 11px; }
+.dd-go {
+  font: inherit; font-weight: 700; padding: 9px 12px; border-radius: var(--radius-md, 6px); cursor: pointer;
+  border: 1px solid var(--accent); background: transparent; color: var(--accent);
+}
+.dd-go:hover, .dd-go:focus-visible { background: var(--accent); color: #fff; outline: none; }
+.dd-go.alt { border-color: var(--border); color: var(--text-muted); }
+.dd-go.alt:hover, .dd-go.alt:focus-visible { background: var(--surface-2); color: var(--text); }
+.dd-btns { display: flex; gap: 8px; }
+.dd-btns .dd-go { flex: 1; }
+
+/* home: wallet, tabs, the wardrobe, records */
+.dd-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dd-brand { font-weight: 700; letter-spacing: 0.16em; }
+.dd-brand::before { content: 'o '; color: var(--accent); letter-spacing: 0; }
+.dd-wallet { font-weight: 700; font-size: 18px; color: #b07d06; font-variant-numeric: tabular-nums; }
+[data-theme="dark"] .dd-wallet { color: #f2c544; }
+.dd-tabs { display: flex; gap: 2px; padding: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.dd-tabs button {
+  flex: 1; font: inherit; font-weight: 600; color: var(--text-muted); background: transparent; border: 0; border-radius: 6px;
+  padding: 4px 8px; min-height: 28px; cursor: pointer;
+}
+.dd-tabs button:hover:not(.on) { color: var(--text); }
+.dd-tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14); }
+[data-theme="dark"] .dd-tabs button.on { background: var(--surface-hover); }
+.dd-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dd-sec { display: flex; flex-direction: column; gap: 4px; }
+.dd-h { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); }
+.dd-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.dd-chip {
+  display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 11px; padding: 3px 7px; min-height: 28px;
+  border-radius: 999px; cursor: pointer; color: var(--text); border: 1px solid var(--border); background: var(--surface-2);
+}
+.dd-chip:hover { border-color: var(--accent); }
+.dd-chip.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.dd-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dd-chip i { font-style: normal; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.dd-chip.locked { background: transparent; border-style: dashed; }
+.dd-chip.poor, .dd-chip.locked[aria-disabled="true"] { opacity: 0.6; }
+.dd-face { font-size: 14px; font-weight: 700; min-width: 1.2em; text-align: center; color: var(--accent); white-space: pre; }
+.dd-foot { display: flex; align-items: center; justify-content: space-between; gap: 4px 8px; flex-wrap: wrap; color: var(--text-faint); font-size: 11px; }
+.dd-confirm { color: var(--text); }
+.dd-lnk {
+  font: inherit; font-size: 11px; color: var(--text-muted); background: none; border: 0; padding: 3px 2px; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.dd-lnk:hover { color: var(--accent); }
+.dd-lnk.danger { color: var(--error, #dc2626); font-weight: 700; }
+
+/* colour swatches (the dot's glyph in that colour) and the power-up legend:
+   the same hues the canvas uses */
+.dd-c-ink { color: var(--text); }
+.dd-c-accent { color: var(--accent); }
+.dd-c-gold, .dd-p-x2 { color: #b07d06; }
+.dd-c-coral, .dd-p-magnet { color: #cf3f3f; }
+.dd-c-sky, .dd-p-feather { color: #2878b5; }
+.dd-c-ember, .dd-p-rocket { color: #e2611f; }
+.dd-c-leaf, .dd-p-butter { color: #2f8f3a; }
+.dd-c-violet { color: #7351c4; }
+.dd-p-sun { color: #de8a12; }
+[data-theme="dark"] .dd-c-gold, [data-theme="dark"] .dd-p-x2 { color: #f2c544; }
+[data-theme="dark"] .dd-c-coral, [data-theme="dark"] .dd-p-magnet { color: #f06a6a; }
+[data-theme="dark"] .dd-c-sky, [data-theme="dark"] .dd-p-feather { color: #7cc7f2; }
+[data-theme="dark"] .dd-c-ember, [data-theme="dark"] .dd-p-rocket { color: #ff8f3f; }
+[data-theme="dark"] .dd-c-leaf, [data-theme="dark"] .dd-p-butter { color: #7ed37a; }
+[data-theme="dark"] .dd-c-violet { color: #b79cf5; }
+[data-theme="dark"] .dd-p-sun { color: #ffb347; }
+.dd-c-rainbow {
+  background: linear-gradient(90deg, #e2611f, #b07d06, #2f8f3a, #2878b5, #7351c4);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.dd-pw { font-weight: 700; }
+
+/* the pad under the play field: one big hold button, or the action buttons */
+.dd-pad { display: flex; gap: 8px; }
+.dd-hold, .dd-act {
+  flex: 1 1 0; min-width: 0; height: 50px; display: flex; align-items: center; justify-content: center; gap: 6px;
+  font: inherit; font-family: var(--font-mono, ui-monospace, monospace); font-size: 14px; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; border-radius: 12px; cursor: pointer;
+}
+.dd-hold { border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); transition: background-color 80ms, color 80ms, transform 80ms; }
+.dd-hold span { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: none; opacity: 0.75; }
+.dd-hold:hover { color: var(--text); }
+.dd-hold.on { background: var(--accent); border-color: var(--accent); color: #fff; transform: scale(0.98); }
+.dd-act { border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+.dd-act.alt { flex: 0 0 auto; padding: 0 14px; border-color: var(--border); background: var(--surface-2); color: var(--text-muted); letter-spacing: 0.06em; }
+.dd-act:hover { filter: brightness(1.08); }
+.dd-act:focus-visible, .dd-hold:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.dd-act small { font-size: 10px; font-weight: 500; letter-spacing: 0.04em; text-transform: none; opacity: 0.75; }
+.dd-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 560px) {
+  #duskdash-panel { left: 8px !important; right: 8px; max-width: none; top: calc(var(--menubar-h, 36px) + 6px); }
+  #duskdash-panel .cade-panel-body { padding: 8px 8px max(8px, env(safe-area-inset-bottom)); }
+  .dd-ovl { padding: 6px; }
+  .dd-card { padding: 10px; }
+}
+@media (pointer: coarse) {
+  .dd-hb button { width: 40px; height: 34px; }
+  .dd-hold, .dd-act { height: 60px; }
+  .dd-tabs button { min-height: 40px; }
+  .dd-chip { min-height: 36px; }
+  .dd-lnk { min-height: 40px; padding: 0 6px; }
+  .dd-go { padding: 12px; }
+}
