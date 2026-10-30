@@ -11,7 +11,9 @@
  * Drawn entirely in monospace glyphs (cached in a glyph atlas) on a canvas,
  * the hills as contour bands. Physics runs on a fixed 120 Hz step with an
  * accumulator and the terrain is analytic (cosine hills, C¹ smooth), so a
- * glide is the same at 60 or 120 Hz; rendering interpolates. The loop runs
+ * glide is the same at 60 or 120 Hz; rendering interpolates, and touchdowns
+ * go through a short cushion, so the dot never changes velocity in one frame.
+ * Lose your momentum and the dot labours on, but the sun sets fast. The loop runs
  * only while a run is on screen; it pauses on blur, tab hide and minimize.
  * Progress persists in Cade.store (cade-dd-*). Offline module, no assets. */
 (function () {
@@ -22,9 +24,14 @@
   var STEP = 1 / 120;
   var G = 30;                          // gravity, let go (light)
   var HOLD_AIR = 3.4, HOLD_GND = 2.6;  // gravity multipliers while held (heavy: dive)
-  var MIN_V = 9, PUSH = 16, CRAWL = 6, MAX_V = 150;  // the dot never stalls: a push below MIN_V, and it always crawls at CRAWL
+  var START_V = 9, MAX_V = 150;
+  var ROLL = 0.5, ROLL_BACK = 4;       // rolling resistance (m/s²); more when rolling backwards
+  var CRAWL = 4;                       // in daylight a slow dot labours on at about this speed (it never freezes on a hill)
   var LAUNCH_V = 8;                    // slower than this, a crest can't throw you
-  var SUN0 = 50, DUSK_T = 6;           // seconds of daylight at the start; seconds to coast once it's dark
+  var SUN0 = 45, DUSK_T = 3.5;         // seconds of daylight at the start; seconds to roll to a stop once it's dark
+  var SLOW_V = 5, STUCK_T = 2.5, STUCK_DRAIN = 3;  // slower than SLOW_V for STUCK_T s: out of steam, the sun sets STUCK_DRAIN× faster
+  var CUSHION = 16;                    // landing cushion (rad/s): the touchdown's normal speed springs out, critically damped (~0.3 s)
+  var EASE = 0.2;                      // seconds a perfect kick / thud takes to change the speed
   var PERFECT_A = 0.36, BAD_A = 0.9;   // landing angle (velocity vs slope, rad): perfect / thud
   var PERFECT_KICK = 4, FEVER_N = 3, FEVER_T = 6, FEVER_A = 7;
   var REF_H = 288, VIEW_W = 384;       // logical px the camera zoom is defined for
@@ -188,8 +195,9 @@
   function newRun(seed, opts) {
     var w = newWorld(seed), y = groundY(w, START_X);
     var f = {
-      seed: seed >>> 0, w: w, phase: 'run', x: START_X, y: y, vx: MIN_V, vy: 0, s: MIN_V, gnd: true, px: START_X, py: y,
-      t: 0, sun: SUN0, duskT: 0, acc: 0, steps: 0, hold: false,
+      seed: seed >>> 0, w: w, phase: 'run', x: START_X, y: y, vx: START_V, vy: 0, s: START_V, gnd: true, px: START_X, py: y,
+      t: 0, sun: SUN0, duskT: 0, acc: 0, steps: 0, hold: false, stuckT: 0, stuck: false,
+      dn: 0, vn: 0, pdn: 0, dv: 0, dvR: 0,
       air: 0, maxAir: 0, maxSpeed: 0, maxAlt: 0, score: 0, coins: 0, perfects: 0, chain: 0, bestChain: 0, fever: 0, fevers: 0,
       island: 0, islands: 0, pw: { rocket: 0, magnet: 0, feather: 0, x2: 0, butter: 0 }, pwGot: 0, lastPw: '', ii: 0,
       zoom: 1, pzoom: 1, cb: -14, pcb: -14, cbT: -14, events: [], hits: [], lastGain: 0, airScore: 0, sunGain: 0, dScore: 0
@@ -217,35 +225,44 @@
   function land(f) {
     var w = f.w, gy = groundY(w, f.x), sl = w.gs, a = Math.atan(sl), ca = Math.cos(a), sa = Math.sin(a);
     var vt = f.vx * ca + f.vy * sa, diff = Math.abs(Math.atan2(f.vy, f.vx) - a), ev = f.events, air = f.air;
-    f.y = gy; f.gnd = true;
+    // the speed into the ground isn't lost in one frame: it compresses a stiff
+    // cushion (rendered as a tiny dip) that springs back, so the dot's velocity
+    // stays continuous through the touchdown
+    // the step overshot into the ground by d (vertically): its part along the
+    // normal goes into the cushion, its part along the slope moves the contact
+    var d = Math.min(0, f.y - gy);
+    f.vn = Math.min(f.vn, f.vy * ca - f.vx * sa, 0); f.dn = Math.min(f.dn, d * ca, 0);
+    f.x += d * sa * ca; f.y = groundY(w, f.x); f.gnd = true; f.s = vt;
     if (air > 0.35 && (diff < PERFECT_A || f.pw.butter > 0) && a < -0.1) {
-      f.s = vt + PERFECT_KICK;
+      ease(f, PERFECT_KICK);
       f.perfects++; f.chain++;
       if (f.chain > f.bestChain) f.bestChain = f.chain;
       addScore(f, 25 * Math.min(f.chain, 10));
       ev.push('perfect');
       if (f.chain >= FEVER_N && f.chain % FEVER_N === 0) { f.fever = FEVER_T; f.fevers++; ev.push('fever'); }
     } else if (air > 0.25 && diff > BAD_A) {
-      f.s = vt * 0.85; f.chain = 0; ev.push('thud');
-    } else {
-      f.s = vt;
-      if (air > 0.25) ev.push('land');
-    }
+      // a bad landing costs speed, but the dot slides on rather than stopping dead
+      f.s = Math.max(vt, 0.45 * Math.sqrt(f.vx * f.vx + f.vy * f.vy));
+      ease(f, -f.s * 0.15); f.chain = 0; ev.push('thud');
+    } else if (air > 0.25) ev.push('land');
     if (air > 1.5) { f.airScore = addScore(f, 15 * air); ev.push('air'); }
-    f.s = clamp(f.s, 3, MAX_V);
+    f.s = clamp(f.s, 0, MAX_V);
     f.vx = f.s * ca; f.vy = f.s * sa;
     f.air = 0;
   }
 
+  // A speed change spread over EASE seconds (no visible jolt).
+  function ease(f, dv) { f.dv += dv; f.dvR = Math.abs(f.dv) / EASE; }
+
   // One fixed physics step. hold: heavy (dive) this step.
   function stepRun(f, hold) {
     if (f.phase === 'done') return;
-    var w = f.w, dt = STEP, ev = f.events, pw = f.pw, k;
+    var w = f.w, dt = STEP, ev = f.events, pw = f.pw, k, touched = false;
     hold = !!hold; f.hold = hold;
-    f.px = f.x; f.py = f.y; f.pzoom = f.zoom; f.pcb = f.cb;
+    f.px = f.x; f.py = f.y; f.pzoom = f.zoom; f.pcb = f.cb; f.pdn = f.dn;
     f.steps++; f.t += dt;
     if (f.phase === 'run') {
-      f.sun -= dt;
+      f.sun -= dt * (f.stuck ? STUCK_DRAIN : 1);
       if (f.sun <= 0) { f.sun = 0; f.phase = 'dusk'; f.duskT = 0; ev.push('night'); }
     } else f.duskT += dt;
     for (k in pw) if (pw[k] > 0) { pw[k] -= dt; if (pw[k] <= 0) { pw[k] = 0; ev.push('pwoff'); } }
@@ -257,29 +274,52 @@
     if (f.gnd) {
       groundY(w, f.x);
       var a = Math.atan(w.gs), ca = Math.cos(a), sa = Math.sin(a);
-      f.s += (-g * sa + fwd) * dt;
-      if (dusk) f.s -= (0.6 * f.s + 3) * dt;                     // dark: the dot tires and rolls to a stop
-      else if (f.s < MIN_V) f.s += PUSH * dt;
-      f.s = clamp(f.s, dusk ? 0 : CRAWL, MAX_V);
+      // slow and climbing in daylight, the dot labours on: gravity fades out
+      // (smoothly) as it nears CRAWL, and it's eased back up to CRAWL
+      var gk = 1;
+      if (!dusk && sa > 0) { var u = clamp((f.s - CRAWL) / 5, 0, 1); gk = 0.1 + 0.9 * u * u * (3 - 2 * u); }
+      f.s += (-g * sa * gk + fwd) * dt;
+      if (!dusk && f.s < CRAWL) f.s += (CRAWL - f.s) * 6 * dt;
+      // rolling resistance; in the dark the dot tires and brakes to a stop
+      var br = (dusk ? 0.9 * Math.abs(f.s) + 6 : f.s < 0 ? ROLL_BACK : ROLL) * dt;
+      f.s = Math.abs(f.s) <= br ? 0 : f.s - (f.s > 0 ? br : -br);
+      if (f.dv) { var dd = Math.min(Math.abs(f.dv), f.dvR * dt) * (f.dv > 0 ? 1 : -1); f.s += dd; f.dv -= dd; if (Math.abs(f.dv) < 1e-9) f.dv = 0; }
+      f.s = clamp(f.s, -40, MAX_V);
       f.x += f.s * ca * dt;
       f.y = groundY(w, f.x);
       a = Math.atan(w.gs); ca = Math.cos(a); sa = Math.sin(a);
       f.vx = f.s * ca; f.vy = f.s * sa;
       // leave the ground when it curves away faster than the dot can follow:
-      // the normal force g·cos a + s²·κ goes negative over a crest
-      var kap = w.gk / Math.pow(1 + w.gs * w.gs, 1.5);
-      if (f.s > LAUNCH_V && g * ca + f.s * f.s * kap < 0) { f.gnd = false; f.air = 0; ev.push('launch'); }
+      // the normal force ga·cos a + s²·κ goes negative over a crest. ga is the
+      // gravity the dot would fly under, so a launch always clears the ground
+      // (a held dot falls harder in the air than it presses on the ground:
+      // testing with the ground's gravity let it land and relaunch every step)
+      var kap = w.gk / Math.pow(1 + w.gs * w.gs, 1.5), ga = G * (hold ? HOLD_AIR : pw.feather > 0 ? 0.45 : 1);
+      if (f.s > LAUNCH_V && ga * ca + f.s * f.s * kap < 0) { f.gnd = false; f.air = 0; ev.push('launch'); }
     } else {
       f.vy -= g * dt;
       if (fwd) { var V0 = Math.sqrt(f.vx * f.vx + f.vy * f.vy) || 1; f.vx += fwd * f.vx / V0 * dt; f.vy += fwd * Math.max(0.25, f.vy / V0) * dt; }
+      if (f.dv) { var de = Math.min(Math.abs(f.dv), f.dvR * dt) * (f.dv > 0 ? 1 : -1), V1 = Math.sqrt(f.vx * f.vx + f.vy * f.vy) || 1; f.vx += de * f.vx / V1; f.vy += de * f.vy / V1; f.dv -= de; if (Math.abs(f.dv) < 1e-9) f.dv = 0; }
       if (f.vx < 3) f.vx = 3;
       var V = Math.sqrt(f.vx * f.vx + f.vy * f.vy);
       if (V > MAX_V) { f.vx *= MAX_V / V; f.vy *= MAX_V / V; }
       f.x += f.vx * dt; f.y += f.vy * dt;
       f.air += dt;
       if (f.air > f.maxAir) f.maxAir = f.air;
-      if (f.y <= groundY(w, f.x)) land(f);
+      if (f.y <= groundY(w, f.x)) { land(f); touched = true; }
     }
+    // the landing cushion: critically damped, back to rest in ~0.3 s (it
+    // keeps easing out if the dot takes off again meanwhile — no pop). Not on
+    // the touchdown step: that step's move already used the full velocity.
+    if ((f.dn || f.vn) && !touched) {
+      f.vn += (-CUSHION * CUSHION * f.dn - 2 * CUSHION * f.vn) * dt; f.dn += f.vn * dt;
+      if (Math.abs(f.dn) < 1e-4 && Math.abs(f.vn) < 1e-3) { f.dn = 0; f.vn = 0; }
+    }
+    // out of steam: crawling for a while makes the sun set fast (no endless crawl)
+    if (f.phase === 'run' && f.gnd && f.s < SLOW_V) f.stuckT += dt; else f.stuckT = 0;
+    var stuck = f.phase === 'run' && (f.stuckT > STUCK_T || (f.stuck && f.stuckT > 0));
+    if (stuck && !f.stuck) ev.push('stuck');
+    f.stuck = stuck;
     var sp = speedOf(f), alt = f.y - groundY(w, f.x);
     if (sp > f.maxSpeed) f.maxSpeed = sp;
     if (alt > f.maxAlt) f.maxAlt = alt;
@@ -288,7 +328,7 @@
     var L = w.isl[f.island];
     if (L && f.x >= L.x1) {
       f.island++; f.islands++;
-      if (!dusk) { f.sunGain = Math.max(4, 13 - f.island); f.sun += f.sunGain; }
+      if (!dusk) { f.sunGain = Math.max(3, 10 - f.island); f.sun += f.sunGain; }
       addScore(f, 150 * f.island);
       ev.push('island');
     }
@@ -299,7 +339,8 @@
     // camera
     var zt = camTarget(f), kz = 1 - Math.exp(-2.4 * dt);
     f.zoom += (zt - f.zoom) * kz; f.cb += (f.cbT - f.cb) * kz;
-    if (dusk && ((f.gnd && f.s < 1.5) || f.duskT > DUSK_T)) { f.phase = 'done'; ev.push('done'); }
+    // night: done once the dot has rolled to a stop (or soon after; never mid-air for long)
+    if (dusk && ((f.gnd && (Math.abs(f.s) < 0.5 || f.duskT > DUSK_T)) || f.duskT > DUSK_T + 3)) { f.phase = 'done'; f.s = 0; ev.push('done'); }
   }
 
   function touchItems(f) {
@@ -400,7 +441,7 @@
   function runSeed(save) { return hash2(save.seed, save.runs + 1) || 1; }
 
   var ENGINE = {
-    STEP: STEP, G: G, HOLD_AIR: HOLD_AIR, HOLD_GND: HOLD_GND, MIN_V: MIN_V, MAX_V: MAX_V, SUN0: SUN0, REF_H: REF_H, VIEW_W: VIEW_W,
+    STEP: STEP, G: G, HOLD_AIR: HOLD_AIR, HOLD_GND: HOLD_GND, START_V: START_V, MAX_V: MAX_V, SUN0: SUN0, DUSK_T: DUSK_T, STUCK_T: STUCK_T, REF_H: REF_H, VIEW_W: VIEW_W,
     POWERS: POWERS, BODIES: BODIES, COLORS: COLORS, TRAILS: TRAILS, FEVER_N: FEVER_N, SUNBEAM: SUNBEAM,
     rng: rng, hash2: hash2, newWorld: newWorld, groundY: groundY, ensure: ensure, islandAt: islandAt,
     newRun: newRun, stepRun: stepRun, land: land, advance: advance, summary: summary, simulate: simulate,
@@ -723,6 +764,10 @@
   function view(f, a) {
     var v = S.v, VH = S.VH;
     v.x = f.px + (f.x - f.px) * a; v.y = f.py + (f.y - f.py) * a;
+    // the landing cushion moves the dot along the ground's normal, and the
+    // camera follows it: the scroll speed never changes in one frame
+    var dn = f.pdn + (f.dn - f.pdn) * a;
+    if (dn) { groundY(f.w, v.x); var an = Math.atan(f.w.gs); v.x -= Math.sin(an) * dn; v.y += Math.cos(an) * dn; }
     // a tall (portrait) view zooms in a little and spends half its spare height on ground
     var zf = Math.pow(Math.max(1, VH / REF_H), 0.35);
     v.z = (f.pzoom + (f.zoom - f.pzoom) * a) * zf;
@@ -924,15 +969,21 @@
     }
   }
 
-  // The dot: one glyph, a little heavier (bigger) while held, sitting on the
-  // surface along its normal. Glows (a halo of dots) while a power-up runs.
+  // The dot: one glyph, a little heavier (bigger) while held, resting on the
+  // surface along its normal. Near the ground the offset blends from the
+  // normal to straight up, so touchdowns and take-offs never jump; the landing
+  // cushion dips it a touch. Glows (a halo of dots) while a power-up runs.
   function drawDot(c, f, v, t, dt) {
     var w = f.w, x = X(v, v.x), y = Y(v, v.y), want = f.hold ? 1.95 : 1.6;
     S.dsc += (want - S.dsc) * Math.min(1, (dt || 0) * 14);
-    var r = S.dsc * RH * 0.32;
-    if (f.gnd) { groundY(w, v.x); var a = Math.atan(w.gs); x -= Math.sin(a) * r; y -= Math.cos(a) * r; }
-    else y -= r;
+    var r = S.dsc * RH * 0.32, gy = groundY(w, v.x), a = Math.atan(w.gs);
+    var b = f.gnd ? 0 : clamp((v.y - gy) / 4, 0, 1), nx = -Math.sin(a) * (1 - b), ny = Math.cos(a) * (1 - b) + b, nl = Math.sqrt(nx * nx + ny * ny) || 1;
+    x += nx / nl * r; y -= ny / nl * r;
     S.dotX = x; S.dotY = y;
+    if (S.f && S.tT <= 0) {                                  // the trail follows the drawn dot exactly
+      S.tT = 1 / 40;
+      pushTrail(v.left + x / v.z, v.bottom + (S.VH - y) / v.z); S.tseq++;
+    }
     var p = f.pw, glow = p.rocket || p.magnet || p.feather || p.x2 || p.butter;
     if (glow && S.f) {
       var gc = p.rocket ? C_FLAME : p.magnet ? C_RED : p.butter ? C_LEAF : p.x2 ? C_GOLD : C_ICE;
@@ -966,7 +1017,7 @@
     n = writeNum(Math.max(0, f.x), 0, true); x = drawNum(c, C_TEXT, n, 112, yv); glyph(c, C_MUTED, 109, x + 4, yv + 1, false, 0.85);
     n = writeNum(f.coins, 0); glyph(c, C_GOLD, 36, 200, yv); drawNum(c, C_TEXT, n, 208, yv);
     // the sun: a bar of daylight; red when it's nearly gone
-    var cells = 12, fr = clamp(f.sun / SUN0, 0, 1.5), on = Math.ceil(Math.min(1, fr) * cells - 0.001), low = f.sun < 8 && f.phase === 'run';
+    var cells = 12, fr = clamp(f.sun / SUN0, 0, 1.5), on = Math.ceil(Math.min(1, fr) * cells - 0.001), low = (f.sun < 8 || f.stuck) && f.phase === 'run';
     x = 262;
     for (var i = 0; i < cells; i++) glyph(c, i < on ? (low && ((f.t * 4) | 0) % 2 ? C_RED : C_SUN) : C_FAINT, i < on ? 35 : 45, x + i * CW * 0.8 + CW * 0.4, yv, false, 0.8);
     if (fr > 1) glyph(c, C_SUN, 43, x + cells * CW * 0.8 + 4, yv, false, 0.8);
@@ -1007,12 +1058,7 @@
     handleEvents(f);
     stepFx(dt);
     // trail samples, at the interpolated position
-    S.tT -= dt;
-    if (S.tT <= 0) {
-      S.tT = 1 / 40;
-      var ix = f.px + (f.x - f.px) * alpha, iy = f.py + (f.y - f.py) * alpha;
-      pushTrail(ix, iy + (f.gnd ? 0.6 : 0.8)); S.tseq++;
-    }
+    S.tT -= dt;   // drawDot samples the trail where the dot is drawn when this runs out
     if (f.pw.rocket > 0 && !S.rm && Math.random() < 0.5) spark(f.x - 1.5, f.y + 0.8, -f.vx * 0.2, 2, 0.45, Math.random() < 0.5 ? 42 : 46, C_FLAME, 0);
     draw(alpha, dt);
     if (f.phase === 'done') {
@@ -1069,6 +1115,10 @@
           snd.tone(523, 0.12, 'triangle', 0.04); snd.tone(784, 0.18, 'triangle', 0.04, 0, 0.1); snd.tone(1047, 0.24, 'triangle', 0.035, 0, 0.2);
           S.flash = 0.08;
           break;
+        case 'stuck':
+          say('OUT OF STEAM - THE SUN SINKS', C_RED, 2.2);
+          snd.tone(330, 0.3, 'sine', 0.035, 220);
+          break;
         case 'night':
           say('NIGHTFALL', C_STAR, 2.4);
           snd.tone(392, 0.4, 'sine', 0.04, 196);
@@ -1123,7 +1173,7 @@
       '<p>Race the sunset over endless hills. You&rsquo;re a dot: the ground is your friend.</p>' +
       '<div class="dd-keys">' + keys + '</div>' +
       '<p class="dd-tip"><b>Hold on the way down</b> to pick up speed, <b>let go on the way up</b> and the crest throws you into the air. Land along a downslope for a <b>PERFECT</b> slide; three in a row is <b>FEVER</b> (x2 score, faster).</p>' +
-      '<p class="dd-tip">Each island crossed (<b>|&gt;</b> flags) buys more daylight. When the sun sets, you coast to a stop.</p>' +
+      '<p class="dd-tip">Each island crossed (<b>|&gt;</b> flags) buys more daylight. Lose your speed and you&rsquo;re <b>out of steam</b>: the sun sinks fast. At nightfall the dot rolls to a stop.</p>' +
       '<div class="dd-keys dd-pws">' + POWERS.map(function (p) { return '<div><b class="dd-pw dd-p-' + p.id + '">[' + p.ch + ']</b> ' + p.name + ' &nbsp;<span>' + p.info + '</span></div>'; }).join('') + '</div>' +
       '<p class="dd-tip">Coins (<b>$</b>) buy new looks in the Wardrobe.</p>' +
       (first ? '' : '<button type="button" class="dd-go" data-act="close-help">Back</button>') + '</div>';

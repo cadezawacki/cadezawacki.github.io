@@ -73,11 +73,11 @@ test('islands tile the world, and hills grow', function () {
   assert.strictEqual(E.islandAt(w, w.isl[2].x0 + 1), 2);
 });
 
-test('a run is deterministic and always moves forward', function () {
+test('a run is deterministic and moves forward in daylight', function () {
   var a = run(99, pilot, 6000), b = run(99, pilot, 6000);
   assert.strictEqual(a.x, b.x); assert.strictEqual(a.score, b.score);
   var f = E.newRun(5), lx = f.x;
-  for (var i = 0; i < 6000; i++) {
+  for (var i = 0; i < 6000 && f.phase === 'run'; i++) {
     E.stepRun(f, i % 400 < 200);
     assert.ok(f.x >= lx, 'went backwards');
     assert.ok(isFinite(f.x) && isFinite(f.y) && isFinite(f.zoom), 'NaN');
@@ -86,9 +86,67 @@ test('a run is deterministic and always moves forward', function () {
   }
 });
 
-test('the dot never crawls to a halt in daylight', function () {
-  var f = E.newRun(11);
-  for (var i = 0; i < 40 / E.STEP; i++) { E.stepRun(f, true); if (f.phase === 'run' && f.t > 1) assert.ok(E.speedOf(f) >= 5.9, 'stalled at ' + f.x); }
+test('a slow dot labours on in daylight, but runs out of steam: the sun sets fast', function () {
+  var f = E.newRun(11), slowest = 1e9, stuck = false;
+  for (var i = 0; i < 400 / E.STEP && f.phase === 'run'; i++) {
+    var sun = f.sun, was = f.stuck;
+    E.stepRun(f, true);
+    if (f.t > 1 && f.gnd) slowest = Math.min(slowest, f.s);
+    if (was && f.stuck && f.phase === 'run') { stuck = true; assert.ok(sun - f.sun > 2.9 * E.STEP, 'the sun should sink faster while out of steam'); }
+    f.events.length = 0;
+  }
+  assert.ok(slowest > 1, 'froze on a hill (' + slowest + ')');
+  assert.ok(stuck, 'never ran out of steam');
+});
+
+test('every run ends: night brakes the dot to a stop, hands off or not', function () {
+  [null, function () { return true; }, pilot].forEach(function (p, k) {
+    for (var s = 1; s <= 3; s++) {
+      var f = run(s * 101 + k, p, 400 / E.STEP);
+      assert.strictEqual(f.phase, 'done', 'run ' + s + '/' + k + ' never ended');
+      assert.ok(f.t < 200, 'run ' + s + '/' + k + ' took ' + f.t.toFixed(0) + ' s');
+      assert.ok(f.ev.night === 1 && f.ev.done === 1);
+    }
+  });
+  var g = run(1, null);
+  assert.strictEqual(g.s, 0);
+  assert.ok(g.t - (g.t - g.duskT) <= E.DUSK_T + 3 + 0.01, 'coasted too long after nightfall');
+});
+
+test('a launch clears the ground: no hard land / relaunch chatter under a steady input', function () {
+  [false, true].forEach(function (hold) {
+    for (var s = 1; s <= 4; s++) {
+      var f = E.newRun(s * 21), was = f.gnd, airAt = 0, vn = 0;
+      for (var i = 0; i < 40 / E.STEP && f.phase === 'run'; i++) {
+        if (!f.gnd) { E.groundY(f.w, f.x); var a = Math.atan(f.w.gs); vn = f.vy * Math.cos(a) - f.vx * Math.sin(a); }
+        E.stepRun(f, hold);
+        if (was && !f.gnd) airAt = i;
+        // a re-contact right after a launch (where a crest's curvature eases) must be a graze
+        if (!was && f.gnd && i - airAt <= 6) assert.ok(vn > -2, 'a hop hit the ground at ' + (-vn).toFixed(1) + ' m/s (hold=' + hold + ')');
+        was = f.gnd; f.events.length = 0;
+      }
+    }
+  });
+});
+
+test('touchdown keeps the drawn velocity continuous (the cushion takes the normal speed)', function () {
+  var f = E.newRun(1), w = f.w, x = 0, i;
+  for (i = 2; i < w.xs.length - 1; i++) if (w.ys[i + 1] > w.ys[i] + 8) { x = (w.xs[i] + w.xs[i + 1]) / 2; break; }
+  E.groundY(w, x);
+  f.gnd = false; f.air = 1; f.x = x - 0.5; f.y = E.groundY(w, x - 0.5) + 0.3; f.vx = 30; f.vy = -12;
+  function drawn() { E.groundY(w, f.x); var a = Math.atan(w.gs); return [f.x - Math.sin(a) * f.dn, f.y + Math.cos(a) * f.dn]; }
+  var p0 = drawn(), v0 = null, landed = false, vIn = 0;
+  for (i = 0; i < 150; i++) {
+    if (!f.gnd) { E.groundY(w, f.x); var a = Math.atan(w.gs); vIn = -(f.vy * Math.cos(a) - f.vx * Math.sin(a)); }
+    E.stepRun(f, false);
+    var p1 = drawn(), v = [(p1[0] - p0[0]) / E.STEP, (p1[1] - p0[1]) / E.STEP];
+    // without the cushion the whole normal speed (vIn) vanishes in one step
+    if (v0) assert.ok(Math.hypot(v[0] - v0[0], v[1] - v0[1]) < 0.5 * vIn, 'velocity jumped by ' + Math.hypot(v[0] - v0[0], v[1] - v0[1]).toFixed(1) + ' of ' + vIn.toFixed(1) + ' m/s at step ' + i);
+    if (f.gnd) landed = true;
+    v0 = v; p0 = p1;
+  }
+  assert.ok(vIn > 8, 'the test should land hard enough to matter');
+  assert.ok(landed && f.dn === 0, 'the cushion should have settled');
 });
 
 test('crests throw a fast dot into the air; holding keeps it down', function () {
@@ -109,13 +167,13 @@ test('landing along a downslope is perfect; into an upslope is a thud', function
   var y = E.groundY(w, x), a = Math.atan(w.gs);
   f.gnd = false; f.air = 1; f.x = x; f.y = y - 0.01; f.vx = 30 * Math.cos(a); f.vy = 30 * Math.sin(a);
   E.land(f);
-  assert.ok(f.events.indexOf('perfect') >= 0 && f.s > 30 && f.chain === 1);
+  assert.ok(f.events.indexOf('perfect') >= 0 && f.chain === 1 && f.dv > 0, 'a perfect kick is eased in');
   var g = E.newRun(1);
   for (i = 2; i < w.xs.length - 1; i++) if (w.ys[i + 1] > w.ys[i] + 8) { x = (w.xs[i] + w.xs[i + 1]) / 2; break; }
   y = E.groundY(g.w, x);
   g.gnd = false; g.air = 1; g.chain = 2; g.x = x; g.y = y - 0.01; g.vx = 20; g.vy = -25;
   E.land(g);
-  assert.ok(g.events.indexOf('thud') >= 0 && g.chain === 0 && g.s < 20);
+  assert.ok(g.events.indexOf('thud') >= 0 && g.chain === 0 && g.s < 20 && g.s > 5 && g.dv < 0, 'a thud costs speed, eased, but never stops the dot dead');
 });
 
 test('three perfects in a row bring on the fever', function () {
@@ -162,7 +220,7 @@ test('the sun sets, the dot coasts, the run ends; islands buy time', function ()
   assert.ok(f.ev.night === 1 && f.ev.done === 1);
   assert.ok(f.islands >= 1 && f.t > E.SUN0, 'islands should have bought daylight');
   var idle = run(7, null), skilled = run(7, pilot);
-  assert.ok(idle.t < 200 && skilled.t < 300);
+  assert.ok(idle.t < 120 && skilled.t < 200);
 });
 
 test('a decent pilot beats doing nothing', function () {
