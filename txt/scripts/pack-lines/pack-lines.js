@@ -1,5 +1,5 @@
 /* Lines Pack — Sort, dedupe, number, reshape lists and lines.
-   Script-pack module: one file registering 16 palette scripts.
+   Script-pack module: one file registering 17 palette scripts.
    Extracted verbatim from txt.html (core slimming). */
 (function () {
   'use strict';
@@ -40,6 +40,191 @@ function smartCompare(a, b) {
   a = stripQuotes(a);
   b = stripQuotes(b);
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+}`);
+
+registerScript(`/**
+  {
+    "name": "Sort by Value",
+    "description": "Sort key: value lines (JSON, JS / Python dicts, YAML, key = value) by their value, keeping braces, comments and trailing-comma style",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='3' y1='6' x2='8' y2='6'/><line x1='3' y1='12' x2='8' y2='12'/><line x1='3' y1='18' x2='8' y2='18'/><line x1='11' y1='6' x2='11' y2='6.01'/><line x1='11' y1='12' x2='11' y2='12.01'/><line x1='11' y1='18' x2='11' y2='18.01'/><line x1='18' y1='5' x2='18' y2='19'/><polyline points='21 16 18 19 15 16'/></svg>",
+    "tags": "sort,value,values,by value,dict,dictionary,json,object,map,keys,yaml,python"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  const r = sortByValue(text);
+  if (r.error) { showToast(r.error, 'error', 3500); return; }
+  if (ctx.selection) ctx.selection = r.text; else ctx.fullText = r.text;
+  showToast('Sorted ' + r.count + ' entr' + (r.count === 1 ? 'y' : 'ies') + ' by value', 'success', 2000);
+}
+
+// Sorts "key: value" entries — JSON, JS / Python dicts, YAML-ish lines,
+// key = value, key => value — by their value, keeping the braces, indentation,
+// comments and comma style the text came in with.
+function sortByValue(text) {
+  const QUOTES = '"\\'\`';
+  const OPEN = '{[(', CLOSE = '}])';
+
+  // Index of the quote closing the string that opens at i (or -1).
+  function endOfString(s, i) {
+    const q = s[i];
+    for (let j = i + 1; j < s.length; j++) {
+      if (s[j] === '\\\\') { j++; continue; }
+      if (s[j] === q) return j;
+    }
+    return -1;
+  }
+  // Is a comment starting at i? "//" and "#" need whitespace before them so
+  // URLs and "#fff" values are left alone.
+  function commentAt(s, i) {
+    const before = i === 0 || s[i - 1] === ' ' || s[i - 1] === '\\t';
+    return before && (s.startsWith('//', i) || s[i] === '#' || s.startsWith('/*', i));
+  }
+  // Scan from i to the first top-level char for which stop() is true,
+  // skipping strings and bracketed groups. Returns the index, or -1 when a
+  // string or bracket is left open.
+  function scan(s, i, stop) {
+    let depth = 0;
+    for (; i < s.length; i++) {
+      const c = s[i];
+      if (QUOTES.includes(c)) { const e = endOfString(s, i); if (e < 0) return -1; i = e; continue; }
+      if (depth === 0 && stop(s, i)) return i;
+      if (OPEN.includes(c)) depth++;
+      else if (CLOSE.includes(c)) { if (depth === 0) return -1; depth--; }
+    }
+    return depth === 0 ? s.length : -1;
+  }
+  function unquote(v) {
+    return v.length >= 2 && QUOTES.includes(v[0]) && v[v.length - 1] === v[0] ? v.slice(1, -1) : v;
+  }
+
+  // One entry → { indent, head (up to the end of the value), comma, tail, key, value }
+  function parseEntry(line) {
+    const indent = line.match(/^\\s*/)[0];
+    let i = indent.length;
+    if (i >= line.length) return null;
+    // Key: a quoted string, or anything up to the separator.
+    let keyEnd;
+    if (QUOTES.includes(line[i])) {
+      keyEnd = endOfString(line, i);
+      if (keyEnd < 0) return null;
+      keyEnd++;
+    } else {
+      keyEnd = scan(line, i, (s, j) => s[j] === ':' || s[j] === '=' || s.startsWith('->', j));
+      if (keyEnd < 0 || keyEnd === i) return null;
+    }
+    const key = unquote(line.slice(i, keyEnd).trim());
+    // Separator: ":", "=>", "=", ":=" or "->", with any whitespace around it.
+    let j = keyEnd;
+    while (line[j] === ' ' || line[j] === '\\t') j++;
+    const sep = line.slice(j).match(/^(=>|:=|->|:|=)/);
+    if (!sep) return null;
+    j += sep[0].length;
+    while (line[j] === ' ' || line[j] === '\\t') j++;
+    // Value: a quoted string, or anything up to a top-level comma / comment.
+    let valEnd;
+    if (QUOTES.includes(line[j])) {
+      valEnd = endOfString(line, j);
+      if (valEnd < 0) return null;
+      valEnd++;
+    } else {
+      valEnd = scan(line, j, (s, k) => s[k] === ',' || commentAt(s, k));
+      if (valEnd < 0) return null;
+      while (valEnd > j && /\\s/.test(line[valEnd - 1])) valEnd--;
+    }
+    const raw = line.slice(j, valEnd);
+    // After the value: optional comma, then only whitespace or a comment.
+    let rest = line.slice(valEnd);
+    let comma = false;
+    const m = rest.match(/^\\s*,/);
+    if (m) { comma = true; rest = rest.slice(m[0].length); }
+    const t = rest.trim();
+    if (t && t !== ';' && !commentAt(' ' + t, 1)) return null;
+    return { indent, head: line.slice(indent.length, valEnd), comma, tail: rest, key, value: unquote(raw.replace(/;$/, '').trim()) };
+  }
+
+  function cmpText(a, b) {
+    const na = Number(a), nb = Number(b);
+    if (a.trim() !== '' && b.trim() !== '' && isFinite(na) && isFinite(nb) && na !== nb) return na - nb;
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }) || (a < b ? -1 : a > b ? 1 : 0);
+  }
+  const cmp = (a, b) => cmpText(a.value, b.value) || cmpText(a.key, b.key);
+
+  // Comma style: all, none, or "between" (all but the last) is kept as is
+  // after sorting; anything else leaves each entry's own comma alone.
+  function fixCommas(sorted, original) {
+    const n = original.length;
+    const between = n > 1 && original.slice(0, -1).every(e => e.comma) && !original[n - 1].comma;
+    if (between) sorted.forEach((e, k) => { e.comma = k < n - 1; });
+  }
+
+  // Peel off an outer { … } (with any "x = {" / "dict(" lead-in and "};" tail).
+  let pre = '', post = '', inner = text;
+  const open = text.match(/^\\s*(?:[^\\n{}"'\`]*?[=:(]\\s*)?\\{/);
+  const close = text.match(/\\}[\\s);,]*$/);
+  if (open && close && close.index >= open[0].length) {
+    pre = open[0];
+    post = text.slice(close.index);
+    inner = text.slice(open[0].length, close.index);
+  }
+
+  const lines = inner.split('\\n');
+  const nonBlank = lines.filter(l => l.trim());
+
+  // Everything on one line: {"a": "x", "b": "y"}
+  if (nonBlank.length === 1) {
+    const line = nonBlank[0];
+    const lead = line.match(/^\\s*/)[0], trail = line.match(/\\s*$/)[0];
+    const body = line.trim();
+    const parts = [];
+    for (let i = 0; i <= body.length;) {
+      const e = scan(body, i, (s, k) => s[k] === ',');
+      if (e < 0) return { error: 'Could not parse — unbalanced quotes or brackets' };
+      parts.push(body.slice(i, e));
+      i = e + 1;
+      if (e === body.length) break;
+    }
+    const trailingComma = parts.length > 1 && !parts[parts.length - 1].trim();
+    if (trailingComma) parts.pop();
+    const entries = parts.map(p => parseEntry(p.trim()));
+    if (entries.some(e => !e)) return { error: 'Could not find a key: value entry in "' + parts[entries.indexOf(null)].trim() + '"' };
+    if (entries.length < 2) return { error: 'Need at least two key: value entries to sort' };
+    const space = (body.match(/,(\\s*)/) || ['', ' '])[1];
+    entries.sort(cmp);
+    const out = lead + entries.map(e => e.head).join(',' + space) + (trailingComma ? ',' : '') + trail;
+    const newLines = inner.split('\\n').map(l => (l === line ? out : l));
+    return { text: pre + newLines.join('\\n') + post, count: entries.length };
+  }
+
+  // One entry per line. Comment lines travel with the entry below them;
+  // blank or comment lines before the first / after the last entry stay put.
+  const isComment = l => /^\\s*(\\/\\/|#|\\/\\*|\\*|--)/.test(l);
+  const items = [];
+  let pending = [], head = [], first = true;
+  for (let n = 0; n < lines.length; n++) {
+    const line = lines[n];
+    if (!line.trim() || isComment(line)) { pending.push(line); continue; }
+    const e = parseEntry(line);
+    if (!e) return { error: 'Line ' + (n + 1) + ' is not a one-line key: value entry: ' + line.trim().slice(0, 60) };
+    if (first) { head = pending; first = false; } else e.before = pending;
+    e.before = e.before || [];
+    pending = [];
+    items.push(e);
+  }
+  if (items.length < 2) return { error: 'Need at least two key: value entries to sort' };
+  const tail = pending;
+  const slots = items.map(e => e.indent);       // indentation belongs to the line, not the entry
+  const original = items.slice();
+  items.sort(cmp);
+  fixCommas(items, original);
+  const out = head.slice();
+  items.forEach((e, k) => {
+    out.push(...e.before);
+    out.push(slots[k] + e.head + (e.comma ? ',' : '') + e.tail);
+  });
+  out.push(...tail);
+  return { text: pre + out.join('\\n') + post, count: items.length };
 }`);
 
 registerScript(`/**
