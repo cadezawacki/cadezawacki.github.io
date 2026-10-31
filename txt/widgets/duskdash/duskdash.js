@@ -13,7 +13,7 @@
  * accumulator and the terrain is analytic (cosine hills, C¹ smooth), so a
  * glide is the same at 60 or 120 Hz; rendering interpolates, and touchdowns
  * go through a short cushion, so the dot never changes velocity in one frame.
- * Lose your momentum and the dot labours on, but the sun sets fast. The loop runs
+ * A slow dot still climbs briskly: the sun is the only timer. The loop runs
  * only while a run is on screen; it pauses on blur, tab hide and minimize.
  * Progress persists in Cade.store (cade-dd-*). Offline module, no assets. */
 (function () {
@@ -26,10 +26,9 @@
   var HOLD_AIR = 3.4, HOLD_GND = 2.6;  // gravity multipliers while held (heavy: dive)
   var START_V = 9, MAX_V = 150;
   var ROLL = 0.5, ROLL_BACK = 4;       // rolling resistance (m/s²); more when rolling backwards
-  var CRAWL = 4;                       // in daylight a slow dot labours on at about this speed (it never freezes on a hill)
+  var CRAWL = 13;                      // in daylight a slow dot still climbs briskly at about this speed (the sun is the timer)
   var LAUNCH_V = 8;                    // slower than this, a crest can't throw you
   var SUN0 = 45, DUSK_T = 3.5;         // seconds of daylight at the start; seconds to roll to a stop once it's dark
-  var SLOW_V = 5, STUCK_T = 2.5, STUCK_DRAIN = 3;  // slower than SLOW_V for STUCK_T s: out of steam, the sun sets STUCK_DRAIN× faster
   var CUSHION = 16;                    // landing cushion (rad/s): the touchdown's normal speed springs out, critically damped (~0.3 s)
   var EASE = 0.2;                      // seconds a perfect kick / thud takes to change the speed
   var PERFECT_A = 0.36, BAD_A = 0.9;   // landing angle (velocity vs slope, rad): perfect / thud
@@ -196,7 +195,7 @@
     var w = newWorld(seed), y = groundY(w, START_X);
     var f = {
       seed: seed >>> 0, w: w, phase: 'run', x: START_X, y: y, vx: START_V, vy: 0, s: START_V, gnd: true, px: START_X, py: y,
-      t: 0, sun: SUN0, duskT: 0, acc: 0, steps: 0, hold: false, stuckT: 0, stuck: false,
+      t: 0, sun: SUN0, duskT: 0, acc: 0, steps: 0, hold: false,
       dn: 0, vn: 0, pdn: 0, dv: 0, dvR: 0,
       air: 0, maxAir: 0, maxSpeed: 0, maxAlt: 0, score: 0, coins: 0, perfects: 0, chain: 0, bestChain: 0, fever: 0, fevers: 0,
       island: 0, islands: 0, pw: { rocket: 0, magnet: 0, feather: 0, x2: 0, butter: 0 }, pwGot: 0, lastPw: '', ii: 0,
@@ -262,7 +261,7 @@
     f.px = f.x; f.py = f.y; f.pzoom = f.zoom; f.pcb = f.cb; f.pdn = f.dn;
     f.steps++; f.t += dt;
     if (f.phase === 'run') {
-      f.sun -= dt * (f.stuck ? STUCK_DRAIN : 1);
+      f.sun -= dt;
       if (f.sun <= 0) { f.sun = 0; f.phase = 'dusk'; f.duskT = 0; ev.push('night'); }
     } else f.duskT += dt;
     for (k in pw) if (pw[k] > 0) { pw[k] -= dt; if (pw[k] <= 0) { pw[k] = 0; ev.push('pwoff'); } }
@@ -274,10 +273,11 @@
     if (f.gnd) {
       groundY(w, f.x);
       var a = Math.atan(w.gs), ca = Math.cos(a), sa = Math.sin(a);
-      // slow and climbing in daylight, the dot labours on: gravity fades out
-      // (smoothly) as it nears CRAWL, and it's eased back up to CRAWL
+      // slow and climbing in daylight, the dot keeps a brisk pace: gravity
+      // fades out (smoothly) as it nears CRAWL, and it's eased back up to CRAWL.
+      // Momentum is still what flings you off the crests.
       var gk = 1;
-      if (!dusk && sa > 0) { var u = clamp((f.s - CRAWL) / 5, 0, 1); gk = 0.1 + 0.9 * u * u * (3 - 2 * u); }
+      if (!dusk && sa > 0) { var u = clamp((f.s - CRAWL) / 6, 0, 1); gk = 0.1 + 0.9 * u * u * (3 - 2 * u); }
       f.s += (-g * sa * gk + fwd) * dt;
       if (!dusk && f.s < CRAWL) f.s += (CRAWL - f.s) * 6 * dt;
       // rolling resistance; in the dark the dot tires and brakes to a stop
@@ -315,11 +315,6 @@
       f.vn += (-CUSHION * CUSHION * f.dn - 2 * CUSHION * f.vn) * dt; f.dn += f.vn * dt;
       if (Math.abs(f.dn) < 1e-4 && Math.abs(f.vn) < 1e-3) { f.dn = 0; f.vn = 0; }
     }
-    // out of steam: crawling for a while makes the sun set fast (no endless crawl)
-    if (f.phase === 'run' && f.gnd && f.s < SLOW_V) f.stuckT += dt; else f.stuckT = 0;
-    var stuck = f.phase === 'run' && (f.stuckT > STUCK_T || (f.stuck && f.stuckT > 0));
-    if (stuck && !f.stuck) ev.push('stuck');
-    f.stuck = stuck;
     var sp = speedOf(f), alt = f.y - groundY(w, f.x);
     if (sp > f.maxSpeed) f.maxSpeed = sp;
     if (alt > f.maxAlt) f.maxAlt = alt;
@@ -441,7 +436,7 @@
   function runSeed(save) { return hash2(save.seed, save.runs + 1) || 1; }
 
   var ENGINE = {
-    STEP: STEP, G: G, HOLD_AIR: HOLD_AIR, HOLD_GND: HOLD_GND, START_V: START_V, MAX_V: MAX_V, SUN0: SUN0, DUSK_T: DUSK_T, STUCK_T: STUCK_T, REF_H: REF_H, VIEW_W: VIEW_W,
+    STEP: STEP, G: G, HOLD_AIR: HOLD_AIR, HOLD_GND: HOLD_GND, START_V: START_V, MAX_V: MAX_V, SUN0: SUN0, DUSK_T: DUSK_T, CRAWL: CRAWL, REF_H: REF_H, VIEW_W: VIEW_W,
     POWERS: POWERS, BODIES: BODIES, COLORS: COLORS, TRAILS: TRAILS, FEVER_N: FEVER_N, SUNBEAM: SUNBEAM,
     rng: rng, hash2: hash2, newWorld: newWorld, groundY: groundY, ensure: ensure, islandAt: islandAt,
     newRun: newRun, stepRun: stepRun, land: land, advance: advance, summary: summary, simulate: simulate,
@@ -811,12 +806,12 @@
       }
       c.globalAlpha = 1;
     }
-    drawSun(c, day, night, hz);
     for (i = 0; i < CLOUDS.length; i++) {
       var cl = CLOUDS[i], tl = S.cloudT[cl.s], cx = ((cl.u - S.cloudOff) % CLOUD_P + CLOUD_P) % CLOUD_P - 160;
       var cyy = 44 + cl.v * Math.max(30, Math.min(hz, VH * 0.5) - 90) / 150;   // the upper sky only
       if (cx < VW && cx + tl.w > 0 && cyy + tl.h < hz) c.drawImage(tl.cv, cx, cyy, tl.w, tl.h);
     }
+    drawSun(c, day, night, hz);                       // in front of the clouds: it's the clock
     ridge(c, FAR, S.farOff, hz);
 
     drawTerrain(c, v);
@@ -1017,10 +1012,14 @@
     n = writeNum(Math.max(0, f.x), 0, true); x = drawNum(c, C_TEXT, n, 112, yv); glyph(c, C_MUTED, 109, x + 4, yv + 1, false, 0.85);
     n = writeNum(f.coins, 0); glyph(c, C_GOLD, 36, 200, yv); drawNum(c, C_TEXT, n, 208, yv);
     // the sun: a bar of daylight; red when it's nearly gone
-    var cells = 12, fr = clamp(f.sun / SUN0, 0, 1.5), on = Math.ceil(Math.min(1, fr) * cells - 0.001), low = (f.sun < 8 || f.stuck) && f.phase === 'run';
+    var cells = 12, fr = clamp(f.sun / SUN0, 0, 1.5), on = Math.ceil(Math.min(1, fr) * cells - 0.001), low = f.sun < 8 && f.phase === 'run';
     x = 262;
     for (var i = 0; i < cells; i++) glyph(c, i < on ? (low && ((f.t * 4) | 0) % 2 ? C_RED : C_SUN) : C_FAINT, i < on ? 35 : 45, x + i * CW * 0.8 + CW * 0.4, yv, false, 0.8);
     if (fr > 1) glyph(c, C_SUN, 43, x + cells * CW * 0.8 + 4, yv, false, 0.8);
+    if (f.phase === 'run') {                          // the clock itself: seconds of daylight left
+      n = writeNum(Math.ceil(f.sun), 0); NB[n++] = 115;
+      drawNum(c, low ? C_RED : C_SUN, n, VW - 6, yl, 'right', L);
+    }
     // the second row: the island, power-ups running, then the streak
     x = drawStr(c, C_MUTED, 'ISLAND ', 6, y2, 'left', false, L);
     n = writeNum(f.island + 1, 0); x = drawNum(c, C_TEXT, n, x, y2, 'left', L) + CW * 1.5;
@@ -1115,10 +1114,6 @@
           snd.tone(523, 0.12, 'triangle', 0.04); snd.tone(784, 0.18, 'triangle', 0.04, 0, 0.1); snd.tone(1047, 0.24, 'triangle', 0.035, 0, 0.2);
           S.flash = 0.08;
           break;
-        case 'stuck':
-          say('OUT OF STEAM - THE SUN SINKS', C_RED, 2.2);
-          snd.tone(330, 0.3, 'sine', 0.035, 220);
-          break;
         case 'night':
           say('NIGHTFALL', C_STAR, 2.4);
           snd.tone(392, 0.4, 'sine', 0.04, 196);
@@ -1173,7 +1168,7 @@
       '<p>Race the sunset over endless hills. You&rsquo;re a dot: the ground is your friend.</p>' +
       '<div class="dd-keys">' + keys + '</div>' +
       '<p class="dd-tip"><b>Hold on the way down</b> to pick up speed, <b>let go on the way up</b> and the crest throws you into the air. Land along a downslope for a <b>PERFECT</b> slide; three in a row is <b>FEVER</b> (x2 score, faster).</p>' +
-      '<p class="dd-tip">Each island crossed (<b>|&gt;</b> flags) buys more daylight. Lose your speed and you&rsquo;re <b>out of steam</b>: the sun sinks fast. At nightfall the dot rolls to a stop.</p>' +
+      '<p class="dd-tip">Each island crossed (<b>|&gt;</b> flags) buys more daylight. The <b>sun is your timer</b>: speed is everything. At nightfall the dot rolls to a stop.</p>' +
       '<div class="dd-keys dd-pws">' + POWERS.map(function (p) { return '<div><b class="dd-pw dd-p-' + p.id + '">[' + p.ch + ']</b> ' + p.name + ' &nbsp;<span>' + p.info + '</span></div>'; }).join('') + '</div>' +
       '<p class="dd-tip">Coins (<b>$</b>) buy new looks in the Wardrobe.</p>' +
       (first ? '' : '<button type="button" class="dd-go" data-act="close-help">Back</button>') + '</div>';
@@ -1272,7 +1267,8 @@
     S.phase = 'run'; S.paused = false; S.endT = 0; S.coinN = 0; S.coinT = 0; S.dsc = 1.6; S.tseq = 0;
     clearInput(); clearFx(); S.msg = null; S.msgQ.length = 0;
     showCard(null); setPad('run'); syncHead();
-    say('HOLD TO DIVE', C_MUTED, 1.6);
+    say('HOLD TO DIVE', C_MUTED, 1.4);
+    say('BEAT THE SUNSET', C_SUN, 1.6, true);
     kick();
   }
   function endRun() {

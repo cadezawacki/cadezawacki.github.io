@@ -86,17 +86,16 @@ test('a run is deterministic and moves forward in daylight', function () {
   }
 });
 
-test('a slow dot labours on in daylight, but runs out of steam: the sun sets fast', function () {
-  var f = E.newRun(11), slowest = 1e9, stuck = false;
-  for (var i = 0; i < 400 / E.STEP && f.phase === 'run'; i++) {
-    var sun = f.sun, was = f.stuck;
-    E.stepRun(f, true);
-    if (f.t > 1 && f.gnd) slowest = Math.min(slowest, f.s);
-    if (was && f.stuck && f.phase === 'run') { stuck = true; assert.ok(sun - f.sun > 2.9 * E.STEP, 'the sun should sink faster while out of steam'); }
-    f.events.length = 0;
-  }
-  assert.ok(slowest > 1, 'froze on a hill (' + slowest + ')');
-  assert.ok(stuck, 'never ran out of steam');
+test('a slow dot still climbs briskly in daylight (the sun is the timer, not the hills)', function () {
+  [false, true].forEach(function (hold) {
+    var f = E.newRun(11), slowest = 1e9;
+    for (var i = 0; i < 60 / E.STEP && f.phase === 'run'; i++) {
+      E.stepRun(f, hold);
+      if (f.t > 1 && f.gnd) slowest = Math.min(slowest, f.s);
+      f.events.length = 0;
+    }
+    assert.ok(slowest > E.CRAWL - 2.5, 'crawled at ' + slowest.toFixed(1) + ' m/s (hold=' + hold + ')');
+  });
 });
 
 test('every run ends: night brakes the dot to a stop, hands off or not', function () {
