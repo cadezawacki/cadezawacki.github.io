@@ -2909,6 +2909,426 @@
       "css": "widgets/duskdash/duskdash.css"
     },
     {
+      "id": "cryptogram",
+      "type": "widget",
+      "name": "Cryptogram",
+      "description": "Crack a famous quote hidden behind a letter-swap cipher — daily puzzle, hints, timer",
+      "icon": "🔐",
+      "tags": "game,puzzle,word,cipher,cryptogram,quote,decode,daily",
+      "entry": "widgets/cryptogram/cryptogram.js",
+      "css": "widgets/cryptogram/cryptogram.css"
+    },
+    {
+      "id": "autocomplete",
+      "type": "widget",
+      "name": "Finish the Phrase",
+      "description": "Guess how sayings and famous lines continue — fuzzy scoring, vs CPU or pass-and-play",
+      "icon": "✍️",
+      "tags": "game,word,phrase,autocomplete,guess,idiom,quiz,party,2 player",
+      "entry": "widgets/autocomplete/autocomplete.js",
+      "css": "widgets/autocomplete/autocomplete.css"
+    },
+    {
+      "id": "wordladder",
+      "type": "widget",
+      "name": "Word Ladder",
+      "description": "Change one letter at a time to climb from one word to another — daily par, hints, solver",
+      "icon": "🪜",
+      "tags": "game,puzzle,word,ladder,doublets,daily",
+      "entry": "widgets/wordladder/wordladder.js",
+      "css": "widgets/wordladder/wordladder.css"
+    },
+    {
+      "id": "wordsearch",
+      "type": "widget",
+      "name": "Word Search",
+      "description": "Find hidden words in a letter grid — themed packs or words from your own note",
+      "icon": "🔎",
+      "tags": "game,puzzle,word,search,find,grid,note",
+      "entry": "widgets/wordsearch/wordsearch.js",
+      "css": "widgets/wordsearch/wordsearch.css"
+    },
+    {
+      "id": "lettertiles",
+      "type": "widget",
+      "name": "Letter Tiles",
+      "description": "Build crossing words on a board for points — vs CPU or pass-and-play",
+      "icon": "🔤",
+      "tags": "game,word,board,tiles,crossword,2 player,cpu",
+      "entry": "widgets/lettertiles/lettertiles.js",
+      "css": "widgets/lettertiles/lettertiles.css"
+    },
+    {
+      "id": "flowlines",
+      "type": "widget",
+      "name": "Flow Lines",
+      "description": "Join matching dots with paths that fill the grid without crossing — generated levels, daily",
+      "icon": "〰️",
+      "tags": "game,puzzle,logic,flow,lines,connect,daily",
+      "entry": "widgets/flowlines/flowlines.js",
+      "css": "widgets/flowlines/flowlines.css"
+    },
+    {
+      "id": "chess",
+      "type": "widget",
+      "name": "Chess",
+      "description": "Classic chess — vs the computer (levels) or pass-and-play, undo, hints, clocks",
+      "icon": "♞",
+      "tags": "game,board,chess,strategy,2 player,cpu",
+      "entry": "widgets/chess/chess.js",
+      "css": "widgets/chess/chess.css"
+    },
+    {
+      "id": "chesspuzzles",
+      "type": "widget",
+      "name": "Chess Puzzles",
+      "description": "Mate-in-one, two and three puzzles — streaks, hints, a daily puzzle",
+      "icon": "♟️",
+      "tags": "game,puzzle,chess,tactics,mate,daily",
+      "entry": "widgets/chesspuzzles/chesspuzzles.js",
+      "css": "widgets/chesspuzzles/chesspuzzles.css"
+    },
+    {
+      "id": "lander",
+      "type": "widget",
+      "name": "Lunar Lander",
+      "description": "Thrust and rotate onto the landing pad — mind the fuel and your legs",
+      "icon": "🚀",
+      "tags": "game,arcade,fun,lander,space,physics,thrust",
+      "entry": "widgets/lander/lander.js",
+      "css": "widgets/lander/lander.css"
+    },
+    {
+      "id": "roadhopper",
+      "type": "widget",
+      "name": "Road Hopper",
+      "description": "Hop across busy roads and rivers — lanes speed up, grab bonuses",
+      "icon": "🚦",
+      "tags": "game,arcade,fun,road,cross,traffic,river,hop",
+      "entry": "widgets/roadhopper/roadhopper.js",
+      "css": "widgets/roadhopper/roadhopper.css"
+    },
+    {
+      "id": "mazemuncher",
+      "type": "widget",
+      "name": "Maze Muncher",
+      "description": "A speedy maze chase — munch every dot, outfox four very different chasers",
+      "icon": "🍒",
+      "tags": "game,arcade,fun,maze,chase,dots,ghosts,speed",
+      "entry": "widgets/mazemuncher/mazemuncher.js",
+      "css": "widgets/mazemuncher/mazemuncher.css"
+    },
+    {
+      "id": "pinball",
+      "type": "widget",
+      "name": "Pinball",
+      "description": "ASCII pinball — flippers, bumpers, ramps, missions and multiball",
+      "icon": "🕹️",
+      "tags": "game,arcade,fun,pinball,flippers,physics,table",
+      "entry": "widgets/pinball/pinball.js",
+      "css": "widgets/pinball/pinball.css"
+    },
+    {
+      "id": "bugswarm",
+      "type": "widget",
+      "name": "Bug Swarm",
+      "description": "Blast a segmented bug as it winds down through the mushroom field",
+      "icon": "🐛",
+      "tags": "game,arcade,fun,shooter,bug,centipede,mushrooms",
+      "entry": "widgets/bugswarm/bugswarm.js",
+      "css": "widgets/bugswarm/bugswarm.css"
+    },
+    {
+      "id": "caveflyer",
+      "type": "widget",
+      "name": "Cave Flyer",
+      "description": "Hold to rise, let go to fall — thread a narrowing cave",
+      "icon": "🚁",
+      "tags": "game,arcade,fun,one button,hold,cave,helicopter,endless",
+      "entry": "widgets/caveflyer/caveflyer.js",
+      "css": "widgets/caveflyer/caveflyer.css"
+    },
+    {
+      "id": "stacktower",
+      "type": "widget",
+      "name": "Stack Tower",
+      "description": "Tap to drop the sliding block — overhangs get sliced, perfect drops grow",
+      "icon": "🧱",
+      "tags": "game,arcade,fun,one button,tap,stack,tower,endless",
+      "entry": "widgets/stacktower/stacktower.js",
+      "css": "widgets/stacktower/stacktower.css"
+    },
+    {
+      "id": "minigolf",
+      "type": "widget",
+      "name": "Mini Golf",
+      "description": "18 ASCII holes of bank shots, windmills, slopes and water — par and scorecards",
+      "icon": "⛳",
+      "tags": "game,sport,fun,golf,mini golf,putt,physics,2 player",
+      "entry": "widgets/minigolf/minigolf.js",
+      "css": "widgets/minigolf/minigolf.css"
+    },
+    {
+      "id": "pool",
+      "type": "widget",
+      "name": "Pool",
+      "description": "8-ball pool with an aiming line — vs CPU or pass-and-play",
+      "icon": "🎱",
+      "tags": "game,sport,fun,pool,billiards,8-ball,physics,2 player,cpu",
+      "entry": "widgets/pool/pool.js",
+      "css": "widgets/pool/pool.css"
+    },
+    {
+      "id": "slingshot",
+      "type": "widget",
+      "name": "Siege Sling",
+      "description": "Fling stones at wobbly towers and topple the castle guards — physics puzzles",
+      "icon": "🏰",
+      "tags": "game,arcade,fun,slingshot,physics,towers,launch,puzzle",
+      "entry": "widgets/slingshot/slingshot.js",
+      "css": "widgets/slingshot/slingshot.css"
+    },
+    {
+      "id": "bowling",
+      "type": "widget",
+      "name": "Bowling",
+      "description": "Aim, spin and hook through 10 frames — vs CPU or pass-and-play",
+      "icon": "🎳",
+      "tags": "game,sport,fun,bowling,strike,spare,2 player,cpu",
+      "entry": "widgets/bowling/bowling.js",
+      "css": "widgets/bowling/bowling.css"
+    },
+    {
+      "id": "darts",
+      "type": "widget",
+      "name": "Darts",
+      "description": "501 and Cricket with a wobbling aim — vs CPU or pass-and-play",
+      "icon": "🎯",
+      "tags": "game,sport,fun,darts,501,cricket,2 player,cpu",
+      "entry": "widgets/darts/darts.js",
+      "css": "widgets/darts/darts.css"
+    },
+    {
+      "id": "curling",
+      "type": "widget",
+      "name": "Curling",
+      "description": "Slide stones, sweep to steer, score the house — vs CPU or pass-and-play",
+      "icon": "🥌",
+      "tags": "game,sport,fun,curling,ice,sweep,2 player,cpu",
+      "entry": "widgets/curling/curling.js",
+      "css": "widgets/curling/curling.css"
+    },
+    {
+      "id": "bridge",
+      "type": "widget",
+      "name": "Bridge Builder",
+      "description": "Build a truss from limited parts so the cart makes it across",
+      "icon": "🌉",
+      "tags": "game,puzzle,physics,bridge,build,engineering",
+      "entry": "widgets/bridge/bridge.js",
+      "css": "widgets/bridge/bridge.css"
+    },
+    {
+      "id": "marblerun",
+      "type": "widget",
+      "name": "Marble Run",
+      "description": "Place ramps, funnels and bumpers, then let the marbles roll — goals and a sandbox",
+      "icon": "🛝",
+      "tags": "game,toy,physics,marble,sandbox,puzzle",
+      "entry": "widgets/marblerun/marblerun.js",
+      "css": "widgets/marblerun/marblerun.css"
+    },
+    {
+      "id": "fallingsand",
+      "type": "widget",
+      "name": "Falling Sand",
+      "description": "A sandbox of sand, water, fire, plants and more — watch it all interact",
+      "icon": "⏳",
+      "tags": "toy,fun,sandbox,sand,simulation,physics,relax",
+      "entry": "widgets/fallingsand/fallingsand.js",
+      "css": "widgets/fallingsand/fallingsand.css"
+    },
+    {
+      "id": "blackjack",
+      "type": "widget",
+      "name": "Blackjack",
+      "description": "Hit, stand, double, split — with a basic-strategy coach and a chip bank",
+      "icon": "🃏",
+      "tags": "game,cards,casino,blackjack,21",
+      "entry": "widgets/blackjack/blackjack.js",
+      "css": "widgets/blackjack/blackjack.css"
+    },
+    {
+      "id": "holdem",
+      "type": "widget",
+      "name": "Texas Hold'em",
+      "description": "No-limit hold'em vs 3–5 computer players with distinct styles",
+      "icon": "♠️",
+      "tags": "game,cards,casino,poker,holdem,cpu",
+      "entry": "widgets/holdem/holdem.js",
+      "css": "widgets/holdem/holdem.css"
+    },
+    {
+      "id": "farkle",
+      "type": "widget",
+      "name": "Farkle",
+      "description": "Push-your-luck dice — Farkle and Pig, vs CPU or pass-and-play",
+      "icon": "🎲",
+      "tags": "game,dice,farkle,pig,push your luck,2 player,cpu",
+      "entry": "widgets/farkle/farkle.js",
+      "css": "widgets/farkle/farkle.css"
+    },
+    {
+      "id": "hearts",
+      "type": "widget",
+      "name": "Hearts",
+      "description": "Classic trick-taking Hearts — pass, avoid points, shoot the moon",
+      "icon": "♥️",
+      "tags": "game,cards,hearts,tricks,cpu",
+      "entry": "widgets/hearts/hearts.js",
+      "css": "widgets/hearts/hearts.css"
+    },
+    {
+      "id": "checkers",
+      "type": "widget",
+      "name": "Checkers",
+      "description": "Checkers with forced captures and kings — vs CPU or pass-and-play",
+      "icon": "⛀",
+      "tags": "game,board,checkers,draughts,2 player,cpu",
+      "entry": "widgets/checkers/checkers.js",
+      "css": "widgets/checkers/checkers.css"
+    },
+    {
+      "id": "seabattle",
+      "type": "widget",
+      "name": "Sea Battle",
+      "description": "Hide your fleet, hunt theirs — vs CPU or pass-and-play",
+      "icon": "🚢",
+      "tags": "game,board,battleship,sea battle,ships,2 player,cpu",
+      "entry": "widgets/seabattle/seabattle.js",
+      "css": "widgets/seabattle/seabattle.css"
+    },
+    {
+      "id": "mancala",
+      "type": "widget",
+      "name": "Mancala",
+      "description": "Sow the seeds, capture, and fill your store — vs CPU or pass-and-play",
+      "icon": "🥜",
+      "tags": "game,board,mancala,kalah,seeds,2 player,cpu",
+      "entry": "widgets/mancala/mancala.js",
+      "css": "widgets/mancala/mancala.css"
+    },
+    {
+      "id": "dotsboxes",
+      "type": "widget",
+      "name": "Dots and Boxes",
+      "description": "Draw lines, close boxes, chain captures — vs CPU or pass-and-play",
+      "icon": "✏️",
+      "tags": "game,pencil,dots,boxes,2 player,cpu",
+      "entry": "widgets/dotsboxes/dotsboxes.js",
+      "css": "widgets/dotsboxes/dotsboxes.css"
+    },
+    {
+      "id": "partygames",
+      "type": "widget",
+      "name": "Party Games",
+      "description": "Charades timer, Fishbowl and Hot Seat questions — pass the phone around",
+      "icon": "🎉",
+      "tags": "game,party,charades,fishbowl,hot seat,group,timer",
+      "entry": "widgets/partygames/partygames.js",
+      "css": "widgets/partygames/partygames.css"
+    },
+    {
+      "id": "lemonade",
+      "type": "widget",
+      "name": "Lemonade Stand",
+      "description": "Weather, prices and recipes — run the stand day by day",
+      "icon": "🍋",
+      "tags": "game,sim,business,lemonade,economy",
+      "entry": "widgets/lemonade/lemonade.js",
+      "css": "widgets/lemonade/lemonade.css"
+    },
+    {
+      "id": "tinyfarm",
+      "type": "widget",
+      "name": "Tiny Farm",
+      "description": "Plant ASCII crops that grow in real time while you're away",
+      "icon": "🌱",
+      "tags": "game,sim,idle,farm,crops,garden",
+      "entry": "widgets/tinyfarm/tinyfarm.js",
+      "css": "widgets/tinyfarm/tinyfarm.css"
+    },
+    {
+      "id": "spacetrader",
+      "type": "widget",
+      "name": "Space Trader",
+      "description": "Buy low, sell high across the stars — upgrades, pirates and missions",
+      "icon": "🛰️",
+      "tags": "game,sim,trading,space,economy,pirates",
+      "entry": "widgets/spacetrader/spacetrader.js",
+      "css": "widgets/spacetrader/spacetrader.css"
+    },
+    {
+      "id": "factory",
+      "type": "widget",
+      "name": "Factory Lines",
+      "description": "Build conveyor and machine lines to automate production puzzles",
+      "icon": "🏭",
+      "tags": "game,puzzle,automation,factory,conveyor,logistics",
+      "entry": "widgets/factory/factory.js",
+      "css": "widgets/factory/factory.css"
+    },
+    {
+      "id": "deckbuilder",
+      "type": "widget",
+      "name": "Deck Delve",
+      "description": "A card-battling roguelite — build a deck, climb a branching map",
+      "icon": "🗡️",
+      "tags": "game,cards,roguelite,deckbuilder,strategy",
+      "entry": "widgets/deckbuilder/deckbuilder.js",
+      "css": "widgets/deckbuilder/deckbuilder.css"
+    },
+    {
+      "id": "escaperoom",
+      "type": "widget",
+      "name": "Escape Room",
+      "description": "Inspect, combine items and crack codes to get out",
+      "icon": "🗝️",
+      "tags": "game,puzzle,escape room,adventure,codes",
+      "entry": "widgets/escaperoom/escaperoom.js",
+      "css": "widgets/escaperoom/escaperoom.css"
+    },
+    {
+      "id": "morse",
+      "type": "widget",
+      "name": "Morse Trainer",
+      "description": "Learn Morse code by ear — levels, speed, and an arcade mode",
+      "icon": "📡",
+      "tags": "game,learning,morse,code,radio,training",
+      "entry": "widgets/morse/morse.js",
+      "css": "widgets/morse/morse.css"
+    },
+    {
+      "id": "plates",
+      "type": "widget",
+      "name": "License Plate Game",
+      "description": "Road-trip tracker for states seen — rarity scores, progress, saved trips",
+      "icon": "🚗",
+      "tags": "game,road trip,license plate,states,travel,tracker,car",
+      "entry": "widgets/plates/plates.js",
+      "css": "widgets/plates/plates.css"
+    },
+    {
+      "id": "arcade",
+      "type": "widget",
+      "name": "Arcade",
+      "description": "Every game in one place — browse, search and launch",
+      "icon": "🕹️",
+      "tags": "game,arcade,games,launcher,hub,play",
+      "entry": "widgets/arcade/arcade.js",
+      "css": "widgets/arcade/arcade.css"
+    },
+    {
       "id": "snippets",
       "type": "widget",
       "name": "Snippets",
