@@ -125,6 +125,13 @@
 .st-act small { font-size: 10px; font-weight: 500; letter-spacing: 0.04em; text-transform: none; opacity: 0.75; }
 .st-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
+/* short landscape screens: the pad stands beside the play field (see layout()) */
+.st.st-side { flex-direction: row; align-items: stretch; }
+.st.st-side .st-stage { margin: 0; }
+.st.st-side .st-pad { flex: 0 0 132px; flex-direction: column; }
+.st.st-side .st-drop, .st.st-side .st-act { height: auto; min-height: 50px; flex: 1 1 0; flex-direction: column; gap: 2px; }
+.st.st-side .st-act.alt { flex: 0 0 auto; padding: 14px 6px; }
+
 @media (max-width: 560px) {
   #stacktower-panel { left: 8px !important; right: 8px; max-width: none; top: calc(var(--menubar-h, 36px) + 6px); }
   #stacktower-panel .cade-panel-body { padding: 8px 8px max(8px, env(safe-area-inset-bottom)); }
