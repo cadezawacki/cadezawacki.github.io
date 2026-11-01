@@ -1,0 +1,161 @@
+/* Road Hopper widget styles (loaded on demand via Cade.loadCSS). */
+#roadhopper-panel { top: calc(var(--menubar-h, 36px) + 12px); right: 12px; max-width: calc(100vw - 24px); }
+#roadhopper-panel .cade-panel-body { padding: 10px; overflow: hidden; overscroll-behavior: contain; }
+#roadhopper-panel .cade-panel-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Hopping is fast tapping and swiping: nothing in the panel may select, magnify,
+   open a callout or zoom. Play surfaces take no browser gestures at all; the rest
+   only allow plain taps (manipulation); the cards scroll vertically. */
+#roadhopper-panel, #roadhopper-panel * {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+#roadhopper-panel { touch-action: manipulation; }
+#roadhopper-panel .rh-stage, #roadhopper-panel .rh-cv, #roadhopper-panel .rh-dir { touch-action: none; }
+#roadhopper-panel button { touch-action: manipulation; }
+#roadhopper-panel .rh-dir { touch-action: none; }
+#roadhopper-panel .rh-ovl { touch-action: pan-y; }
+
+/* Help / sound / pause in the panel header, before the core minimize button. */
+.rh-hb { display: inline-flex; flex: none; gap: 4px; cursor: default; }
+.rh-hb button {
+  width: 30px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--radius-md, 6px); background: var(--surface-2); color: var(--text-muted); cursor: pointer;
+}
+.rh-hb button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.rh-hb button.on { color: var(--accent); }
+.rh-hb button:disabled { opacity: 0.35; cursor: default; }
+.rh-hb button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.rh { display: flex; flex-direction: column; gap: 8px; width: var(--rh-w, auto); margin: 0 auto; }
+.rh-stage { position: relative; margin: 0 auto; line-height: 0; }
+.rh-cv {
+  display: block; width: 100%; height: 100%; cursor: pointer;
+  border-radius: 8px; background: var(--bg); box-shadow: 0 0 0 1px var(--border);
+}
+.rh-stage.dim::after, .rh-stage.home::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1;
+  background: var(--bg); opacity: 0.55; border-radius: 8px; pointer-events: none;
+}
+.rh-stage.home::after { opacity: 0.4; }
+.rh-ovl {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center; padding: 10px;
+  overflow: auto; overscroll-behavior: contain; line-height: 1.35; border-radius: 8px;
+}
+.rh-card {
+  display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 330px; margin: auto; padding: 12px;
+  color: var(--text); font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md, 6px); box-shadow: var(--shadow-lg);
+}
+.rh-card p { margin: 0; color: var(--text-muted); line-height: 1.45; }
+.rh-card p b { color: var(--text); }
+.rh-title { font-weight: 700; font-size: 15px; letter-spacing: 0.14em; text-align: center; white-space: nowrap; }
+.rh-title::before, .rh-title::after { content: '--'; color: var(--accent); letter-spacing: 0; margin: 0 0.5em; font-weight: 500; }
+.rh-sub { text-align: center; color: var(--text-muted); }
+.rh-big { text-align: center; font-size: 26px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.rh-pass .rh-big { font-size: 20px; }
+.rh-note { text-align: center; color: var(--text-faint); font-size: 11px; }
+.rh-new { text-align: center; color: var(--accent); font-weight: 700; font-size: 11px; letter-spacing: 0.04em; }
+.rh-art { margin: 0 auto; font: inherit; font-weight: 700; line-height: 1.2; white-space: pre; color: var(--accent); }
+.rh-tab {
+  margin: 0 auto; font: inherit; line-height: 1.5; white-space: pre; color: var(--text-muted);
+  font-variant-numeric: tabular-nums; max-width: 100%; overflow-x: auto;
+}
+.rh-tab b { color: var(--text); font-weight: 700; }
+.rh-tab i { font-style: normal; color: var(--text-faint); }
+.rh-tab .g, .rh-tab .g b, .rh-tab .g i { color: var(--accent); }
+.rh-keys { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: var(--radius-md, 6px); color: var(--text-muted); }
+.rh-keys b { color: var(--text); }
+.rh-tip { font-size: 11px; }
+.rh-c-gold { color: #b07d06 !important; }
+.rh-c-red { color: #cf3f3f !important; }
+.rh-c-pink { color: #c44080 !important; }
+[data-theme="dark"] .rh-c-gold { color: #f2c544 !important; }
+[data-theme="dark"] .rh-c-red { color: #f06a6a !important; }
+[data-theme="dark"] .rh-c-pink { color: #f48fc4 !important; }
+.rh-go {
+  font: inherit; font-weight: 700; padding: 9px 12px; border-radius: var(--radius-md, 6px); cursor: pointer;
+  border: 1px solid var(--accent); background: transparent; color: var(--accent);
+}
+.rh-go:hover, .rh-go:focus-visible { background: var(--accent); color: #fff; outline: none; }
+.rh-go.alt { border-color: var(--border); color: var(--text-muted); }
+.rh-go.alt:hover, .rh-go.alt:focus-visible { background: var(--surface-2); color: var(--text); }
+.rh-btns { display: flex; gap: 8px; }
+.rh-btns .rh-go { flex: 1; }
+
+/* home: tabs, mode / difficulty / players, records */
+.rh-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.rh-brand { font-weight: 700; letter-spacing: 0.14em; }
+.rh-brand::before { content: 'o.o '; color: var(--accent); letter-spacing: 0; }
+.rh-hi { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.rh-tabs { display: flex; gap: 2px; padding: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.rh-tabs button {
+  flex: 1; font: inherit; font-weight: 600; color: var(--text-muted); background: transparent; border: 0; border-radius: 6px;
+  padding: 4px 8px; min-height: 28px; cursor: pointer;
+}
+.rh-tabs button:hover:not(.on) { color: var(--text); }
+.rh-tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14); }
+[data-theme="dark"] .rh-tabs button.on { background: var(--surface-hover); }
+.rh-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.rh-sec { display: flex; flex-direction: column; gap: 4px; }
+.rh-h { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); }
+.rh-hint { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+.rh-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.rh-chip {
+  flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; font: inherit; font-size: 12px; padding: 3px 8px; min-height: 30px;
+  border-radius: 999px; cursor: pointer; color: var(--text-muted); border: 1px solid var(--border); background: var(--surface-2); white-space: nowrap;
+}
+.rh-chip:hover { border-color: var(--accent); color: var(--text); }
+.rh-chip.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); color: var(--accent); font-weight: 700; }
+.rh-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rh-foot { display: flex; align-items: center; justify-content: space-between; gap: 4px 8px; flex-wrap: wrap; color: var(--text-faint); font-size: 11px; }
+.rh-confirm { color: var(--text); }
+.rh-lnk {
+  font: inherit; font-size: 11px; color: var(--text-muted); background: none; border: 0; padding: 3px 2px; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.rh-lnk:hover { color: var(--accent); }
+.rh-lnk.danger { color: var(--error, #dc2626); font-weight: 700; }
+
+/* the pad under the play field: four hop buttons, or the action buttons */
+.rh-pad { display: flex; gap: 6px; }
+.rh-dir, .rh-act {
+  flex: 1 1 0; min-width: 0; height: 46px; display: flex; align-items: center; justify-content: center; gap: 6px;
+  font: inherit; font-family: var(--font-mono, ui-monospace, monospace); font-size: 14px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; border-radius: 12px; cursor: pointer;
+}
+.rh-dir { border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); transition: background-color 80ms, color 80ms, transform 80ms; }
+.rh-dir svg { width: 20px; height: 20px; }
+.rh-dir.rh-up { flex-grow: 1.6; color: var(--text); }
+.rh-dir span { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: none; opacity: 0.75; }
+.rh-dir:hover { color: var(--text); }
+.rh-dir.on { background: var(--accent); border-color: var(--accent); color: #fff; transform: scale(0.97); }
+.rh-act { border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+.rh-act.alt { flex: 0 0 auto; padding: 0 14px; border-color: var(--border); background: var(--surface-2); color: var(--text-muted); letter-spacing: 0.06em; }
+.rh-act:hover { filter: brightness(1.08); }
+.rh-act:focus-visible, .rh-dir:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.rh-act small { font-size: 10px; font-weight: 500; letter-spacing: 0.04em; text-transform: none; opacity: 0.75; }
+.rh-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 560px) {
+  #roadhopper-panel { left: 8px !important; right: 8px; max-width: none; top: calc(var(--menubar-h, 36px) + 6px); }
+  #roadhopper-panel .cade-panel-body { padding: 8px 8px max(8px, env(safe-area-inset-bottom)); }
+  .rh-ovl { padding: 6px; }
+  .rh-card { padding: 10px; }
+}
+@media (pointer: coarse) {
+  .rh-hb button { width: 40px; height: 34px; }
+  .rh-dir, .rh-act { height: 60px; }
+  .rh-dir svg { width: 26px; height: 26px; }
+  /* a thumb pad: left / right tall at the sides, a big forward hop over back */
+  .rh-pad.rh-dpad { display: grid; grid-template-columns: 1fr 1.7fr 1fr; grid-template-rows: 66px 50px; }
+  .rh-dpad .rh-dir { height: auto; }
+  .rh-dpad [data-k="3"] { grid-column: 1; grid-row: 1 / span 2; }
+  .rh-dpad [data-k="0"] { grid-column: 2; grid-row: 1; }
+  .rh-dpad [data-k="2"] { grid-column: 2; grid-row: 2; }
+  .rh-dpad [data-k="1"] { grid-column: 3; grid-row: 1 / span 2; }
+  .rh-tabs button { min-height: 40px; }
+  .rh-chip { min-height: 40px; }
+  .rh-lnk { min-height: 40px; padding: 0 6px; }
+  .rh-go { padding: 12px; }
+}

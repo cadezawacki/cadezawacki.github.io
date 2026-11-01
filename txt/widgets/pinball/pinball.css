@@ -1,0 +1,147 @@
+/* Pinball widget styles (loaded on demand via Cade.loadCSS). */
+#pinball-panel { top: calc(var(--menubar-h, 36px) + 12px); right: 12px; max-width: calc(100vw - 24px); }
+#pinball-panel .cade-panel-body { padding: 8px 10px 10px; overflow: hidden; overscroll-behavior: contain; }
+#pinball-panel .cade-panel-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Flippers get hammered: nothing in the panel may select, magnify, open a
+   callout or zoom (double-tap or pinch). The play surfaces and held buttons
+   take no browser gestures at all; other buttons only plain taps. */
+#pinball-panel, #pinball-panel * {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+#pinball-panel { touch-action: manipulation; }
+#pinball-panel .pb-stage, #pinball-panel .pb-cv, #pinball-panel .pb-pad, #pinball-panel .pb-fl, #pinball-panel .pb-mid { touch-action: none; }
+#pinball-panel button { touch-action: manipulation; }
+#pinball-panel .pb-fl, #pinball-panel .pb-mid { touch-action: none; }
+
+/* Help / sound / pause in the panel header, before the core minimize button. */
+.pb-hb { display: inline-flex; flex: none; gap: 4px; cursor: default; }
+.pb-hb button {
+  width: 30px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--radius-md, 6px); background: var(--surface-2); color: var(--text-muted); cursor: pointer;
+}
+.pb-hb button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.pb-hb button.on { color: var(--accent); }
+.pb-hb button:disabled { opacity: 0.35; cursor: default; }
+.pb-hb button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.pb { display: flex; flex-direction: column; gap: 8px; width: var(--pb-w, auto); margin: 0 auto; }
+.pb-stage { position: relative; margin: 0 auto; line-height: 0; }
+.pb-cv {
+  display: block; width: 100%; height: 100%; cursor: pointer;
+  border-radius: 8px; background: var(--bg); box-shadow: 0 0 0 1px var(--border);
+}
+.pb-stage.dim::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1;
+  background: var(--bg); opacity: 0.5; border-radius: 8px; pointer-events: none;
+}
+.pb-ovl {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center; padding: 10px;
+  overflow: auto; overscroll-behavior: contain; touch-action: pan-y; line-height: 1.35; border-radius: 8px;
+}
+.pb-card {
+  display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 300px; margin: auto; padding: 12px;
+  color: var(--text); font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md, 6px); box-shadow: var(--shadow-lg);
+}
+.pb-card p { margin: 0; color: var(--text-muted); line-height: 1.45; }
+.pb-card p b { color: var(--text); }
+.pb-title { font-weight: 700; font-size: 15px; letter-spacing: 0.16em; text-align: center; white-space: nowrap; }
+.pb-title::before, .pb-title::after { content: '--'; color: var(--accent); letter-spacing: 0; margin: 0 0.5em; font-weight: 500; }
+.pb-sub { text-align: center; color: var(--text-muted); }
+.pb-big { text-align: center; font-size: 26px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.pb-note { text-align: center; color: var(--text-faint); font-size: 11px; }
+.pb-note:empty { display: none; }
+.pb-new { text-align: center; color: var(--accent); font-weight: 700; font-size: 11px; letter-spacing: 0.04em; }
+.pb-art { margin: 0 auto; font: inherit; font-size: 12px; font-weight: 700; line-height: 1.15; white-space: pre; color: var(--accent); max-width: 100%; overflow: hidden; }
+.pb-tab {
+  margin: 0 auto; font: inherit; line-height: 1.5; white-space: pre; color: var(--text-muted);
+  font-variant-numeric: tabular-nums; max-width: 100%; overflow-x: auto;
+}
+.pb-tab b { color: var(--text); font-weight: 700; }
+.pb-tab i { font-style: normal; color: var(--text-faint); }
+.pb-recs { padding-top: 6px; border-top: 1px dashed var(--border); width: 100%; text-align: center; }
+.pb-keys { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: var(--radius-md, 6px); color: var(--text-muted); }
+.pb-keys b { color: var(--text); }
+.pb-keys span { color: var(--text-faint); }
+.pb-tip { font-size: 11px; }
+.pb-rules { margin: 0; padding-left: 16px; color: var(--text-muted); font-size: 11px; line-height: 1.45; display: flex; flex-direction: column; gap: 2px; }
+.pb-rules b { color: var(--text); }
+.pb-go {
+  font: inherit; font-weight: 700; padding: 9px 12px; border-radius: var(--radius-md, 6px); cursor: pointer;
+  border: 1px solid var(--accent); background: transparent; color: var(--accent);
+}
+.pb-go:hover, .pb-go:focus-visible { background: var(--accent); color: #fff; outline: none; }
+.pb-go.alt { border-color: var(--border); color: var(--text-muted); }
+.pb-go.alt:hover, .pb-go.alt:focus-visible { background: var(--surface-2); color: var(--text); }
+.pb-btns { display: flex; gap: 8px; }
+.pb-btns .pb-go { flex: 1; }
+
+/* home: tabs, options, scores */
+.pb-tabs { display: flex; gap: 2px; padding: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.pb-tabs button {
+  flex: 1; font: inherit; font-weight: 600; color: var(--text-muted); background: transparent; border: 0; border-radius: 6px;
+  padding: 4px 8px; min-height: 28px; cursor: pointer;
+}
+.pb-tabs button:hover:not(.on) { color: var(--text); }
+.pb-tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14); }
+[data-theme="dark"] .pb-tabs button.on { background: var(--surface-hover); }
+.pb-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pb-opt { display: flex; flex-direction: column; gap: 4px; }
+.pb-h { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); }
+.pb-seg { display: flex; gap: 4px; }
+.pb-seg button {
+  flex: 1 1 0; min-width: 0; font: inherit; font-size: 12px; padding: 4px 6px; min-height: 30px; cursor: pointer; white-space: nowrap;
+  border-radius: 999px; color: var(--text); border: 1px solid var(--border); background: var(--surface-2);
+}
+.pb-seg button:hover { border-color: var(--accent); }
+.pb-seg button.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); color: var(--accent); font-weight: 700; }
+.pb-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pb-foot { display: flex; align-items: center; justify-content: space-between; gap: 4px 8px; flex-wrap: wrap; color: var(--text-faint); font-size: 11px; }
+.pb-confirm { color: var(--text); }
+.pb-lnk {
+  font: inherit; font-size: 11px; color: var(--text-muted); background: none; border: 0; padding: 3px 2px; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.pb-lnk:hover { color: var(--accent); }
+.pb-lnk.danger { color: var(--error, #dc2626); font-weight: 700; }
+
+/* the pad under the table: two flipper buttons and launch / nudge, or the action buttons */
+.pb-pad { display: flex; gap: 6px; }
+.pb-fl, .pb-mid, .pb-act {
+  flex: 1 1 0; min-width: 0; height: 46px; display: flex; align-items: center; justify-content: center; gap: 6px;
+  font: inherit; font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; border-radius: 12px; cursor: pointer;
+}
+.pb-fl, .pb-mid { border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); transition: background-color 60ms, color 60ms, transform 60ms; }
+.pb-fl { flex: 1.3 1 0; }
+.pb-fl span, .pb-mid span { font-size: 10px; font-weight: 500; letter-spacing: 0.04em; text-transform: none; opacity: 0.75; }
+.pb-fl:hover, .pb-mid:hover { color: var(--text); }
+.pb-mid.launch { color: var(--accent); border-color: var(--accent); }
+.pb-fl.on, .pb-mid.on { background: var(--accent); border-color: var(--accent); color: #fff; transform: scale(0.98); }
+.pb-act { border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+.pb-act.alt { flex: 0 0 auto; padding: 0 14px; border-color: var(--border); background: var(--surface-2); color: var(--text-muted); letter-spacing: 0.06em; }
+.pb-act:hover { filter: brightness(1.08); }
+.pb-act:focus-visible, .pb-fl:focus-visible, .pb-mid:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.pb-act small { font-size: 10px; font-weight: 500; letter-spacing: 0.04em; text-transform: none; opacity: 0.75; }
+.pb-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 560px) {
+  #pinball-panel { left: 6px !important; right: 6px; max-width: none; top: calc(var(--menubar-h, 36px) + 6px); }
+  #pinball-panel .cade-panel-body { padding: 6px 6px max(6px, env(safe-area-inset-bottom)); }
+  .pb { gap: 6px; }
+  .pb-ovl { padding: 6px; }
+  .pb-card { padding: 10px; gap: 7px; }
+  .pb-help { font-size: 11px; gap: 6px; }
+  .pb-help .pb-keys { padding: 6px 8px; }
+  .pb-rules { font-size: 10.5px; line-height: 1.4; }
+}
+@media (pointer: coarse) {
+  .pb-hb button { width: 40px; height: 34px; }
+  .pb-fl, .pb-mid, .pb-act { height: 54px; }
+  .pb-tabs button { min-height: 40px; }
+  .pb-seg button { min-height: 40px; }
+  .pb-lnk { min-height: 40px; padding: 0 6px; }
+  .pb-go { padding: 12px; }
+}
