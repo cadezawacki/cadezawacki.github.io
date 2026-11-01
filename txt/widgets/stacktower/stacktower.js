@@ -432,7 +432,7 @@
   function buildAtlas() {
     if (!S.k || !S.col) return;
     var a = S.atl || (S.atl = { cv: document.createElement('canvas') });
-    a.sc = 2;
+    a.sc = Math.max(1, Math.min(2, 6 / S.k));   // supersample, within a memory budget at 3x screens
     a.cwp = Math.ceil((CW + 6) * S.k * a.sc); a.chp = Math.ceil((RH + 6) * S.k * a.sc);
     a.cv.width = a.cwp * AT_COLS; a.cv.height = a.chp * AT_ROWS;
     a.c = a.cv.getContext('2d');
@@ -572,39 +572,51 @@
   // ---- the scene ----
   function hueSlot(g, n) { return (g.hue0 + n) % NH; }
   function easeOut(t) { t = clamp(t, 0, 1); return 1 - (1 - t) * (1 - t) * (1 - t); }
-  // Camera: z (px per world px) and the world y at the bottom edge. While
-  // playing, the slider sits ~42% from the top; after a miss it pulls back
-  // to show the whole tower.
+  // Camera. The world is drawn zoomed in so the tower dominates the view: a
+  // fresh block spans ~62% of the width (zx) and each layer is a thick slab
+  // (zy >= zx; ~6-7% of the view height on a tall screen, at least ~11 layers
+  // in view on a short one). zx/zy are px per world px; the engine's world
+  // (travel range, speeds) is unchanged, so the slider may run off the sides
+  // at the ends of its swing, as in the classic game. While playing, the slider
+  // sits ~40% from the top with the last layers below it; the ground stays in
+  // the bottom ~30% until the tower outgrows it. After a miss the camera pulls
+  // back to show the whole tower.
+  var ZX = 0.62 * VW / W0;
+  function baseZy(VH) { return clamp(VH / (LH * 13), ZX, ZX * 1.7); }
   function view(g, a) {
-    var v = S.v, VH = S.VH;
+    var v = S.v, VH = S.VH, zy0 = baseZy(VH);
     var cam = g.pcam + (g.cam - g.pcam) * a;
-    var b = Math.max(-Math.max(46, VH * 0.2), cam * LH - VH * 0.58);
-    var z = 1;
+    var b = Math.max(-VH * 0.3 / zy0, (cam + 0.5) * LH - VH * 0.6 / zy0);
+    var m = 1;
     if (S.zoomT > 0) {
-      var H = (g.blocks.length + 3) * LH + 46, zf = Math.min(1, (VH - 70) / H), e = easeOut(S.zoomT);
-      z = 1 + (zf - 1) * e;
-      b = b + (-46 / z - b) * e;
+      var H = (g.blocks.length + 3) * LH * zy0 + 46, mf = Math.min(1, (VH - 70) / H), e = easeOut(S.zoomT);
+      m = 1 + (mf - 1) * e;
+      b = b + (-46 / (zy0 * m) - b) * e;
     }
-    v.z = z; v.bottom = b;
+    v.m = m; v.zx = ZX * m; v.zy = zy0 * m; v.z = v.zx; v.bottom = b;
+    // glyph scale on the slabs: as wide as the zoom, but never taller than the slab
+    v.gs = Math.min(v.zx, LH * v.zy / RH * 0.8);
     return v;
   }
-  function X(v, wx) { return (wx - FW / 2) * v.z + VW / 2; }
-  function Y(v, wy) { return S.VH - (wy - v.bottom) * v.z; }
+  function X(v, wx) { return (wx - FW / 2) * v.zx + VW / 2; }
+  function Y(v, wy) { return S.VH - (wy - v.bottom) * v.zy; }
 
-  // One block: a soft fill, a rim, and a row of glyphs [====] stretched over its width.
+  // One block: a thick slab: soft fill, a lit top face, a shaded base, and a
+  // row of glyphs [====] stretched over its width.
+  function slabRow(c, v, ci, ch, sx, sw, cy, gs) {
+    if (sw < CW * gs * 1.4) { glyph(c, ci, 124, sx + sw / 2, cy, true, gs); return; }
+    var k = Math.max(2, Math.round(sw / (CW * gs))), step = sw / k;
+    for (var i = 0; i < k; i++) glyph(c, ci, i === 0 ? 91 : i === k - 1 ? 93 : ch, sx + step * (i + 0.5), cy, true, gs);
+  }
   function drawBlock(c, v, x, w, n, slot, ch, lift, bright) {
-    var z = v.z, sx = X(v, x), sw = w * z, sy = Y(v, (n + 1) * LH + (lift || 0)), sh = LH * z;
+    var sx = X(v, x), sw = w * v.zx, sy = Y(v, (n + 1) * LH + (lift || 0)), sh = LH * v.zy, px1 = 1 / S.k;
     if (sx > VW || sx + sw < 0 || sy > S.VH || sy + sh < 0) return;
     c.fillStyle = S.fill[slot]; c.fillRect(sx, sy, sw, sh);
-    if (z < 0.45) { c.fillStyle = S.rim[slot]; c.fillRect(sx, sy, sw, Math.max(1 / S.k, sh * 0.25)); return; }
-    c.fillStyle = S.rim[slot]; c.fillRect(sx, sy, sw, 1 / S.k * 1.5); c.fillRect(sx, sy + sh - 1 / S.k, sw, 1 / S.k);
-    var ci = bright ? C_TEXT : C_HUE + slot, cy = sy + sh / 2, sc = z < 1 ? z : 0;
-    if (sw < CW * z * 1.4) { glyph(c, ci, 124, sx + sw / 2, cy, true, sc); return; }
-    var k = Math.max(2, Math.round(sw / (CW * z))), step = sw / k;
-    for (var i = 0; i < k; i++) {
-      var code = i === 0 ? 91 : i === k - 1 ? 93 : ch;
-      glyph(c, ci, code, sx + step * (i + 0.5), cy, true, sc);
-    }
+    if (v.zx < 0.45) { c.fillStyle = S.rim[slot]; c.fillRect(sx, sy, sw, Math.max(px1, sh * 0.25)); return; }
+    var top = Math.max(px1 * 1.5, sh * 0.16);
+    c.fillStyle = S.rim[slot]; c.fillRect(sx, sy, sw, top);                       // lit top face
+    c.globalAlpha = 0.55; c.fillRect(sx, sy + sh - Math.max(px1, sh * 0.07), sw, Math.max(px1, sh * 0.07)); c.globalAlpha = 1;
+    slabRow(c, v, bright ? C_TEXT : C_HUE + slot, ch, sx, sw, sy + top + (sh - top) / 2, v.gs);
   }
   function drawDebris(c, v, g, a, d) {
     var x = d.px + (d.x - d.px) * a, y = d.py + (d.y - d.py) * a, an = d.pa + (d.a - d.pa) * a;
@@ -613,27 +625,23 @@
     var fade = d.rest ? clamp(1 - (d.t - 6) / 4, 0.25, 1) : 1, slot = hueSlot(g, d.n);
     c.save();
     c.globalAlpha = fade;
-    c.translate(sx, sy); c.rotate(-an); c.scale(v.z, v.z);
-    var w = d.w, h = d.h;
+    c.translate(sx, sy); c.rotate(-an);
+    var w = d.w * v.zx, h = d.h * v.zy, top = Math.max(1.5 / S.k, h * 0.16);
     c.fillStyle = S.fill[slot]; c.fillRect(-w / 2, -h / 2, w, h);
-    c.fillStyle = S.rim[slot]; c.fillRect(-w / 2, -h / 2, w, 1.5 / S.k);
-    if (w < CW * 1.4) glyph(c, C_HUE + slot, 124, 0, 0, true);
-    else {
-      var k = Math.max(2, Math.round(w / CW)), st = w / k;
-      for (var i = 0; i < k; i++) glyph(c, C_HUE + slot, i === 0 ? 91 : i === k - 1 ? 93 : 61, -w / 2 + st * (i + 0.5), 0, true);
-    }
+    c.fillStyle = S.rim[slot]; c.fillRect(-w / 2, -h / 2, w, top);
+    if (v.zx >= 0.45) slabRow(c, v, C_HUE + slot, 61, -w / 2, w, top / 2, v.gs);
     c.restore();
   }
 
   function draw(alpha, dt) {
     if (!S || !S.ctx || !S.atl) return;
     var g = S.g || S.hg, c = S.ctx, VH = S.VH, v = view(g, alpha), i, n, t = S.idleT;
-    S.alpha = alpha;
+    S.alpha = alpha; S.fxs = Math.max(1, Math.min(1.35, v.gs));
     c.setTransform(S.k, 0, 0, S.k, 0, 0);
     if (S.shake > 0 && !S.rm) { var sh = S.shake * S.shakeA; c.translate((Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh * 0.6); }
     c.fillStyle = S.col.bg; c.fillRect(-10, -10, VW + 20, VH + 20);
     // the sky deepens with altitude
-    var alt = Math.max(0, v.bottom + VH * 0.5 / v.z) / LH, deep = clamp((alt - 10) / 90, 0, 1);
+    var alt = Math.max(0, v.bottom + VH * 0.5 / v.zy) / LH, deep = clamp((alt - 10) / 90, 0, 1);
     if (deep > 0) {
       var sk = S.col.sky, gr = c.createLinearGradient(0, 0, 0, VH);
       gr.addColorStop(0, css(sk, deep * (S.dark ? 0.5 : 0.22)));
@@ -644,7 +652,7 @@
     var starA = S.dark ? 0.35 + 0.65 * deep : clamp((alt - 45) / 40, 0, 1) * 0.8;
     if (starA > 0.02) {
       c.globalAlpha = starA;
-      var pan = v.bottom * 0.15;
+      var pan = v.bottom * 0.15 * v.zy;
       for (i = 0; i < STARS.length; i++) {
         var st = STARS[i], syy = ((st.y * (VH + 200) + pan) % (VH + 200) + VH + 200) % (VH + 200) - 100;
         if (syy > 0 && syy < VH) glyph(c, C_STAR, st.c, st.x, syy, false, st.c === 46 ? 1 : 0.75);
@@ -657,15 +665,15 @@
     for (i = 0; i < CLOUDS.length && cA > 0.01; i++) {
       var cl = CLOUDS[i], tl = S.cloudT[cl.s];
       var cx = ((cl.x + t * cl.sp) % 620 + 620) % 620 - 150;
-      var cyw = cl.y, cyy = VH - (cyw - v.bottom * 0.6) * Math.max(0.6, v.z) - tl.h;
-      if (cyy > -tl.h && cyy < VH) c.drawImage(tl.cv, X(v, cx) - (X(v, cx) - VW / 2) * (1 - Math.max(0.6, v.z)) * 0.3, cyy, tl.w, tl.h);
+      var cyw = cl.y, cyy = VH - (cyw - v.bottom * 0.3 * v.zy) * Math.max(0.6, v.m) - tl.h;
+      if (cyy > -tl.h && cyy < VH) c.drawImage(tl.cv, cx - (cx - VW / 2) * (1 - Math.max(0.6, v.m)) * 0.3, cyy, tl.w, tl.h);
     }
     c.globalAlpha = 1;
     // altitude ruler on the right, every 10 layers; the best height as a dashed gold line
-    var z = v.z;
+    var z = v.zx, zy = v.zy, rs = LH * zy * 10 > VH * 0.45 ? 5 : 10;
     if (z > 0.5) {
-      var n0 = Math.max(10, Math.floor(v.bottom / LH / 10) * 10);
-      for (var L = n0; L * LH < v.bottom + VH / z + LH; L += 10) {
+      var n0 = Math.max(rs, Math.floor(v.bottom / LH / rs) * rs);
+      for (var L = n0; L * LH < v.bottom + VH / zy + LH; L += rs) {
         var ry = Y(v, L * LH);
         if (ry < 46 || ry > VH) continue;
         n = writeNum(L);
@@ -690,10 +698,10 @@
       if (z > 0.45) {
         for (var gx = ((X(v, 0) % gs) + gs) % gs - gs; gx < VW + gs; gx += gs) {
           var hsh = ((Math.round((gx - X(v, 0)) / gs) * 7919) >>> 0) % 7;
-          glyph(c, hsh < 2 ? C_GRASS : C_FAINT, hsh < 2 ? 34 : hsh < 4 ? 44 : 46, gx + gs / 2, gy + 2 * z, true, z < 1 ? z : 0);
-          for (var ry2 = 1; ry2 < 12 && gy + RH * z * (ry2 + 0.3) < VH; ry2++) {   // soil: sparser with depth
+          glyph(c, hsh < 2 ? C_GRASS : C_FAINT, hsh < 2 ? 34 : hsh < 4 ? 44 : 46, gx + gs / 2, gy + 2 * z, true, z);
+          for (var ry2 = 1; ry2 < 16 && gy + RH * z * (ry2 + 0.3) < VH; ry2++) {   // soil: sparser with depth
             var hh = ihash(Math.round((gx - X(v, 0)) / gs), ry2) % 13;
-            if (hh < 4 - Math.min(2, ry2 >> 1)) glyph(c, C_FAINT, hh === 0 ? 39 : hh === 1 ? 44 : 46, gx + gs / 2 + (ry2 % 2) * gs * 0.4, gy + RH * z * (ry2 + 0.3), true, z < 1 ? z : 0);
+            if (hh < 4 - Math.min(2, ry2 >> 1)) glyph(c, C_FAINT, hh === 0 ? 39 : hh === 1 ? 44 : 46, gx + gs / 2 + (ry2 % 2) * gs * 0.4, gy + RH * z * (ry2 + 0.3), true, z);
           }
         }
       }
@@ -702,44 +710,45 @@
     // debris behind the tower (it slides off the back edge)
     for (i = 0; i < g.debris.length; i++) drawDebris(c, v, g, alpha, g.debris[i]);
     // the tower: only visible layers
-    var B = g.blocks, lo = Math.max(0, Math.floor(v.bottom / LH) - 1), hi = Math.min(B.length - 1, Math.ceil((v.bottom + VH / z) / LH) + 1);
+    var B = g.blocks, lo = Math.max(0, Math.floor(v.bottom / LH) - 1), hi = Math.min(B.length - 1, Math.ceil((v.bottom + VH / zy) / LH) + 1);
     for (i = lo; i <= hi; i++) {
       var bk = B[i];
       if (i === 0) {
         var px0 = X(v, bk.x), pw = bk.w * z, py0 = Y(v, LH);
-        c.fillStyle = S.col.plinth; c.fillRect(px0, py0, pw, LH * z);
+        c.fillStyle = S.col.plinth; c.fillRect(px0, py0, pw, LH * zy);
         if (z > 0.45) {
-          var kk = Math.max(2, Math.round(pw / (CW * z)));
-          for (var j = 0; j < kk; j++) glyph(c, C_MUTED, j === 0 ? 47 : j === kk - 1 ? 92 : 35, px0 + pw / kk * (j + 0.5), py0 + LH * z / 2, true, z < 1 ? z : 0);
+          var kk = Math.max(2, Math.round(pw / (CW * v.gs)));
+          for (var j = 0; j < kk; j++) glyph(c, C_MUTED, j === 0 ? 47 : j === kk - 1 ? 92 : 35, px0 + pw / kk * (j + 0.5), py0 + LH * zy / 2, true, v.gs);
         }
         continue;
       }
       var last = i === B.length - 1 && S.landT < 0.18 && S.g;
-      var lift = last ? (1 - S.landT / 0.18) * 3 : 0;
+      var lift = last ? (1 - S.landT / 0.18) * 2 : 0;
       drawBlock(c, v, bk.x, bk.w, bk.n, hueSlot(g, bk.n), bk.perfect ? 35 : 61, lift, last && bk.perfect && S.landT < 0.1);
     }
     // ripples around perfect drops
     for (i = 0; i < S.ripples.length; i++) {
-      var rp = S.ripples[i], e = rp.t / 0.5, gr2 = 2 + e * 14;
+      var rp = S.ripples[i], e = rp.t / 0.5, gr2 = 2 + e * 18;
       c.globalAlpha = (1 - e) * 0.9;
       c.strokeStyle = S.pal[C_HUE + rp.slot]; c.lineWidth = 1.5;
-      c.strokeRect(X(v, rp.x) - gr2, Y(v, (rp.n + 1) * LH) - gr2 * 0.5, rp.w * z + gr2 * 2, LH * z + gr2);
+      c.strokeRect(X(v, rp.x) - gr2, Y(v, (rp.n + 1) * LH) - gr2 * 0.5, rp.w * z + gr2 * 2, LH * zy + gr2);
       c.globalAlpha = 1;
     }
     // the slider, with faint guides at the top block's edges behind it
     var m = g.m;
     if (m && S.g) {
       var mx = m.px + (m.x - m.px) * alpha, tp = B[B.length - 1], gyy = Y(v, m.n * LH + LH / 2);
-      glyph(c, C_FAINT, 58, X(v, tp.x) + 1, gyy, true);
-      glyph(c, C_FAINT, 58, X(v, tp.x + tp.w) - 1, gyy, true);
+      glyph(c, C_FAINT, 58, X(v, tp.x) + 1, gyy, true, v.gs);
+      glyph(c, C_FAINT, 58, X(v, tp.x + tp.w) - 1, gyy, true, v.gs);
       var slot = hueSlot(g, m.n);
       drawBlock(c, v, mx, m.w, m.n, slot, 61, 0, false);
       if (g.players === 2) {     // whose drop it is: a marker over the slider
         var pc = P_SLOT[g.turn], lab = g.turn === 0 ? 'P1' : g.mode === 'cpu' ? 'CPU' : 'P2';
         if (m.hold > 0) lab += ' READY';
         var lhw = lab.length * CW * 0.85 / 2 + 4, lcx = X(v, mx + m.w / 2);
-        drawStr(c, pc, lab, clamp(lcx, lhw, VW - lhw), gyy - RH * 1.25, 'center', true, 0.85);
-        glyph(c, pc, 118, clamp(lcx, 8, VW - 8), gyy - RH * 0.6, true, 0.75);
+        var gtop = gyy - LH * zy / 2;
+        drawStr(c, pc, lab, clamp(lcx, lhw, VW - lhw), gtop - RH * 1.3, 'center', true, 0.85);
+        glyph(c, pc, 118, clamp(lcx, 8, VW - 8), gtop - RH * 0.55, true, 0.75);
       }
     }
     // particles + pop-ups
@@ -749,7 +758,7 @@
       var ppx = X(v, p.x), ppy = Y(v, p.y);
       if (ppx < -CW || ppx > VW + CW || ppy < -RH || ppy > VH + RH) continue;
       c.globalAlpha = Math.min(1, 2.5 * (1 - p.t / p.life));
-      glyph(c, p.ci, p.code, ppx, ppy, true);
+      glyph(c, p.ci, p.code, ppx, ppy, true, S.fxs);
     }
     c.globalAlpha = 1;
     for (i = 0; i < NPOP; i++) {
@@ -757,13 +766,13 @@
       if (!pp.on) continue;
       c.globalAlpha = Math.min(1, 3 * (1 - pp.t));
       n = writeNum(pp.v);
-      var qx = X(v, pp.x), qy = Y(v, pp.y) - pp.t * 26;
+      var qx = X(v, pp.x), qy = Y(v, pp.y) - LH * v.zy - RH * 0.9 - pp.t * 26;   // above the slider, not on it
       glyph(c, pp.ci, 43, qx - (n + 1) * CW / 2, qy);
       drawNum(c, pp.ci, n, qx + CW / 2, qy, 'center');
     }
     c.globalAlpha = 1;
     if (S.g) hud(c, g);
-    if (S.msg && S.g) banner(c, S.msg.text, VH * 0.24, S.msg.ci, S.msg.t);
+    if (S.msg && S.g) banner(c, S.msg.text, Math.max(VH * 0.24, 86), S.msg.ci, S.msg.t);
     if (S.flash > 0 && !S.rm) {
       c.fillStyle = S.dark ? 'rgba(255,255,255,' + (S.flash * 0.9).toFixed(3) + ')' : 'rgba(255,255,255,' + (S.flash * 1.6).toFixed(3) + ')';
       c.fillRect(-10, -10, VW + 20, VH + 20);
@@ -775,9 +784,9 @@
     return h >>> 0;
   }
   function drawTree(c, v, x, kind) {
-    var z = v.z, sx = X(v, x), sy = Y(v, 0);
+    var z = v.zx, sx = X(v, x), sy = Y(v, 0);
     if (sx < -30 || sx > VW + 30 || z < 0.45) return;
-    var sc = z < 1 ? z : 0, rh = RH * z;
+    var sc = z, rh = RH * z;
     if (kind === 0) {
       glyph(c, C_GRASS, 94, sx, sy - rh * 2.5, true, sc);
       drawStr(c, C_GRASS, '/ \\', sx, sy - rh * 1.5, 'center', true, sc || 1);
@@ -1170,32 +1179,68 @@
   }
 
   // ---- layout ----
-  function availH(vw, vh) {
-    var r = S.panel.getBoundingClientRect();
-    if (!r.height) return vh - (vw <= 560 ? 190 : 210);
-    var chrome = r.height - (S.stage.offsetHeight || 0);
-    if (S.panel.classList.contains('cade-solo-panel')) {
-      var hd = S.panel.querySelector('.cade-panel-head');
-      chrome = (hd ? hd.offsetHeight : 40) + (S.pad.offsetHeight || 56) + 36;
+  // The logical view is always VW (= the world) wide; the canvas is sized from
+  // the space the panel can really have, and the logical height VH follows its
+  // aspect. A stacking game is portrait, so a tall view is preferred; text stays
+  // readable because the scale (CSS px per logical px) never drops much below 1.
+  function px(v) { return parseFloat(v) || 0; }
+  var SIDE_W = 132;   // the pad's width when it sits beside the play field (short landscape screens)
+  function chromeOf(side) {
+    var p = S.panel, body = S.stage.parentNode && S.stage.parentNode.parentNode, cs = getComputedStyle(p), bs = body ? getComputedStyle(body) : null;
+    var h = px(cs.borderTopWidth) + px(cs.borderBottomWidth) + px(cs.paddingTop) + px(cs.paddingBottom);
+    var w = px(cs.borderLeftWidth) + px(cs.borderRightWidth) + px(cs.paddingLeft) + px(cs.paddingRight);
+    for (var i = 0; i < p.children.length; i++) {
+      var ch = p.children[i];
+      if (ch === body || ch.classList.contains('cade-rz')) continue;
+      var pos = getComputedStyle(ch).position;
+      if (pos !== 'absolute' && pos !== 'fixed') h += ch.offsetHeight || 0;
     }
-    return vh - Math.min(Math.max(0, r.top), 140) - chrome - 10;
+    if (bs) { h += px(bs.paddingTop) + px(bs.paddingBottom); w += px(bs.paddingLeft) + px(bs.paddingRight); }
+    var st = S.stage.parentNode, gap = st ? px(getComputedStyle(st).rowGap) : 8;
+    gap = isNaN(gap) ? 8 : gap;
+    if (side) w += SIDE_W + gap;
+    else h += gap + Math.max(S.pad.offsetHeight || 0, S.coarse ? 62 : 50);
+    return { w: w, h: h };
+  }
+  // The box (CSS px) the canvas may fill.
+  function availBox(vw, vh, vb, side) {
+    var p = S.panel, ch = chromeOf(side), r = p.getBoundingClientRect(), phone = vw <= 560;
+    if (p.classList.contains('cade-solo-panel')) return { w: vw - ch.w, h: vb - ch.h, fill: true };
+    if (p.classList.contains('cade-sized') && r.width && r.height && !p.classList.contains('cade-popped'))
+      return { w: (phone ? vw - 16 : r.width) - ch.w, h: r.height - ch.h, fill: true };
+    if (p.classList.contains('cade-popped')) return { w: vw - ch.w, h: vh - ch.h, fill: true };
+    var top = r.height ? Math.min(Math.max(0, r.top), 140) : 48;
+    return { w: (phone ? vw - 16 : vw - 24) - ch.w, h: vb - top - ch.h - 8, fill: phone };
   }
   function layout() {
-    var vw = window.innerWidth || 800, vh = window.innerHeight || 600, vv = window.visualViewport;
-    if (vv && vv.height && vv.scale <= 1.01) vh = Math.min(vh, vv.height);
-    var phone = vw <= 560, solo = S.panel.classList.contains('cade-solo-panel');
-    var s = Math.min((vw - (phone ? 34 : 48)) / VW, phone ? 1.3 : solo ? 2 : 1.25), ah = availH(vw, vh);
-    var vh2 = Math.floor(ah / s);
-    if (vh2 < 380) { s = Math.max(0.6, Math.min(s, ah / 380)); vh2 = 380; }
-    vh2 = Math.min(vh2, phone ? 560 : 500);
-    var cw = Math.floor(VW * s), ch = Math.floor(vh2 * s), dpr = Math.min(2, window.devicePixelRatio || 1);
+    var vw = window.innerWidth || 800, vh = window.innerHeight || 600, vv = window.visualViewport, vb = vh;
+    if (vv && vv.height && vv.scale <= 1.01) vb = Math.min(vh, vv.offsetTop + vv.height);
+    S.coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+    // short and wide (a phone on its side): the pad moves beside the play field so it can stay tall
+    var side = vb < 520 && vw > vb * 1.25;
+    S.stage.parentNode.classList.toggle('st-side', side);
+    var box = availBox(vw, vh, vb, side), W = Math.max(200, Math.floor(box.w)), H = Math.max(150, Math.floor(box.h)), cw, ch;
+    if (box.fill) {
+      // fill the width; a tall view, but not so wide on a big screen that it turns into a letterbox
+      cw = Math.min(W, Math.max(VW, Math.round(H * (side ? 1.2 : vw <= 560 ? 1.1 : 0.8))));
+      ch = Math.min(H, Math.round(cw * 2.3));
+    } else {
+      // a floating desktop panel: comfortably tall, portrait, never over the window
+      cw = Math.min(W, 500, Math.max(VW, Math.round(H * 0.68)));
+      ch = Math.min(H, Math.round(cw * 1.75));
+    }
+    cw = Math.max(Math.min(W, 0.9 * VW), cw);   // keep glyphs readable even in a cramped spot
+    cw = Math.floor(cw); ch = Math.floor(ch);
+    // device pixels: up to 3x, but keep the backing store within a sane budget (iOS caps canvas memory)
+    var dpr = Math.min(3, window.devicePixelRatio || 1);
+    while (dpr > 1 && cw * ch * dpr * dpr > 5e6) dpr = Math.max(1, dpr - 0.25);
     S.cv.style.width = cw + 'px'; S.cv.style.height = ch + 'px';
     S.stage.style.width = cw + 'px'; S.stage.style.height = ch + 'px';
-    S.panel.style.setProperty('--st-w', cw + 'px');
+    S.panel.style.setProperty('--st-w', (side ? cw + SIDE_W + 8 : cw) + 'px');
     S.cv.width = Math.round(cw * dpr); S.cv.height = Math.round(ch * dpr);
     S.k = S.cv.width / VW;
     S.VH = S.cv.height / S.k;
-    S.coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+    S.cssW = cw; S.cssH = ch;
     if (S.col) fitFont();
   }
   function redraw() { if (!S) return; if (S.phase === 'play' && !S.paused && S.raf) return; draw(1, 0); }

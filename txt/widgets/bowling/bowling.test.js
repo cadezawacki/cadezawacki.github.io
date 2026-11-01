@@ -277,6 +277,40 @@ test('swipes: up the screen bowls; direction aims, speed is power, the bow hooks
   assert.ok(hookL.spin > 0.3 && hookR.spin < -0.3, 'a stroke bowed right hooks left');
 });
 
+test('swipe mapping: straight fast is straight and firm, slow is soft, curves hook opposite ways, taps do nothing', function () {
+  // a stroke sampled every ~12 ms like a real touch screen: up h px over ms, bowed sideways by bow px
+  function stroke(dx, h, ms, bow) {
+    var pts = [], n = Math.max(4, Math.round(ms / 12));
+    for (var i = 0; i <= n; i++) { var u = i / n; pts.push({ x: 180 + dx * u + Math.sin(u * Math.PI) * (bow || 0), y: 420 - h * u, t: 1000 + u * ms }); }
+    return pts;
+  }
+  var fast = E.swipeThrow(stroke(0, 220, 110));
+  assert.ok(fast && Math.abs(fast.ang) < 1e-9 && fast.spin === 0, 'straight up the lane is straight with no hook');
+  assert.ok(fast.pow > 0.8, 'a quick flick is near full power (' + fast.pow + ')');
+  var slow = E.swipeThrow(stroke(0, 140, 1100));
+  assert.ok(slow && slow.pow < 0.2, 'a slow push is a soft ball (' + slow.pow + ')');
+  assert.ok(E.speedOf(fast.pow) > E.speedOf(slow.pow) + 100);
+  var left = E.swipeThrow(stroke(-50, 200, 160));
+  assert.ok(left.ang < 0 && left.ang >= -E.ANG_MAX, 'a swipe up and to the left aims left');
+  var bowR = E.swipeThrow(stroke(0, 220, 180, 40)), bowL = E.swipeThrow(stroke(0, 220, 180, -40));
+  assert.ok(bowR.spin > 0.3 && bowL.spin < -0.3 && Math.abs(bowR.spin + bowL.spin) < 1e-9, 'curved right / left hook with opposite spin');
+  assert.ok(Math.abs(bowR.ang) < 0.01, 'the bow hooks without changing the aim much');
+  // taps and wobbles
+  var tap = [{ x: 100, y: 400, t: 0 }, { x: 103, y: 397, t: 60 }];
+  assert.strictEqual(E.swipeThrow(tap), null, 'a tiny tap is no throw');
+  assert.strictEqual(E.swipeKind(tap), '', 'a tap is undecided');
+  assert.strictEqual(E.swipeThrow([{ x: 0, y: 0, t: 0 }]), null);
+  assert.strictEqual(E.swipeThrow(null), null);
+  // position drag vs throw
+  assert.strictEqual(E.swipeKind(stroke(0, 60, 200)), 'throw', 'up the screen throws');
+  assert.strictEqual(E.swipeKind([{ x: 100, y: 400, t: 0 }, { x: 140, y: 405, t: 300 }]), 'pos', 'a sideways drag positions');
+  assert.strictEqual(E.swipeKind([{ x: 100, y: 400, t: 0 }, { x: 140, y: 380, t: 300 }]), 'pos', 'mostly sideways still positions');
+  assert.strictEqual(E.swipeKind([{ x: 100, y: 400, t: 0 }, { x: 102, y: 440, t: 300 }]), '', 'down the screen does nothing');
+  // a throw's result runs through the physics: a firm straight centre ball reaches the pins and knocks some down
+  var res = E.simulate(E.newRack(), { x: 0, ang: fast.ang, pow: fast.pow, spin: fast.spin }, 7);
+  assert.ok(res.count > 0);
+});
+
 test('records: stats per game, high game, perfect, top list; normalisation', function () {
   var rec = E.newRecords();
   var g = E.newGame([{ kind: 'h', name: 'Ann' }, { kind: 'c', lvl: 1 }], 1);

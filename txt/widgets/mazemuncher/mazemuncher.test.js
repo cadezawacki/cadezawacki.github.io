@@ -387,4 +387,42 @@ test('fright pauses the scatter/chase clock', function () {
   assert.ok(Math.abs(g.modeT - t) < 1e-9, 'mode clock held');
 });
 
+test('thumbstick: dead zone, dominant axis, diagonal hysteresis, clamp', function () {
+  var r = 40, d = E.stickDir;
+  assert.strictEqual(E.STICK_DZ, 0.25);
+  assert.strictEqual(d(0, 0, r), -1);
+  assert.strictEqual(d(9, 0, r), -1, 'inside 25% of the radius: no wish');
+  assert.strictEqual(d(6, -6, r), -1, 'the dead zone is round');
+  assert.strictEqual(d(0, -11, r), 0);
+  assert.strictEqual(d(-11, 0, r), 1);
+  assert.strictEqual(d(0, 11, r), 2);
+  assert.strictEqual(d(11, 0, r), 3);
+  assert.strictEqual(d(30, -12, r), 3, 'dominant axis wins');
+  assert.strictEqual(d(-5, 30, r), 2);
+  assert.strictEqual(d(-30, -29, r), 1);
+  // near a diagonal the previous wish holds until the other axis clearly leads
+  assert.strictEqual(d(20, 21, r, 0.25, 3), 3);
+  assert.strictEqual(d(20, 21, r, 0.25, -1), 2);
+  assert.strictEqual(d(20, 26, r, 0.25, 3), 2);
+  assert.strictEqual(d(-20, 21, r, 0.25, 3), 2, 'a held right does not stick once the stick points left');
+  assert.strictEqual(d(20, -21, r, 0.25, 2), 0, 'a held down does not stick once the stick points up');
+  assert.strictEqual(d(9, 0, r, 0.1), 3, 'custom dead zone');
+  assert.strictEqual(d(NaN, 'x', 0), -1);
+  var c = E.stickClamp(30, 40, 25);
+  assert.ok(Math.abs(c[0] - 15) < 1e-9 && Math.abs(c[1] - 20) < 1e-9);
+  assert.deepStrictEqual(E.stickClamp(3, -4, 25), [3, -4]);
+  // a stick wish feeds the same buffered turn wish as a key
+  var g = quiet(0), want = d(0, -30, r);
+  E.setWant(g, want);
+  assert.strictEqual(g.pac.want, 0);
+});
+
+test('save: control options normalise', function () {
+  var s = E.newSave();
+  assert.ok(s.opt.ctl === 'stick' && s.opt.osc === false);
+  var n = E.normSave({ opt: { ctl: 'arrows', osc: 1 } });
+  assert.ok(n.opt.ctl === 'arrows' && n.opt.osc === true);
+  assert.strictEqual(E.normSave({ opt: { ctl: 'wheel' } }).opt.ctl, 'stick');
+});
+
 console.log(passed + ' passed' + (process.exitCode ? ', some failed' : ''));

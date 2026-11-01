@@ -192,7 +192,7 @@
 [data-theme="dark"] .k-flame { color: #ff8f3f !important; }
 
 /* the pad under the green: aim / power buttons and PUTT, or the flow buttons */
-.mg-pad { display: flex; gap: 6px; align-items: stretch; flex-wrap: wrap; min-height: 50px; }
+.mg-pad { display: flex; gap: 6px; align-items: stretch; align-content: center; flex-wrap: wrap; min-height: 67px; }
 .mg-pow {
   flex: 1 1 100%; text-align: center; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; font-weight: 700;
   white-space: pre; font-variant-numeric: tabular-nums; color: var(--text-muted); line-height: 1.2;
@@ -230,6 +230,7 @@
   .mg-sc th, .mg-sc td { padding: 2px 3px; }
 }
 @media (pointer: coarse) {
+  .mg-pad { min-height: 75px; }
   .mg-hb button { width: 38px; height: 34px; }
   .mg-pb, .mg-act { height: 54px; }
   .mg-tabs button { min-height: 40px; }
@@ -238,3 +239,20 @@
   .mg-lnk { min-height: 38px; padding: 0 6px; }
   .mg-go { padding: 12px; }
 }
+
+/* A phone on its side (set by layout()): the pad stands beside the green so
+   the whole course, HUD and controls fit the short screen with no scrolling. */
+#minigolf-panel.mg-side .cade-panel-body { padding: 6px 8px max(6px, env(safe-area-inset-bottom)); }
+#minigolf-panel.mg-side .cade-panel-head { padding-top: 4px; padding-bottom: 4px; }
+#minigolf-panel.mg-side { top: calc(var(--menubar-h, 36px) + 4px); }
+#minigolf-panel.mg-side .mg {
+  display: grid; grid-template-columns: var(--mg-w, auto) 168px; grid-template-areas: 'hud hud' 'stage pad';
+  gap: 4px 10px; width: auto; justify-content: center; align-items: center;
+}
+#minigolf-panel.mg-side .mg-hud { grid-area: hud; min-height: 18px; font-size: 11px; gap: 2px 8px; }
+#minigolf-panel.mg-side .mg-stage { grid-area: stage; margin: 0; }
+#minigolf-panel.mg-side .mg-pad { grid-area: pad; width: 168px; min-height: 0; align-content: center; }
+#minigolf-panel.mg-side .mg-pb { flex: 1 1 calc(50% - 3px); height: 44px; }
+#minigolf-panel.mg-side .mg-act { flex: 1 1 100%; height: 44px; }
+#minigolf-panel.mg-side .mg-act.alt { flex: 1 1 100%; }
+#minigolf-panel.mg-side .mg-wait { flex: 1 1 100%; min-height: 44px; }

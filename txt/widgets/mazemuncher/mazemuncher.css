@@ -10,7 +10,8 @@
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
 }
 #mazemuncher-panel { touch-action: manipulation; }
-#mazemuncher-panel .mm-stage, #mazemuncher-panel .mm-cv, #mazemuncher-panel .mm-pad, #mazemuncher-panel .mm-dir { touch-action: none; }
+#mazemuncher-panel .mm-stage, #mazemuncher-panel .mm-cv, #mazemuncher-panel .mm-pad, #mazemuncher-panel .mm-dir,
+#mazemuncher-panel .mm-stick, #mazemuncher-panel .mm-stick * { touch-action: none; }
 #mazemuncher-panel button { touch-action: manipulation; }
 #mazemuncher-panel .mm-pad button { touch-action: none; }
 
@@ -109,9 +110,53 @@
 [data-theme="dark"] .mm-pale { color: #8ea6ff; }
 [data-theme="dark"] .mm-i-clover { color: #7ed37a; }
 
-/* the pad under the maze (touch screens): four big arrows; swipes across it steer too */
+/* the pad under the maze (touch screens; opt-in on desktop): a thumbstick or four
+   big arrows; swipes across the pad (beside the stick) steer too */
 .mm-pad { display: none; gap: 8px; }
-.mm-touch .mm-pad { display: flex; }
+.mm-osc .mm-pad { display: flex; }
+.mm-pad.stick { justify-content: center; }
+.mm-pad.stick .mm-dir, .mm-pad:not(.stick) .mm-stick { display: none; }
+
+/* the stick: a round base with ASCII arrows (the wished way lights up) and a knob
+   carrying the muncher that follows the finger and springs home on release */
+.mm-stick {
+  --sz: clamp(96px, 17vh, 128px);
+  position: relative; flex: none; width: var(--sz); height: var(--sz); border-radius: 50%; cursor: grab;
+  background: radial-gradient(circle at 50% 50%, var(--surface) 0 30%, var(--surface-2) 31% 100%);
+  border: 1px solid var(--border); box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+  font-family: var(--font-mono, ui-monospace, monospace); font-weight: 700; line-height: 1;
+  transition: opacity 120ms, border-color 120ms;
+}
+.mm-stick::before {   /* the dead zone */
+  content: ''; position: absolute; left: 39%; top: 39%; width: 22%; height: 22%; border-radius: 50%;
+  border: 1px dashed var(--border); pointer-events: none;
+}
+.mm-stick.drag { cursor: grabbing; border-color: var(--accent); }
+/* a soft accent glow on the side being pushed */
+.mm-stick { --glow: color-mix(in srgb, var(--accent) 40%, transparent); }
+.mm-stick[data-dir="0"] { box-shadow: inset 0 14px 16px -10px var(--glow); }
+.mm-stick[data-dir="1"] { box-shadow: inset 14px 0 16px -10px var(--glow); }
+.mm-stick[data-dir="2"] { box-shadow: inset 0 -14px 16px -10px var(--glow); }
+.mm-stick[data-dir="3"] { box-shadow: inset -14px 0 16px -10px var(--glow); }
+.mm-sg { position: absolute; font-size: 15px; color: var(--text-faint); pointer-events: none; transition: color 80ms, transform 80ms; }
+.mm-sg0 { left: 50%; top: 7%; transform: translateX(-50%); }
+.mm-sg2 { left: 50%; bottom: 7%; transform: translateX(-50%); }
+.mm-sg1 { top: 50%; left: 8%; transform: translateY(-50%); }
+.mm-sg3 { top: 50%; right: 8%; transform: translateY(-50%); }
+.mm-sg.on { color: var(--accent); }
+.mm-stick[data-dir="0"] .mm-sg0, .mm-stick[data-dir="2"] .mm-sg2 { color: var(--accent); transform: translateX(-50%) scale(1.25); }
+.mm-stick[data-dir="1"] .mm-sg1, .mm-stick[data-dir="3"] .mm-sg3 { color: var(--accent); transform: translateY(-50%) scale(1.25); }
+.mm-knob {
+  position: absolute; left: 28%; top: 28%; width: 44%; height: 44%; border-radius: 50%; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 2px solid var(--border-strong, var(--border)); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  color: #c08a00; font-size: 20px;
+  transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), border-color 80ms;
+}
+.mm-stick.drag .mm-knob { transition: border-color 80ms; border-color: var(--accent); }
+[data-theme="dark"] .mm-knob { color: #f2c544; background: var(--surface-hover, var(--surface)); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45); }
+.mm-pad.idle .mm-stick { opacity: 0.45; }
+@media (prefers-reduced-motion: reduce) { .mm-knob, .mm-sg { transition: none; } }
 .mm-dir {
   flex: 1 1 0; min-width: 0; height: 56px; display: flex; align-items: center; justify-content: center;
   border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); color: var(--text-muted); cursor: pointer;

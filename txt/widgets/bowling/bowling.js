@@ -572,14 +572,24 @@
   // ---- swipe → throw (phone swipe / mouse drag) ----
   // pts: [{x, y, t}] in logical px (y down, t ms). Up the screen = down the lane.
   // Direction → angle, speed of the flick → power, the path's bow → spin.
-  var SW_ANG = 0.2, SW_V0 = 260, SW_V1 = 1900, SW_CURVE = 4.5;
+  var SW_ANG = 0.2, SW_V0 = 260, SW_V1 = 1900, SW_CURVE = 4.5, SW_TAP = 10, SW_WIN = 100;
+  // What a stroke is so far: '' (undecided: still a tap, or going nowhere clear), 'throw' (up the
+  // lane), 'pos' (mostly sideways: slide the ball along the foul line).
+  function swipeKind(pts) {
+    if (!pts || pts.length < 2) return '';
+    var a = pts[0], b = pts[pts.length - 1], ax = Math.abs(b.x - a.x), up = a.y - b.y;
+    if (ax < SW_TAP && Math.abs(up) < SW_TAP) return '';
+    if (up >= SW_TAP && up >= ax * 0.7) return 'throw';
+    if (ax >= Math.abs(up) * 1.3) return 'pos';
+    return '';
+  }
   function swipeThrow(pts) {
     if (!pts || pts.length < 2) return null;
     var a = pts[0], b = pts[pts.length - 1], dx = b.x - a.x, dy = a.y - b.y, len = Math.sqrt(dx * dx + dy * dy);
     if (dy < 24 || len < 30) return null;
-    // speed: over the last ~120 ms of the stroke
+    // speed: over the last ~100 ms of the stroke
     var k = pts.length - 1;
-    while (k > 0 && b.t - pts[k - 1].t < 120) k--;
+    while (k > 0 && b.t - pts[k - 1].t < SW_WIN) k--;
     var q = pts[Math.max(0, k - 1)], dt = Math.max(16, b.t - q.t), vx = b.x - q.x, vy = b.y - q.y;
     var v = Math.sqrt(vx * vx + vy * vy) / dt * 1000;
     var pow = clamp((v - SW_V0) / (SW_V1 - SW_V0), 0, 1);
@@ -660,7 +670,7 @@
     scoreGame: scoreGame, cursor: cursor, validRolls: validRolls, isSplit: isSplit, leaveName: leaveName,
     newGame: newGame, turnOf: turnOf, rackFor: rackFor, applyRoll: applyRoll, seedFor: seedFor, normGame: normGame,
     aimFor: aimFor, cpuCandidates: cpuCandidates, cpuPlanner: cpuPlanner, cpuStep: cpuStep, cpuExecute: cpuExecute, cpuThrow: cpuThrow, cpuForget: cpuForget,
-    swipeThrow: swipeThrow, newRecords: newRecords, normRecords: normRecords, gameStats: gameStats, settleGame: settleGame
+    swipeThrow: swipeThrow, swipeKind: swipeKind, newRecords: newRecords, normRecords: normRecords, gameStats: gameStats, settleGame: settleGame
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = ENGINE;
 
@@ -961,7 +971,9 @@
       glyph(c, p.ci, p.code, PX, PY, clamp(PS * 0.9, 0.45, 1.1));
     }
     c.globalAlpha = 1;
-    if (S.swipe && S.swipe.pts.length > 1) drawSwipe(c);
+    if (S.swipe && S.swipe.mode === 'pos') drawSlide(c, S.swipe.pts[S.swipe.pts.length - 1]);
+    else if (S.swipe && S.swipe.pts.length > 1) drawSwipe(c, S.swipe.pts, 1);
+    else if (S.trail && S.time - S.trail.t0 < 0.5) drawSwipe(c, S.trail.pts, 1 - (S.time - S.trail.t0) / 0.5);
     hud(c);
     readout(c);
     if (S.msg) banner(c);
@@ -1162,12 +1174,25 @@
     var n = Math.max(4, Math.round((PX - x0) / (CW * 0.9))), sc = clamp(PS * 2.2, 0.4, 1.8);
     for (var i = 0; i <= n; i++) glyph(c, C_MUTED, 61, x0 + (PX - x0) * i / n, y0 + (PY - y0) * i / n, sc);
   }
-  function drawSwipe(c) {
-    var pts = S.swipe.pts, n = pts.length;
-    for (var i = 0; i < n; i++) {
-      c.globalAlpha = 0.25 + 0.6 * i / n;
-      glyph(c, C_ACC, i === n - 1 ? 111 : 46, pts[i].x, pts[i].y, i === n - 1 ? 1.3 : 1);
+  // the finger's path: a tapering line (live, then fading for a moment after the release)
+  function drawSwipe(c, pts, fade) {
+    var n = pts.length, col = S.pal[C_ACC];
+    if (n < 2) return;
+    c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = col;
+    for (var i = 1; i < n; i++) {
+      var u = i / (n - 1);
+      c.globalAlpha = (0.18 + 0.62 * u) * fade;
+      c.lineWidth = 1.5 + 4 * u;
+      c.beginPath(); c.moveTo(pts[i - 1].x, pts[i - 1].y); c.lineTo(pts[i].x, pts[i].y); c.stroke();
     }
+    c.globalAlpha = 0.9 * fade;
+    glyph(c, C_ACC, 111, pts[n - 1].x, pts[n - 1].y, 1.3);
+    c.globalAlpha = 1;
+  }
+  // sideways drag on the approach: arrows either side of the finger
+  function drawSlide(c, q) {
+    c.globalAlpha = 0.8;
+    drawStr(c, C_ACC, '<  >', q.x, q.y - 22, 'center', 1.1);
     c.globalAlpha = 1;
   }
 
@@ -1208,9 +1233,20 @@
   }
   // under the lane: stand, aim, hook and the power meter while aiming
   function readout(c) {
-    var VH = S.VH, a = S.aim, ph = S.phase;
+    var VH = S.VH, a = S.aim, ph = S.phase, y = VH - 12;
+    if (ph === 'roll' && S.rel && S.time - S.rel.t0 < 2.2) {    // the release: speed and hook
+      var rl = S.rel, ra = Math.min(1, (2.2 - (S.time - rl.t0)) * 2), rx;
+      c.fillStyle = S.col.bg; c.fillRect(0, VH - 25, VW, 25);
+      c.globalAlpha = ra;
+      rx = drawStr(c, C_MUTED, 'SPEED ', 7, y, 'left', 0.75);
+      rx = drawStr(c, C_TEXT, rl.mph.toFixed(1) + ' mph', rx, y, 'left', 0.85);
+      rx = drawStr(c, C_MUTED, '  HOOK ', rx, y, 'left', 0.75);
+      var rk = Math.round(Math.abs(rl.spin) * 5);
+      drawStr(c, C_ACC, rk ? new Array(rk + 1).join(rl.spin > 0 ? '<' : '>') : 'straight', rx, y, 'left', 0.85);
+      c.globalAlpha = 1;
+      return;
+    }
     if (!(ph === 'aim' || ph === 'meter') || !a) return;
-    var y = VH - 12;
     c.fillStyle = S.col.bg; c.fillRect(0, VH - 25, VW, 25);
     var stand = Math.round((LANE_HW - a.x) / BOARD + 0.5), tgt = Math.round((LANE_HW - (a.x + Math.tan(a.ang) * 180)) / BOARD + 0.5);
     var x = drawStr(c, C_MUTED, 'STAND ', 7, y, 'left', 0.75);
@@ -1402,6 +1438,7 @@
     S.R = newRoll(S.rack, thr, seedFor(S.g));
     S.R.ball.z = -8; S.R.ball.pz = -8;
     S.lastMph = mph(S.R.ball.v0);
+    S.rel = P.kind === 'h' ? { mph: S.lastMph, spin: S.R.ball.spin, t0: S.time } : null;
     S.phase = 'roll'; S.aimShow = null; S.swipe = null; S.idleBall = null; S.firstHit = false; S.fallN = 0; S.clackT = 0; S.thudT = 0;
     S.ff = P.kind === 'c' && S.fastCpu ? 2.5 : 1;
     S.snd.tone(180, 0.12, 'sine', 0.05, 120);
@@ -1610,8 +1647,8 @@
   }
   function helpHtml() {
     var keys = S.coarse ?
-      '<div><b>swipe up</b> &nbsp;from the ball to bowl: the direction aims, the speed is power, a curved stroke adds hook</div><div><b>tap the approach</b> &nbsp;to stand there</div><div><b>&lsaquo; &rsaquo; buttons</b> &nbsp;stand, aim and hook in steps, then <b>BOWL</b> (tap to start the power meter, tap again to let go)</div>' :
-      '<div><b>drag up</b> &nbsp;with the mouse and let go: direction aims, speed is power, a curve adds hook</div><div><b>&larr; &rarr;</b> stand &nbsp; <b>A D</b> aim &nbsp; <b>Q E</b> hook &nbsp;(Shift: bigger steps)</div><div><b>Space</b> &nbsp;start the power meter, again to let go</div><div><b>F</b> fast-forward &nbsp; <b>P / Esc</b> pause &nbsp; <b>gamepad</b> d-pad / LB RB / X B, A bowls</div>';
+      '<div><b>swipe up the lane</b> &nbsp;from the ball and let go to bowl: the <b>direction</b> of the swipe aims, how <b>fast</b> you flick is the power, and a <b>curved</b> swipe hooks (bow it right to hook left, left to hook right)</div><div><b>drag sideways</b> &nbsp;along the foul line first to move where you stand, or <b>tap the approach</b> to stand there</div><div><b>&lsaquo; &rsaquo; buttons</b> &nbsp;stand, aim and hook in steps, then <b>BOWL</b> (tap to start the power meter, tap again to let go)</div>' :
+      '<div><b>drag up the lane</b> &nbsp;with the mouse and let go: the direction aims, the speed of the flick is power, a curved stroke hooks. <b>Drag sideways</b> first to move where you stand.</div><div><b>&larr; &rarr;</b> stand &nbsp; <b>A D</b> aim &nbsp; <b>Q E</b> hook &nbsp;(Shift: bigger steps)</div><div><b>Space</b> &nbsp;start the power meter, again to let go</div><div><b>F</b> fast-forward &nbsp; <b>P / Esc</b> pause &nbsp; <b>gamepad</b> d-pad / LB RB / X B, A bowls</div>';
     return '<div class="bw-card bw-help">' +
       '<pre class="bw-art" aria-hidden="true">   o  o  o  o\n     o  o  o\n      o  o\n       o\n\n       @  ))</pre>' +
       '<div class="bw-title">BOWLING</div>' +
@@ -1978,29 +2015,47 @@
       if (S.phase === 'roll' && S.g.players[S.turn].kind === 'c') { S.ff = 3; renderPad(); return; }
       if (!canAim()) return;
       try { S.cv.setPointerCapture(e.pointerId); } catch (x) {}
-      S.swipe = { id: e.pointerId, pts: [stagePt(e)] };
+      var p0 = stagePt(e);
+      // mode: '' until the stroke shows what it is, then 'pos' (slide the ball) or 'throw'
+      S.swipe = { id: e.pointerId, pts: [p0], mode: '', x0: S.aim.x, piv: p0 };
+      S.trail = null;
       draw(1, 0);
     });
+    function laneDX(px) { camSet(S.cam); return proj(0, -8, 0) ? px / (S.F / PD) : 0; }
     S.cv.addEventListener('pointermove', function (e) {
       if (!S || !S.swipe || S.swipe.id !== e.pointerId) return;
       if (!canAim()) { S.swipe = null; return; }
-      var pts = S.swipe.pts, q = stagePt(e), l = pts[pts.length - 1];
+      var sw = S.swipe, pts = sw.pts, q = stagePt(e), l = pts[pts.length - 1];
       if (Math.abs(q.x - l.x) + Math.abs(q.y - l.y) < 1.5) return;
       pts.push(q);
       if (pts.length > 160) pts.splice(1, 1);
-      swipePreview();
+      if (!sw.mode) sw.mode = swipeKind(pts);
+      if (sw.mode === 'pos') {
+        // slide along the foul line; a turn up the lane from the lowest point starts the throw there
+        var x = clamp(Math.round((sw.x0 + laneDX(q.x - pts[0].x)) / BOARD) * BOARD, -X_MAX, X_MAX);
+        if (x !== S.aim.x) { S.aim.x = x; S.idleBall.x = x; S.snd.tone(900, 0.02, 'sine', 0.012); }
+        if (q.y >= sw.piv.y) sw.piv = q;
+        var up = sw.piv.y - q.y;
+        if (up > 18 && up > Math.abs(q.x - sw.piv.x) * 0.7) {
+          var k = pts.indexOf(sw.piv);
+          sw.pts = pts.slice(Math.max(0, k)); sw.mode = 'throw'; persistSetup();
+        }
+      }
+      if (sw.mode === 'throw') swipePreview();
       if (!S.swipeRaf) S.swipeRaf = requestAnimationFrame(function () { if (S) { S.swipeRaf = 0; if (!S.raf) draw(1, 0); } });
     });
     function swipeEnd(e) {
       if (!S || !S.swipe || S.swipe.id !== e.pointerId) return;
       var sw = S.swipe; S.swipe = null;
-      if (e.type === 'pointerup') sw.pts.push(stagePt(e));
-      var th = e.type === 'pointerup' && canAim() ? swipeThrow(sw.pts) : null;
-      if (th) { throwBall({ x: S.aim.x, ang: th.ang, pow: th.pow, spin: th.spin }); return; }
-      S.aimShow = S.aim; S.idleBall.spin = S.aim.spin;
+      var up = e.type === 'pointerup' && canAim();
+      if (up) { var q = stagePt(e), l = sw.pts[sw.pts.length - 1]; if (q.x !== l.x || q.y !== l.y) sw.pts.push(q); }
+      var th = up && sw.mode !== 'pos' ? swipeThrow(sw.pts) : null;
+      if (th) { S.trail = { pts: sw.pts, t0: S.time }; throwBall({ x: S.aim.x, ang: th.ang, pow: th.pow, spin: th.spin }); return; }
+      if (S.aim) { S.aimShow = S.aim; if (S.idleBall) S.idleBall.spin = S.aim.spin; }
+      if (sw.mode === 'pos') persistSetup();
       // a tap on the approach: stand there
       var a = sw.pts[0], b = sw.pts[sw.pts.length - 1];
-      if (e.type === 'pointerup' && canAim() && Math.abs(b.x - a.x) + Math.abs(b.y - a.y) < 12) {
+      if (up && !sw.mode && Math.abs(b.x - a.x) + Math.abs(b.y - a.y) < 12) {
         camSet(S.cam);
         if (proj(0, -8, 0) && a.y > PY - 60) {
           var d = PD, x = (a.x - VW / 2) / (S.F / d);
