@@ -1,0 +1,181 @@
+/* Dots and Boxes widget styles (loaded on demand via Cade.loadCSS). */
+#dotsboxes-panel { top: calc(var(--menubar-h, 36px) + 12px); right: 12px; max-width: calc(100vw - 24px); }
+#dotsboxes-panel .cade-panel-body { padding: 10px; overflow: hidden; overscroll-behavior: contain; }
+#dotsboxes-panel .cade-panel-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Fast taps must never select, magnify, open a callout or zoom. The board takes no
+   browser gestures at all; buttons allow plain taps only; cards scroll vertically. */
+#dotsboxes-panel, #dotsboxes-panel * {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+#dotsboxes-panel { touch-action: manipulation; }
+#dotsboxes-panel .db-stage, #dotsboxes-panel .db-cv { touch-action: none; }
+#dotsboxes-panel button { touch-action: manipulation; }
+#dotsboxes-panel .db-ovl { touch-action: pan-y; }
+
+/* header: new game / help / sound, before the core minimize button */
+.db-hb { display: inline-flex; flex: none; gap: 4px; cursor: default; }
+.db-hb button {
+  width: 30px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--radius-md, 6px); background: var(--surface-2); color: var(--text-muted); cursor: pointer;
+}
+.db-hb button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.db-hb button.on { color: var(--accent); }
+.db-hb button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* player colours: the same hues the canvas uses */
+.db { --db-p0: var(--accent); --db-p1: #cf3f3f; --db-p2: #b07d06; --db-p3: #7351c4; }
+[data-theme="dark"] .db { --db-p1: #f06a6a; --db-p2: #f2c544; --db-p3: #b79cf5; }
+.db .db-c0 { --pc: var(--db-p0); color: var(--db-p0); }
+.db .db-c1 { --pc: var(--db-p1); color: var(--db-p1); }
+.db .db-c2 { --pc: var(--db-p2); color: var(--db-p2); }
+.db .db-c3 { --pc: var(--db-p3); color: var(--db-p3); }
+
+.db {
+  display: flex; flex-direction: column; gap: 6px; width: var(--db-w, auto); margin: 0 auto;
+  font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; color: var(--text);
+}
+
+/* scoreboard */
+.db-bar { display: flex; gap: 6px; min-height: 34px; }
+.db-pl {
+  flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted) !important;
+  transition: border-color 120ms, box-shadow 120ms, background-color 120ms;
+}
+.db-pl .db-g {
+  flex: none; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border-radius: 5px;
+  font-weight: 700; color: var(--pc); background: color-mix(in srgb, var(--pc) 16%, transparent);
+}
+.db-pl .db-nm { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.db-pl .db-sc { flex: none; font-style: normal; font-weight: 700; font-size: 17px; font-variant-numeric: tabular-nums; color: var(--pc); }
+.db-pl.on { border-color: var(--pc); box-shadow: 0 0 0 1px var(--pc); background: var(--surface); color: var(--text) !important; }
+.db-pl.win { border-color: var(--pc); background: color-mix(in srgb, var(--pc) 12%, var(--surface)); color: var(--text) !important; }
+.db-pl.win .db-nm::after { content: ' \2605'; color: var(--pc); }
+.db-think { font-style: normal; color: var(--pc); margin-left: 1px; }
+.db-think b { font-weight: 700; animation: db-blink 1.2s infinite; }
+.db-think b:nth-child(2) { animation-delay: 0.2s; }
+.db-think b:nth-child(3) { animation-delay: 0.4s; }
+@keyframes db-blink { 0%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+
+/* the board */
+.db-stage { position: relative; margin: 0 auto; line-height: 0; }
+.db-cv { display: block; width: 100%; height: 100%; cursor: pointer; border-radius: 8px; background: var(--bg); box-shadow: 0 0 0 1px var(--border); }
+.db-stage.dim::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1;
+  background: var(--bg); opacity: 0.6; border-radius: 8px; pointer-events: none;
+}
+.db-ovl {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center; padding: 10px;
+  overflow: auto; overscroll-behavior: contain; line-height: 1.35; border-radius: 8px;
+}
+.db-card {
+  display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 360px; margin: auto; padding: 12px;
+  color: var(--text); font-size: 12px; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md, 6px); box-shadow: var(--shadow-lg);
+}
+.db-card p { margin: 0; color: var(--text-muted); line-height: 1.45; }
+.db-card p b { color: var(--text); }
+.db-title { font-weight: 700; font-size: 15px; letter-spacing: 0.16em; text-align: center; white-space: nowrap; }
+.db-title::before, .db-title::after { content: '--'; color: var(--accent); letter-spacing: 0; margin: 0 0.5em; font-weight: 500; }
+.db-sub { text-align: center; color: var(--text-muted); }
+.db-big { display: flex; justify-content: center; align-items: baseline; gap: 12px; font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.db-big i { font-style: normal; color: var(--text-faint); font-weight: 500; }
+.db-note { text-align: center; color: var(--text-faint); font-size: 11px; }
+.db-new { text-align: center; color: var(--accent); font-weight: 700; font-size: 11px; letter-spacing: 0.04em; }
+.db-dim { color: var(--text-faint); }
+.db-art { margin: 0 auto; font: inherit; font-weight: 700; line-height: 1.15; white-space: pre; color: var(--text-muted); }
+.db-art i { font-style: normal; color: var(--text); }
+.db-tab {
+  margin: 0 auto; font: inherit; line-height: 1.55; white-space: pre; color: var(--text-muted);
+  font-variant-numeric: tabular-nums; max-width: 100%; overflow-x: auto;
+}
+.db-tab b { color: var(--text); font-weight: 700; }
+.db-tab i { font-style: normal; color: var(--text-faint); }
+.db-keys { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: var(--radius-md, 6px); color: var(--text-muted); }
+.db-keys b { color: var(--text); }
+.db-tip { font-size: 11px; }
+.db-go {
+  font: inherit; font-weight: 700; padding: 9px 12px; border-radius: var(--radius-md, 6px); cursor: pointer;
+  border: 1px solid var(--accent); background: transparent; color: var(--accent);
+}
+.db-go:hover, .db-go:focus-visible { background: var(--accent); color: #fff; outline: none; }
+.db-go.alt { border-color: var(--border); color: var(--text-muted); }
+.db-go.alt:hover, .db-go.alt:focus-visible { background: var(--surface-2); color: var(--text); }
+.db-btns { display: flex; gap: 8px; }
+.db-btns .db-go { flex: 1; }
+.db-tabs { display: flex; gap: 2px; padding: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.db-tabs button {
+  flex: 1; font: inherit; font-weight: 600; color: var(--text-muted); background: transparent; border: 0; border-radius: 6px;
+  padding: 4px 8px; min-height: 30px; cursor: pointer;
+}
+.db-tabs button:hover:not(.on) { color: var(--text); }
+.db-tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14); }
+[data-theme="dark"] .db-tabs button.on { background: var(--surface-hover); }
+.db-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.db-sec { display: flex; flex-direction: column; gap: 4px; }
+.db-h { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); }
+.db-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.db-chip {
+  display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 11px; padding: 3px 9px; min-height: 28px;
+  border-radius: 999px; cursor: pointer; color: var(--text); border: 1px solid var(--border); background: var(--surface-2);
+}
+.db-chip:hover { border-color: var(--accent); }
+.db-chip.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.db-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.db-chip i { font-style: normal; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.db-gls { display: inline-flex; gap: 1px; font-weight: 700; }
+.db-foot { display: flex; align-items: center; justify-content: space-between; gap: 4px 8px; flex-wrap: wrap; color: var(--text-faint); font-size: 11px; }
+.db-confirm { color: var(--text); }
+.db-lnk {
+  font: inherit; font-size: 11px; color: var(--text-muted); background: none; border: 0; padding: 3px 2px; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.db-lnk:hover { color: var(--accent); }
+.db-lnk.danger { color: var(--error, #dc2626); font-weight: 700; }
+
+/* status line and the pad */
+.db-status {
+  min-height: 18px; text-align: center; color: var(--text-muted); font-size: 12px; line-height: 18px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.db-status.link { cursor: pointer; color: var(--text); }
+.db-status u { color: var(--accent); text-underline-offset: 2px; }
+.db-pad { display: flex; gap: 8px; }
+.db-act {
+  flex: 1 1 0; min-width: 0; height: 40px; display: flex; align-items: center; justify-content: center; gap: 6px;
+  font: inherit; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff;
+}
+.db-act.alt { border-color: var(--border); background: var(--surface-2); color: var(--text-muted); }
+.db-act.alt:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+.db-act:disabled { opacity: 0.4; cursor: default; }
+.db-act:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.db-act small { font-size: 10px; font-weight: 500; opacity: 0.6; border: 1px solid currentColor; border-radius: 3px; padding: 0 3px; line-height: 13px; }
+.db-pad .db-onover { display: none; }
+.db-pad.over .db-act:not(.db-onover) { display: none; }
+.db-pad.over .db-onover { display: flex; }
+.db-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 560px) {
+  #dotsboxes-panel { left: 8px !important; right: 8px; max-width: none; top: calc(var(--menubar-h, 36px) + 6px); }
+  #dotsboxes-panel .cade-panel-body { padding: 8px 8px max(8px, env(safe-area-inset-bottom)); }
+  .db-ovl { padding: 6px; }
+  .db-card { padding: 10px; }
+  .db-pl { padding: 4px 6px; gap: 4px; }
+  /* 3-4 players: keep the glyph (it matches the boxes on the board) beside the short name */
+  .db-bar[data-n="4"] .db-pl, .db-bar[data-n="3"] .db-pl { padding: 4px 5px; gap: 3px; }
+  .db-bar[data-n="4"] .db-pl .db-g { width: 18px; }
+}
+@media (pointer: coarse) {
+  .db-hb button { width: 40px; height: 34px; }
+  .db-act { height: 52px; }
+  .db-tabs button { min-height: 40px; }
+  .db-chip { min-height: 38px; padding: 3px 12px; }
+  .db-lnk { min-height: 40px; padding: 0 6px; }
+  .db-go { padding: 12px; }
+}
+@media (max-height: 720px) and (max-width: 560px) {
+  .db-art { display: none; }
+}

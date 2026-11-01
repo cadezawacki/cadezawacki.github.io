@@ -2916,7 +2916,10 @@
       "icon": "🔐",
       "tags": "game,puzzle,word,cipher,cryptogram,quote,decode,daily",
       "entry": "widgets/cryptogram/cryptogram.js",
-      "css": "widgets/cryptogram/cryptogram.css"
+      "css": "widgets/cryptogram/cryptogram.css",
+      "precache": [
+        "widgets/cryptogram/cryptogram-quotes.js"
+      ]
     },
     {
       "id": "autocomplete",
@@ -2926,37 +2929,49 @@
       "icon": "✍️",
       "tags": "game,word,phrase,autocomplete,guess,idiom,quiz,party,2 player",
       "entry": "widgets/autocomplete/autocomplete.js",
-      "css": "widgets/autocomplete/autocomplete.css"
+      "css": "widgets/autocomplete/autocomplete.css",
+      "precache": [
+        "widgets/autocomplete/autocomplete-data.js"
+      ]
     },
     {
       "id": "wordladder",
       "type": "widget",
       "name": "Word Ladder",
-      "description": "Change one letter at a time to climb from one word to another — daily par, hints, solver",
+      "description": "Change one letter at a time to climb from one word to another — daily par, hints, solver, race the CPU or a friend",
       "icon": "🪜",
-      "tags": "game,puzzle,word,ladder,doublets,daily",
+      "tags": "game,puzzle,word,ladder,doublets,daily,word game,race,vs cpu,2 player,pass and play",
       "entry": "widgets/wordladder/wordladder.js",
-      "css": "widgets/wordladder/wordladder.css"
+      "css": "widgets/wordladder/wordladder.css",
+      "precache": [
+        "widgets/wordladder/wordladder-words.js"
+      ]
     },
     {
       "id": "wordsearch",
       "type": "widget",
       "name": "Word Search",
-      "description": "Find hidden words in a letter grid — themed packs or words from your own note",
+      "description": "Find hidden words in a letter grid — 32 theme packs, words from your note or your own list; daily puzzle, vs CPU and 2 players",
       "icon": "🔎",
-      "tags": "game,puzzle,word,search,find,grid,note",
+      "tags": "game,puzzle,word,search,find,grid,note,daily,hidden words,wordsearch,themes,vs cpu,2 player,pass and play",
       "entry": "widgets/wordsearch/wordsearch.js",
-      "css": "widgets/wordsearch/wordsearch.css"
+      "css": "widgets/wordsearch/wordsearch.css",
+      "precache": [
+        "widgets/wordsearch/wordsearch-data.js"
+      ]
     },
     {
       "id": "lettertiles",
       "type": "widget",
       "name": "Letter Tiles",
-      "description": "Build crossing words on a board for points — vs CPU or pass-and-play",
+      "description": "Build crossing words on a 15x15 board for points — vs CPU (easy/medium/hard) or 2-4 player pass-and-play",
       "icon": "🔤",
-      "tags": "game,word,board,tiles,crossword,2 player,cpu",
+      "tags": "game,word,board,tiles,crossword,2 player,cpu,letters,pass and play,bingo",
       "entry": "widgets/lettertiles/lettertiles.js",
-      "css": "widgets/lettertiles/lettertiles.css"
+      "css": "widgets/lettertiles/lettertiles.css",
+      "precache": [
+        "widgets/lettertiles/lettertiles-words.js"
+      ]
     },
     {
       "id": "flowlines",
@@ -2964,7 +2979,7 @@
       "name": "Flow Lines",
       "description": "Join matching dots with paths that fill the grid without crossing — generated levels, daily",
       "icon": "〰️",
-      "tags": "game,puzzle,logic,flow,lines,connect,daily",
+      "tags": "game,puzzle,logic,flow,lines,connect,daily,pipes,paths,dots,ascii",
       "entry": "widgets/flowlines/flowlines.js",
       "css": "widgets/flowlines/flowlines.css"
     },
@@ -2972,29 +2987,40 @@
       "id": "chess",
       "type": "widget",
       "name": "Chess",
-      "description": "Classic chess — vs the computer (levels) or pass-and-play, undo, hints, clocks",
+      "description": "Classic chess — vs the computer (six levels) or pass-and-play; undo, hints, clocks, PGN, saved games",
       "icon": "♞",
-      "tags": "game,board,chess,strategy,2 player,cpu",
+      "tags": "game,board,chess,strategy,2 player,cpu,pgn,clock,hint",
       "entry": "widgets/chess/chess.js",
-      "css": "widgets/chess/chess.css"
+      "css": "widgets/chess/chess.css",
+      "precache": [
+        "widgets/chess/chess-engine.js",
+        "widgets/chess/chess-board.js",
+        "widgets/chess/chess-board.css"
+      ]
     },
     {
       "id": "chesspuzzles",
       "type": "widget",
       "name": "Chess Puzzles",
-      "description": "Mate-in-one, two and three puzzles — streaks, hints, a daily puzzle",
+      "description": "Mate-in-one, two and three puzzles — daily puzzle, rated streaks, hints, solutions; 172 engine-proven puzzles",
       "icon": "♟️",
-      "tags": "game,puzzle,chess,tactics,mate,daily",
+      "tags": "game,puzzle,chess,tactics,mate,daily,rated,streak",
       "entry": "widgets/chesspuzzles/chesspuzzles.js",
-      "css": "widgets/chesspuzzles/chesspuzzles.css"
+      "css": "widgets/chesspuzzles/chesspuzzles.css",
+      "precache": [
+        "widgets/chess/chess-engine.js",
+        "widgets/chess/chess-board.js",
+        "widgets/chess/chess-board.css",
+        "widgets/chesspuzzles/chesspuzzles-data.js"
+      ]
     },
     {
       "id": "lander",
       "type": "widget",
       "name": "Lunar Lander",
-      "description": "Thrust and rotate onto the landing pad — mind the fuel and your legs",
+      "description": "Thrust and rotate onto the landing pad — mind the fuel and your legs. 12-level campaign, endless, duels vs CPU or a friend",
       "icon": "🚀",
-      "tags": "game,arcade,fun,lander,space,physics,thrust",
+      "tags": "game,arcade,fun,lander,space,physics,thrust,moon,lunar,gravity,campaign,2 player,vs cpu,ascii",
       "entry": "widgets/lander/lander.js",
       "css": "widgets/lander/lander.css"
     },
@@ -3002,9 +3028,9 @@
       "id": "roadhopper",
       "type": "widget",
       "name": "Road Hopper",
-      "description": "Hop across busy roads and rivers — lanes speed up, grab bonuses",
+      "description": "Hop across busy roads and rivers — classic levels or endless lanes, vs CPU or 2 players",
       "icon": "🚦",
-      "tags": "game,arcade,fun,road,cross,traffic,river,hop",
+      "tags": "game,arcade,fun,road,cross,traffic,river,hop,endless,logs,ascii,cpu,2 player",
       "entry": "widgets/roadhopper/roadhopper.js",
       "css": "widgets/roadhopper/roadhopper.css"
     },
@@ -3014,7 +3040,7 @@
       "name": "Maze Muncher",
       "description": "A speedy maze chase — munch every dot, outfox four very different chasers",
       "icon": "🍒",
-      "tags": "game,arcade,fun,maze,chase,dots,ghosts,speed",
+      "tags": "game,arcade,fun,maze,chase,dots,ghosts,speed,muncher,power pellet,2 player,ascii",
       "entry": "widgets/mazemuncher/mazemuncher.js",
       "css": "widgets/mazemuncher/mazemuncher.css"
     },
@@ -3024,7 +3050,7 @@
       "name": "Pinball",
       "description": "ASCII pinball — flippers, bumpers, ramps, missions and multiball",
       "icon": "🕹️",
-      "tags": "game,arcade,fun,pinball,flippers,physics,table",
+      "tags": "game,arcade,fun,pinball,flippers,physics,table,multiball,ascii,2 players",
       "entry": "widgets/pinball/pinball.js",
       "css": "widgets/pinball/pinball.css"
     },
@@ -3032,9 +3058,9 @@
       "id": "bugswarm",
       "type": "widget",
       "name": "Bug Swarm",
-      "description": "Blast a segmented bug as it winds down through the mushroom field",
+      "description": "Blast a segmented bug as it winds down through the mushroom field — splits, skitters, ticks, hornets, waves, 1 or 2 players",
       "icon": "🐛",
-      "tags": "game,arcade,fun,shooter,bug,centipede,mushrooms",
+      "tags": "game,arcade,fun,shooter,bug,centipede,mushrooms,waves,2 player,ascii",
       "entry": "widgets/bugswarm/bugswarm.js",
       "css": "widgets/bugswarm/bugswarm.css"
     },
@@ -3042,9 +3068,9 @@
       "id": "caveflyer",
       "type": "widget",
       "name": "Cave Flyer",
-      "description": "Hold to rise, let go to fall — thread a narrowing cave",
+      "description": "Hold to rise, let go to fall — thread a narrowing cave past stalactites; near misses, fuel, shields and a hangar of craft",
       "icon": "🚁",
-      "tags": "game,arcade,fun,one button,hold,cave,helicopter,endless",
+      "tags": "game,arcade,fun,one button,hold,cave,helicopter,endless,near miss,fuel,ascii",
       "entry": "widgets/caveflyer/caveflyer.js",
       "css": "widgets/caveflyer/caveflyer.css"
     },
@@ -3054,7 +3080,7 @@
       "name": "Stack Tower",
       "description": "Tap to drop the sliding block — overhangs get sliced, perfect drops grow",
       "icon": "🧱",
-      "tags": "game,arcade,fun,one button,tap,stack,tower,endless",
+      "tags": "game,arcade,fun,one button,tap,stack,tower,endless,vs cpu,2 players,ascii",
       "entry": "widgets/stacktower/stacktower.js",
       "css": "widgets/stacktower/stacktower.css"
     },
@@ -3072,9 +3098,9 @@
       "id": "pool",
       "type": "widget",
       "name": "Pool",
-      "description": "8-ball pool with an aiming line — vs CPU or pass-and-play",
+      "description": "8-ball pool on an ASCII table — aiming line, spin, vs CPU (easy/normal/hard), pass-and-play or practice racks",
       "icon": "🎱",
-      "tags": "game,sport,fun,pool,billiards,8-ball,physics,2 player,cpu",
+      "tags": "game,sport,fun,pool,billiards,8-ball,physics,2 player,cpu,practice,ascii",
       "entry": "widgets/pool/pool.js",
       "css": "widgets/pool/pool.css"
     },
@@ -3094,7 +3120,7 @@
       "name": "Bowling",
       "description": "Aim, spin and hook through 10 frames — vs CPU or pass-and-play",
       "icon": "🎳",
-      "tags": "game,sport,fun,bowling,strike,spare,2 player,cpu",
+      "tags": "game,sport,fun,bowling,strike,spare,2 player,cpu,ten pin,pins,hook",
       "entry": "widgets/bowling/bowling.js",
       "css": "widgets/bowling/bowling.css"
     },
@@ -3102,9 +3128,9 @@
       "id": "darts",
       "type": "widget",
       "name": "Darts",
-      "description": "501 and Cricket with a wobbling aim — vs CPU or pass-and-play",
+      "description": "501 and Cricket with a wobbling aim — hold your breath to steady, release to throw; vs CPU or 2-4 player pass-and-play",
       "icon": "🎯",
-      "tags": "game,sport,fun,darts,501,cricket,2 player,cpu",
+      "tags": "game,sport,fun,darts,501,301,cricket,around the clock,practice,2 player,cpu,pub,board,ascii",
       "entry": "widgets/darts/darts.js",
       "css": "widgets/darts/darts.css"
     },
@@ -3114,7 +3140,7 @@
       "name": "Curling",
       "description": "Slide stones, sweep to steer, score the house — vs CPU or pass-and-play",
       "icon": "🥌",
-      "tags": "game,sport,fun,curling,ice,sweep,2 player,cpu",
+      "tags": "game,sport,fun,curling,ice,sweep,2 player,cpu,stones,house,olympic,winter",
       "entry": "widgets/curling/curling.js",
       "css": "widgets/curling/curling.css"
     },
@@ -3132,9 +3158,9 @@
       "id": "marblerun",
       "type": "widget",
       "name": "Marble Run",
-      "description": "Place ramps, funnels and bumpers, then let the marbles roll — goals and a sandbox",
+      "description": "Place ramps, funnels and bumpers, then let the marbles roll — 18 goal levels and a sandbox with save slots and share codes",
       "icon": "🛝",
-      "tags": "game,toy,physics,marble,sandbox,puzzle",
+      "tags": "game,toy,physics,marble,sandbox,puzzle,ramps,funnel,bumper,flipper,conveyor,trampoline,teleporter,build",
       "entry": "widgets/marblerun/marblerun.js",
       "css": "widgets/marblerun/marblerun.css"
     },
@@ -3144,7 +3170,7 @@
       "name": "Falling Sand",
       "description": "A sandbox of sand, water, fire, plants and more — watch it all interact",
       "icon": "⏳",
-      "tags": "toy,fun,sandbox,sand,simulation,physics,relax",
+      "tags": "toy,fun,sandbox,sand,simulation,physics,relax,powder,cellular automaton,fire,water,lava",
       "entry": "widgets/fallingsand/fallingsand.js",
       "css": "widgets/fallingsand/fallingsand.css"
     },
@@ -3154,7 +3180,7 @@
       "name": "Blackjack",
       "description": "Hit, stand, double, split — with a basic-strategy coach and a chip bank",
       "icon": "🃏",
-      "tags": "game,cards,casino,blackjack,21",
+      "tags": "game,cards,casino,blackjack,21,card counting,hi-lo,basic strategy,pass and play",
       "entry": "widgets/blackjack/blackjack.js",
       "css": "widgets/blackjack/blackjack.css"
     },
@@ -3162,9 +3188,9 @@
       "id": "holdem",
       "type": "widget",
       "name": "Texas Hold'em",
-      "description": "No-limit hold'em vs 3–5 computer players with distinct styles",
+      "description": "No-limit hold'em vs 3–5 computer players with distinct styles — tournaments, cash games, side pots, pass-and-play",
       "icon": "♠️",
-      "tags": "game,cards,casino,poker,holdem,cpu",
+      "tags": "game,cards,casino,poker,holdem,texas,no limit,tournament,cash game,cpu,pass and play,2 player,multiplayer",
       "entry": "widgets/holdem/holdem.js",
       "css": "widgets/holdem/holdem.css"
     },
@@ -3174,7 +3200,7 @@
       "name": "Farkle",
       "description": "Push-your-luck dice — Farkle and Pig, vs CPU or pass-and-play",
       "icon": "🎲",
-      "tags": "game,dice,farkle,pig,push your luck,2 player,cpu",
+      "tags": "game,dice,farkle,pig,push your luck,2 player,cpu,pass and play,ascii",
       "entry": "widgets/farkle/farkle.js",
       "css": "widgets/farkle/farkle.css"
     },
@@ -3182,9 +3208,9 @@
       "id": "hearts",
       "type": "widget",
       "name": "Hearts",
-      "description": "Classic trick-taking Hearts — pass, avoid points, shoot the moon",
+      "description": "Classic trick-taking Hearts — pass, avoid points, shoot the moon; vs 3 CPUs (easy/normal/hard) or pass-and-play",
       "icon": "♥️",
-      "tags": "game,cards,hearts,tricks,cpu",
+      "tags": "game,cards,hearts,tricks,cpu,pass and play,2 player,multiplayer,queen of spades,shoot the moon",
       "entry": "widgets/hearts/hearts.js",
       "css": "widgets/hearts/hearts.css"
     },
@@ -3202,9 +3228,9 @@
       "id": "seabattle",
       "type": "widget",
       "name": "Sea Battle",
-      "description": "Hide your fleet, hunt theirs — vs CPU or pass-and-play",
+      "description": "Hide your fleet, hunt theirs — vs CPU (random, hunt/target, probability heatmap) or pass-and-play; Classic, Salvo and Hit-again rules",
       "icon": "🚢",
-      "tags": "game,board,battleship,sea battle,ships,2 player,cpu",
+      "tags": "game,board,battleship,sea battle,ships,2 player,cpu,salvo,ascii",
       "entry": "widgets/seabattle/seabattle.js",
       "css": "widgets/seabattle/seabattle.css"
     },
@@ -3212,9 +3238,9 @@
       "id": "mancala",
       "type": "widget",
       "name": "Mancala",
-      "description": "Sow the seeds, capture, and fill your store — vs CPU or pass-and-play",
+      "description": "Sow the seeds, capture, and fill your store — Kalah or Oware, vs a 6-level CPU or pass-and-play",
       "icon": "🥜",
-      "tags": "game,board,mancala,kalah,seeds,2 player,cpu",
+      "tags": "game,board,mancala,kalah,oware,awale,seeds,sowing,2 player,cpu",
       "entry": "widgets/mancala/mancala.js",
       "css": "widgets/mancala/mancala.css"
     },
@@ -3222,9 +3248,9 @@
       "id": "dotsboxes",
       "type": "widget",
       "name": "Dots and Boxes",
-      "description": "Draw lines, close boxes, chain captures — vs CPU or pass-and-play",
+      "description": "Draw lines, close boxes, chain captures — vs CPU (Easy/Medium/Hard with double-crosses) or 2–4 player pass-and-play",
       "icon": "✏️",
-      "tags": "game,pencil,dots,boxes,2 player,cpu",
+      "tags": "game,pencil,dots,boxes,2 player,cpu,pass and play,strategy,chains,paper",
       "entry": "widgets/dotsboxes/dotsboxes.js",
       "css": "widgets/dotsboxes/dotsboxes.css"
     },
@@ -3232,19 +3258,22 @@
       "id": "partygames",
       "type": "widget",
       "name": "Party Games",
-      "description": "Charades timer, Fishbowl and Hot Seat questions — pass the phone around",
+      "description": "Charades, Fishbowl, Hot Seat and quick decks — teams, timers and scores; pass the phone around",
       "icon": "🎉",
-      "tags": "game,party,charades,fishbowl,hot seat,group,timer",
+      "tags": "game,party,charades,fishbowl,hot seat,would you rather,never have i ever,most likely to,group,teams,timer,family",
       "entry": "widgets/partygames/partygames.js",
-      "css": "widgets/partygames/partygames.css"
+      "css": "widgets/partygames/partygames.css",
+      "precache": [
+        "widgets/partygames/partygames-data.js"
+      ]
     },
     {
       "id": "lemonade",
       "type": "widget",
       "name": "Lemonade Stand",
-      "description": "Weather, prices and recipes — run the stand day by day",
+      "description": "Run a lemonade stand for a 30-day season — supplies, recipe, price, fickle weather, events and upgrades",
       "icon": "🍋",
-      "tags": "game,sim,business,lemonade,economy",
+      "tags": "game,sim,business,lemonade,economy,tycoon,weather,shop,stand,ascii",
       "entry": "widgets/lemonade/lemonade.js",
       "css": "widgets/lemonade/lemonade.css"
     },
@@ -3252,9 +3281,9 @@
       "id": "tinyfarm",
       "type": "widget",
       "name": "Tiny Farm",
-      "description": "Plant ASCII crops that grow in real time while you're away",
+      "description": "Plant ASCII crops that grow in real time while you're away — seasons, weather, crows, animals, upgrades and a daily market",
       "icon": "🌱",
-      "tags": "game,sim,idle,farm,crops,garden",
+      "tags": "game,sim,idle,farm,crops,garden,harvest,seasons,weather,chickens,cows,market,ascii",
       "entry": "widgets/tinyfarm/tinyfarm.js",
       "css": "widgets/tinyfarm/tinyfarm.css"
     },
@@ -3262,9 +3291,9 @@
       "id": "spacetrader",
       "type": "widget",
       "name": "Space Trader",
-      "description": "Buy low, sell high across the stars — upgrades, pirates and missions",
+      "description": "Buy low, sell high across an ASCII star map — pirates, police, missions, upgrades, a rival trader and a moon to buy",
       "icon": "🛰️",
-      "tags": "game,sim,trading,space,economy,pirates",
+      "tags": "game,sim,trading,space,economy,pirates,merchant,ascii,strategy,vs cpu,2 player",
       "entry": "widgets/spacetrader/spacetrader.js",
       "css": "widgets/spacetrader/spacetrader.css"
     },
@@ -3272,9 +3301,9 @@
       "id": "factory",
       "type": "widget",
       "name": "Factory Lines",
-      "description": "Build conveyor and machine lines to automate production puzzles",
+      "description": "Automation puzzles — mine ore, run belts, splitters and machines, hit the delivery rate; 16 levels, star ratings and a sandbox",
       "icon": "🏭",
-      "tags": "game,puzzle,automation,factory,conveyor,logistics",
+      "tags": "game,puzzle,automation,factory,conveyor,logistics,belts,machines,sandbox",
       "entry": "widgets/factory/factory.js",
       "css": "widgets/factory/factory.css"
     },
@@ -3282,9 +3311,9 @@
       "id": "deckbuilder",
       "type": "widget",
       "name": "Deck Delve",
-      "description": "A card-battling roguelite — build a deck, climb a branching map",
+      "description": "A card-battling roguelite — build a deck, climb a branching map through three acts; seeded runs, daily delve, saves mid-run",
       "icon": "🗡️",
-      "tags": "game,cards,roguelite,deckbuilder,strategy",
+      "tags": "game,cards,roguelite,deckbuilder,strategy,dungeon,relics,daily,seed,turn based,solo,ascii",
       "entry": "widgets/deckbuilder/deckbuilder.js",
       "css": "widgets/deckbuilder/deckbuilder.css"
     },
@@ -3292,9 +3321,9 @@
       "id": "escaperoom",
       "type": "widget",
       "name": "Escape Room",
-      "description": "Inspect, combine items and crack codes to get out",
+      "description": "Point-and-click escape rooms in ASCII — inspect, combine items, crack dials, keypads and symbol locks; hints, timer and best times",
       "icon": "🗝️",
-      "tags": "game,puzzle,escape room,adventure,codes",
+      "tags": "game,puzzle,escape room,adventure,codes,point and click,locks,riddles,logic,ascii",
       "entry": "widgets/escaperoom/escaperoom.js",
       "css": "widgets/escaperoom/escaperoom.css"
     },
@@ -3302,9 +3331,9 @@
       "id": "morse",
       "type": "widget",
       "name": "Morse Trainer",
-      "description": "Learn Morse code by ear — levels, speed, and an arcade mode",
+      "description": "Learn Morse code by ear — Koch lessons, Farnsworth timing, copy, send with a key or paddles, word drills and an arcade mode",
       "icon": "📡",
-      "tags": "game,learning,morse,code,radio,training",
+      "tags": "game,learning,morse,code,radio,training,cw,koch,farnsworth,ham,telegraph,keyer,paddle,callsign,arcade",
       "entry": "widgets/morse/morse.js",
       "css": "widgets/morse/morse.css"
     },
@@ -3312,9 +3341,9 @@
       "id": "plates",
       "type": "widget",
       "name": "License Plate Game",
-      "description": "Road-trip tracker for states seen — rarity scores, progress, saved trips",
+      "description": "Road-trip license plate tracker — tap states seen, multi-counts, rarity points, family scoring, saved trips and records",
       "icon": "🚗",
-      "tags": "game,road trip,license plate,states,travel,tracker,car",
+      "tags": "game,road trip,license plate,states,travel,tracker,car,family,kids,bingo,plates,usa,canada,mexico",
       "entry": "widgets/plates/plates.js",
       "css": "widgets/plates/plates.css"
     },
