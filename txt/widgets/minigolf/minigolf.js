@@ -1984,25 +1984,39 @@
   }
 
   // ---- layout ----
-  function availH(vw, vh) {
+  // Everything in the panel but the stage, measured from the content (not the
+  // panel box: a panel clamped to the screen hides how tall its body wants to
+  // be, which made the green too tall and pushed the pad off a phone screen).
+  function chromeH() {
+    var r = S.panel.getBoundingClientRect(), bd = S.panel.querySelector('.cade-panel-body');
+    if (!r.height || !bd) return 0;
+    return (r.height - bd.clientHeight) + bd.scrollHeight - (S.stage.offsetHeight || 0);
+  }
+  // the room left for the stage: the visible viewport below the panel's top
+  function availH(vw, vh, chrome) {
     var r = S.panel.getBoundingClientRect();
-    if (!r.height) return vh - (vw <= 560 ? 210 : 230);
-    var chrome = r.height - (S.stage.offsetHeight || 0);
-    if (S.panel.classList.contains('cade-solo-panel')) {
-      var hd = S.panel.querySelector('.cade-panel-head');
-      chrome = (hd ? hd.offsetHeight : 40) + (S.pad.offsetHeight || 56) + (S.hud.offsetHeight || 24) + 44;
-    }
-    return vh - Math.min(Math.max(0, r.top), 140) - chrome - 10;
+    if (!r.height || !chrome) return vh - (vw <= 560 ? 230 : 240);
+    var room = vh - Math.min(Math.max(0, r.top), 140), mx = getComputedStyle(S.panel).maxHeight, mh = /px$/.test(mx) ? parseFloat(mx) : 0;
+    if (mh > 0) room = Math.min(room, mh);                              // the app caps the panel to the window it opened in
+    return room - chrome - 6;
   }
   function layout() {
     var vw = window.innerWidth || 800, vh = window.innerHeight || 600, vv = window.visualViewport;
+    if (vv && vv.width && vv.scale <= 1.01) vw = Math.min(vw, vv.width);
     if (vv && vv.height && vv.scale <= 1.01) vh = Math.min(vh, vv.height);
     var phone = vw <= 560, solo = S.panel.classList.contains('cade-solo-panel');
-    var W = Math.floor(Math.min(vw - (phone ? 30 : 48), solo ? 1100 : 760)), ah = Math.max(200, availH(vw, vh)), H;
+    // a short, wide screen (a phone on its side): the pad goes beside the green
+    var side = vh < 520 && vw > vh * 1.25 && vw >= 480;
+    S.panel.classList.toggle('mg-side', side);
+    var gut = side ? (solo ? 24 : 40) : phone ? (solo ? 20 : 34) : 48;
+    var padW = side ? 178 : 0;                                         // .mg-side .mg-pad width + gap
+    var W = Math.floor(Math.min(vw - gut - padW, solo ? 1100 : 760)), ch = chromeH(), ah = availH(vw, vh, ch), H;
+    ah = Math.floor(Math.max(side ? 120 : 160, ah));
     if (W < ah * 0.9) H = Math.min(ah, Math.round(W * 1.7));           // a tall stage: holes turn on their side
     else H = Math.min(ah, Math.round(W * 0.62));
     H = Math.max(H, Math.min(ah, 220));
-    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (side && W > H * 2.6) W = Math.round(H * 2.6);                   // no letterboxed strip of a green
+    var dpr = Math.min(W * H > 360000 ? 2 : 3, Math.max(1, window.devicePixelRatio || 1));   // crisp glyphs on a phone, bounded memory on a big screen
     S.SW = W; S.SH = H;
     S.cv.style.width = W + 'px'; S.cv.style.height = H + 'px';
     S.stage.style.width = W + 'px'; S.stage.style.height = H + 'px';
@@ -2011,7 +2025,14 @@
     S.k = S.cv.width / W;
     S.coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
     S.sc = 0;
+    S.lay = { vw: vw, vh: vh, chrome: ch, side: side };
     if (S.g) fitView();
+  }
+  // the HUD wrapping or the pad changing mode moves the chrome: fit again
+  function relayoutIfMoved() {
+    if (!S || !S.lay || (Cade.isMinimized && Cade.isMinimized(S.panel))) return;
+    var ch = chromeH();
+    if (ch && Math.abs(ch - S.lay.chrome) > 1) { layout(); redraw(); }
   }
   function redraw() { if (!S) return; if (S.raf) return; draw(1); }
 
@@ -2029,6 +2050,8 @@
     window.removeEventListener('blur', s.onBlur);
     window.removeEventListener('resize', s.onResize);
     if (window.visualViewport) window.visualViewport.removeEventListener('resize', s.onResize);
+    window.removeEventListener('orientationchange', s.onResize);
+    if (s.ro) s.ro.disconnect();
     if (s.themeObs) s.themeObs.disconnect();
     if (s.phase === 'play' && s.g && !s.preview) { try { var snap = snapRound(s.g); if (snap) sset(ROUND_KEY, JSON.stringify(snap)); } catch (e) {} }
     s.snd.close();
@@ -2106,6 +2129,11 @@
     };
     window.addEventListener('resize', S.onResize);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', S.onResize);
+    window.addEventListener('orientationchange', S.onResize);
+    try {
+      S.ro = new ResizeObserver(function () { if (S && S.panel === p) requestAnimationFrame(relayoutIfMoved); });
+      S.ro.observe(S.hud); S.ro.observe(S.pad);
+    } catch (e) {}
     S.onPad = function () { if (S && !S.gpT) S.gpT = setInterval(pollMenus, 100); };
     window.addEventListener('gamepadconnected', S.onPad);
     if (readPad()) S.onPad();
@@ -2154,7 +2182,10 @@
     ['gesturestart', 'gesturechange', 'dblclick'].forEach(function (t) { p.addEventListener(t, noTouch, { passive: false }); });
 
     // drag back to aim: from anywhere on the stage, like a slingshot; let go to putt
-    function stagePt(e) { var r = S.cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+    function stagePt(e) {
+      var r = S.cv.getBoundingClientRect(), fx = r.width ? S.SW / r.width : 1, fy = r.height ? S.SH / r.height : 1;
+      return { x: (e.clientX - r.left) * fx, y: (e.clientY - r.top) * fy };
+    }
     S.cv.addEventListener('pointerdown', function (e) {
       if (!S || e.button > 0) return;
       e.preventDefault();
@@ -2262,7 +2293,7 @@
       S.phase = 'menu'; showCard('help'); setPad('start'); syncHead();
       draw(1);
     } else toMenu();
-    requestAnimationFrame(function () { if (S && S.panel === p) { layout(); redraw(); } });
+    requestAnimationFrame(function () { if (S && S.panel === p) { layout(); layout(); redraw(); } });
     try {
       if (document.fonts && document.fonts.load) {
         document.fonts.load('700 12px ' + S.col.font).then(function () { if (S && S.panel === p) { buildAtlas(); S.layerDirty = true; redraw(); } }, function () {});

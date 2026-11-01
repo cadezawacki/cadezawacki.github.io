@@ -2841,6 +2841,28 @@ body.origami-on .cade-panel-head .cade-panel-lockbtn, .cade-panel-head .cade-pan
   display: inline-flex; align-items: center; cursor: pointer; opacity: 0.6; padding: 2px 5px; border-radius: 4px; line-height: 1; color: var(--text-muted);
 }
 .cade-panel-head .cade-panel-sharebtn svg { width: 14px; height: 14px; flex: none; }
+/* Back to the Arcade (games only): first in the header, like a back link. */
+.cade-panel-head .cade-panel-arcadebtn {
+  display: inline-flex; align-items: center; gap: 2px; flex: none; cursor: pointer; padding: 2px 7px 2px 3px; border-radius: 999px; line-height: 1;
+  color: var(--text-muted); border: 1px solid var(--border); font-size: var(--text-xs); font-weight: 600;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation; -webkit-user-select: none; user-select: none;
+}
+.cade-panel-head .cade-panel-arcadebtn svg { width: 14px; height: 14px; flex: none; }
+.cade-panel-head .cade-panel-arcadebtn:hover, .cade-panel-head .cade-panel-arcadebtn:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
+@media (pointer: coarse) { .cade-panel-head .cade-panel-arcadebtn { min-height: 30px; padding: 4px 9px 4px 5px; } }
+/* Narrow screens: the back button shrinks to its arrow, and a game's title
+   gives way (ellipsis) so its own header buttons and × always fit. */
+@media (max-width: 599px) {
+  .cade-panel-head .cade-panel-arcadebtn { padding: 4px 6px; }
+  .cade-panel-head .cade-panel-arcadebtn > span { display: none; }
+  .cade-panel-head:has(.cade-panel-arcadebtn) { gap: 6px; }
+  .cade-panel-head:has(.cade-panel-arcadebtn) .cade-panel-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+/* Very small phones: the share-link button makes way for the game's controls. */
+@media (max-width: 380px) {
+  .cade-panel-head:has(.cade-panel-arcadebtn) { gap: 4px; }
+  .cade-panel-head:has(.cade-panel-arcadebtn) .cade-panel-sharebtn { display: none; }
+}
 .cade-panel-head .cade-panel-sharebtn:hover, .cade-panel-head .cade-panel-sharebtn:focus-visible { opacity: 1; background: var(--surface-hover, rgba(127,127,127,0.15)); outline: none; }
 /* Solo widget link: nothing but the widget's panel (and toasts), filling the window. */
 html.cade-solo body > *:not(.cade-panel):not(.toast-container):not(.cade-solo-msg) { display: none !important; }
@@ -23068,6 +23090,37 @@ function _addShareBtn(p, m) {
   b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); b.click(); } });
   b.addEventListener('click', e => { e.stopPropagation(); _shareWidget(m); });
 }
+// ---- Back to the Arcade ----------------------------------------------------
+// Every game's panel (a manifest widget tagged game/toy, other than the Arcade
+// itself and ARG Desk, a planning tool) gets a button in its header that
+// closes the game and opens the Arcade — or, on a solo widget link, goes to
+// the Arcade's own solo link.
+const _NOT_ARCADE_GAMES = new Set(['arcade', 'arg']);
+function _isArcadeGame(m) {
+  return !!m && !_NOT_ARCADE_GAMES.has(m.id) && /(^|,)\s*(game|toy)\s*(,|$)/i.test(m.tags || '');
+}
+function _addArcadeBtn(p) {
+  const b = document.createElement('span');
+  b.className = 'cade-panel-arcadebtn'; b.setAttribute('role', 'button'); b.tabIndex = 0;
+  b.title = 'Back to the Arcade'; b.setAttribute('aria-label', b.title);
+  b.innerHTML = _ARCADE_SVG + '<span>Arcade</span>';
+  const head = p.querySelector('.cade-panel-head');
+  head.insertBefore(b, head.querySelector('.cade-panel-title'));
+  b.addEventListener('pointerdown', e => e.stopPropagation());   // a button, not a header drag
+  b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); b.click(); } });
+  b.addEventListener('click', e => { e.stopPropagation(); _backToArcade(p); });
+}
+function _backToArcade(p) {
+  if (_solo) { location.href = _widgetLink('arcade'); return; }
+  // close the game exactly as its × would (its teardown runs), then show the Arcade
+  const x = p.querySelector('.cade-panel-x');
+  if (x) x.click(); else { p.remove(); if (p._onClose) p._onClose(); }
+  const arcade = document.getElementById('arcade-panel');
+  if (arcade && _isMinimized(arcade)) { _restorePanel(arcade); return; }
+  if (arcade) return;                                  // already open: it's right there
+  const m = _manifestById.get('arcade');
+  if (!(m && window.__cadeRunCommand && window.__cadeRunCommand(m.name))) showToast('The Arcade isn’t available', 'error', 2000);
+}
 async function _shareWidget(m) {
   const url = _widgetLink(m.id), title = m.name;
   let coarse = false;
@@ -23209,6 +23262,8 @@ window.__cadePanelMin = { minimize: _minimizePanel, restore: _restorePanel, isMi
 const _popped = new Map(); // panel → { win, obs, bodyObs, closing }
 const _SHARE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg>';
+const _ARCADE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M15 6l-6 6 6 6"/></svg>';
 const _POP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></svg>';
 function _mkPanel(id, title, bodyHtml) {
@@ -23225,6 +23280,7 @@ function _mkPanel(id, title, bodyHtml) {
   p.__cadeWidget = _openingWidget || null;
   const shareMod = _shareableModule(p.__cadeWidget);
   if (shareMod) _addShareBtn(p, shareMod);
+  if (_isArcadeGame(shareMod)) _addArcadeBtn(p);
   if (_solo && shareMod && shareMod.id === _solo.id) _makeSoloPanel(p);
   document.body.appendChild(p);
   p.querySelector('.cade-panel-minbtn').addEventListener('click', e => { e.stopPropagation(); _minimizePanel(p); });

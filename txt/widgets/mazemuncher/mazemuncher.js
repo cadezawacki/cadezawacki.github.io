@@ -703,12 +703,34 @@
   }
   function setWant(g, dir) { if (g && g.pac && dir >= 0 && dir < 4) g.pac.want = dir; }
 
+  // On-screen thumbstick -> a direction (or -1). dx, dy: the knob's offset from the
+  // base centre (screen px, y down); r: the base radius. Inside the dead zone (dz of
+  // r, default 25%) there is no wish. Otherwise the dominant axis wins; near a
+  // diagonal the previous direction (prev) holds until the other axis leads by
+  // more than STICK_HYS, so a thumb resting on 45 degrees doesn't chatter.
+  var STICK_DZ = 0.25, STICK_HYS = 1.15;
+  function stickDir(dx, dy, r, dz, prev) {
+    dx = +dx || 0; dy = +dy || 0; r = +r > 0 ? +r : 1;
+    if (dz == null) dz = STICK_DZ;
+    var ax = Math.abs(dx), ay = Math.abs(dy);
+    if (Math.sqrt(dx * dx + dy * dy) < dz * r) return -1;
+    var h = dx < 0 ? 1 : 3, v = dy < 0 ? 0 : 2;
+    if (prev === h && ax > 0 && ay <= ax * STICK_HYS) return h;
+    if (prev === v && ay > 0 && ax <= ay * STICK_HYS) return v;
+    return ax > ay ? h : v;
+  }
+  // the knob's offset clamped to the base radius
+  function stickClamp(dx, dy, r) {
+    var d = Math.sqrt(dx * dx + dy * dy);
+    return d > r && d > 0 ? [dx * r / d, dy * r / d] : [dx, dy];
+  }
+
   // ---- results + records ----
   function summary(g) {
     return g.ps.map(function (P) { return { n: P.n, score: P.score, level: P.best || P.level, items: P.items.slice() }; });
   }
   function newSave() {
-    return { v: 1, hi: [], best: { score: 0, level: 0 }, stats: { games: 0, dots: 0, ghosts: 0, items: 0, clears: 0, quads: 0 }, opt: { turbo: false, inter: true } };
+    return { v: 1, hi: [], best: { score: 0, level: 0 }, stats: { games: 0, dots: 0, ghosts: 0, items: 0, clears: 0, quads: 0 }, opt: { turbo: false, inter: true, ctl: 'stick', osc: false } };
   }
   function num(v, d) { v = +v; return isFinite(v) && v >= 0 ? Math.floor(v) : d; }
   function normSave(o) {
@@ -726,7 +748,7 @@
     }
     if (o.best && typeof o.best === 'object') { s.best.score = num(o.best.score, 0); s.best.level = num(o.best.level, 0); }
     if (o.stats && typeof o.stats === 'object') for (var k in s.stats) s.stats[k] = num(o.stats[k], 0);
-    if (o.opt && typeof o.opt === 'object') { s.opt.turbo = !!o.opt.turbo; s.opt.inter = o.opt.inter !== false; }
+    if (o.opt && typeof o.opt === 'object') { s.opt.turbo = !!o.opt.turbo; s.opt.inter = o.opt.inter !== false; s.opt.ctl = o.opt.ctl === 'arrows' ? 'arrows' : 'stick'; s.opt.osc = !!o.opt.osc; }
     return s;
   }
   // Fold a finished game into the save; returns what the results card shows.
@@ -759,6 +781,7 @@
     rng: rng, parseMaze: parseMaze, open: open, cellAt: cellAt, mazeFor: mazeFor, speeds: speeds, frightTime: frightTime,
     modeTable: modeTable, releaseRule: releaseRule, newGame: newGame, step: step, advance: advance, movePac: movePac,
     ghostTarget: ghostTarget, chooseDir: chooseDir, fright: fright, autoPilot: autoPilot, setWant: setWant,
+    stickDir: stickDir, stickClamp: stickClamp, STICK_DZ: STICK_DZ,
     handoffReady: handoffReady, skipInter: skipInter, nextLevel: nextLevel, spawnItem: spawnItem, rushOf: rushOf,
     summary: summary, newSave: newSave, normSave: normSave, settle: settle, hiScore: hiScore, cur: cur
   };
@@ -1272,6 +1295,8 @@
     pollPad();
     if (!running()) return;
     var g = S.g;
+    // a stick held through a respawn / new level wishes again (like a held key)
+    if (S.stk && S.stk.dir >= 0 && g.pac && g.pac.want < 0 && g.phase !== 'inter') { setWant(g, S.stk.dir); syncPad(); }
     S.clock += dt;
     var alpha = advance(g, dt);
     handleEvents(g);
@@ -1375,14 +1400,26 @@
       '<div class="mm-opt"><span>Intermissions</span><span class="mm-seg" role="group" aria-label="Intermissions">' +
       '<button type="button" data-opt="inter" data-v="1" class="' + (o.inter ? 'on' : '') + '" aria-pressed="' + o.inter + '">On</button>' +
       '<button type="button" data-opt="inter" data-v="0" class="' + (!o.inter ? 'on' : '') + '" aria-pressed="' + !o.inter + '">Off</button></span></div>' +
+      ctlOpt(o) +
       '</div>' +
       '<div class="mm-foot"><button type="button" class="mm-lnk" data-act="records">Records</button><button type="button" class="mm-lnk" data-act="help">How to play</button></div>' +
-      '<div class="mm-note">' + (S.coarse ? 'Swipe the maze or the pad to steer' : 'Arrows / WASD to steer &middot; P to pause') + '</div>' +
+      '<div class="mm-note">' + (S.coarse ? (o.ctl === 'stick' ? 'Steer with the stick, or swipe the maze' : 'Swipe the maze or the pad to steer') : 'Arrows / WASD to steer &middot; P to pause') + '</div>' +
       '</div>';
   }
+  // the on-screen controls: a stick or four arrows (always on touch; opt-in on desktop)
+  function ctlOpt(o) {
+    var v = S.coarse ? o.ctl : o.osc ? o.ctl : 'off', vals = S.coarse ? ['stick', 'arrows'] : ['off', 'stick', 'arrows'];
+    var lab = S.coarse ? 'Controls' : 'On-screen pad';
+    return '<div class="mm-opt"><span>' + lab + '</span><span class="mm-seg" role="group" aria-label="' + lab + '">' + vals.map(function (k) {
+      return '<button type="button" data-opt="ctl" data-v="' + k + '" class="' + (v === k ? 'on' : '') + '" aria-pressed="' + (v === k) + '">' + k.charAt(0).toUpperCase() + k.slice(1) + '</button>';
+    }).join('') + '</span></div>';
+  }
+  function ctlShown() { return !!S && (S.coarse || S.save.opt.osc); }
   function helpHtml() {
+    var stick = ctlShown() && S.save.opt.ctl === 'stick';
     var keys = S.coarse ?
-      '<div><b>swipe</b> on the maze or the pad &nbsp;steer (turns are remembered: swipe early)</div><div><b>arrow pad</b> &nbsp;tap a direction</div><div><b>&#10074;&#10074;</b> &nbsp;pause</div>' :
+      (stick ? '<div><b>stick</b> under the maze &nbsp;push a way to steer &mdash; push early, the turn waits for the corner; let go and the muncher keeps going</div><div><b>swipe</b> on the maze &nbsp;steers too</div>' :
+      '<div><b>swipe</b> on the maze or the pad &nbsp;steer (turns are remembered: swipe early)</div><div><b>arrow pad</b> &nbsp;tap a direction</div>') + '<div><b>&#10074;&#10074;</b> &nbsp;pause</div>' :
       '<div><b>arrows / WASD</b> &nbsp;steer &mdash; press a turn early, it waits for the corner</div><div><b>gamepad</b> &nbsp;d-pad / stick, Start pauses</div><div><b>P / Esc</b> &nbsp;pause</div>';
     return '<div class="mm-card mm-help">' + title('HOW TO PLAY') +
       '<p>Munch every dot (<b>&middot;</b>) to clear the maze. Touch a chaser and you lose a life. The side <b>tunnels</b> wrap round &mdash; chasers crawl through them.</p>' +
@@ -1472,6 +1509,9 @@
     S.pad.classList.toggle('idle', !live);
     var bs = S.pad.querySelectorAll('[data-d]');
     for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', !!S.g && live && S.g.pac && S.g.pac.want === +bs[i].getAttribute('data-d'));
+    var want = !!S.g && live && S.g.pac ? S.g.pac.want : -1;
+    for (i = 0; i < S.sg.length; i++) S.sg[i].classList.toggle('on', want === i);
+    if (!live && S.stk) stickRelease();
   }
   function syncHead() {
     if (!S) return;
@@ -1551,6 +1591,7 @@
     if (S.g.phase === 'handoff') { stopLoop(); if (S.cardKind !== 'handoff') showHandoff(); return; }
     S.paused = true;
     stopLoop();
+    stickRelease();
     showCard('pause'); syncHead(); syncPad();
   }
   function resume() {
@@ -1660,6 +1701,17 @@
     }
   }
 
+  // let go of the stick: the knob springs home; the muncher keeps its heading
+  function stickRelease() {
+    if (!S || !S.stick) return;
+    var k = S.stk;
+    S.stk = null;
+    if (k) { try { S.stick.releasePointerCapture(k.id); } catch (x) {} }
+    S.stick.classList.remove('drag');
+    S.stick.removeAttribute('data-dir');
+    S.knob.style.transform = '';
+  }
+
   // ---- layout ----
   function availH(vw, vh) {
     var r = S.panel.getBoundingClientRect();
@@ -1677,6 +1729,8 @@
     var phone = vw <= 560, solo = S.panel.classList.contains('cade-solo-panel');
     S.coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
     S.panel.classList.toggle('mm-touch', S.coarse);
+    S.panel.classList.toggle('mm-osc', ctlShown());
+    S.pad.classList.toggle('stick', S.save.opt.ctl === 'stick');
     var s = Math.min((vw - (phone ? 36 : 48)) / VW, availH(vw, vh) / VH, phone ? 1.6 : solo ? 2.4 : 1.5);
     s = Math.max(0.6, s);
     var cw = Math.floor(VW * s), ch = Math.floor(VH * s), dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -1728,7 +1782,9 @@
       return '<button type="button" class="mm-dir" data-d="' + [1, 0, 2, 3][d] + '" aria-label="' + ['Left', 'Up', 'Down', 'Right'][d] + '">' + IC_ARROW[[1, 0, 2, 3][d]] + '</button>';
     }).join('');
     var body = '<div class="mm"><div class="mm-stage"><canvas class="mm-cv"></canvas><div class="mm-ovl" style="display:none"></div></div>' +
-      '<div class="mm-pad">' + padH + '</div><div class="mm-live" aria-live="polite"></div></div>';
+      '<div class="mm-pad">' + padH + '<div class="mm-stick" aria-label="Joystick: drag to steer">' +
+      ['^', '&lt;', 'v', '&gt;'].map(function (c, d) { return '<span class="mm-sg mm-sg' + d + '" aria-hidden="true">' + c + '</span>'; }).join('') +
+      '<div class="mm-knob" aria-hidden="true"><span>C</span></div></div></div><div class="mm-live" aria-live="polite"></div></div>';
     var p = Cade.mkPanel(PANEL_ID, '🍒 Maze Muncher', body);
     if (Cade.markGamePanel) Cade.markGamePanel(p);
     else { try { Cade.editor.contentDOM.blur(); } catch (e) {} }
@@ -1740,7 +1796,7 @@
     var ld = loadSave(), mm = window.matchMedia;
     S = {
       panel: p, head: hb, stage: p.querySelector('.mm-stage'), cv: p.querySelector('.mm-cv'), ovl: p.querySelector('.mm-ovl'),
-      pad: p.querySelector('.mm-pad'), liveEl: p.querySelector('.mm-live'),
+      pad: p.querySelector('.mm-pad'), stick: p.querySelector('.mm-stick'), knob: p.querySelector('.mm-knob'), sg: p.querySelectorAll('.mm-sg'), stk: null, liveEl: p.querySelector('.mm-live'),
       save: ld.save, snd: new Snd(sget(SOUND_KEY) === '1'),
       rm: !!(mm && mm('(prefers-reduced-motion: reduce)').matches), coarse: !!(mm && mm('(pointer: coarse)').matches),
       view: 'menu', g: null, hg: null, paused: false, raf: 0, last: 0, clock: 0, overT: 0, np: 1,
@@ -1815,7 +1871,7 @@
 
     // Rapid tapping / swiping must never zoom, select, magnify or open a callout.
     function noTouch(e) { if (e.cancelable) e.preventDefault(); }
-    [S.cv, S.pad].forEach(function (el) {
+    [S.cv, S.pad, S.stick].forEach(function (el) {
       el.addEventListener('touchstart', noTouch, { passive: false });
       el.addEventListener('touchmove', noTouch, { passive: false });
       el.addEventListener('touchend', noTouch, { passive: false });
@@ -1855,6 +1911,37 @@
     });
     S.cv.addEventListener('click', function () { if (S && S.view === 'game' && S.g && S.g.phase === 'inter') skipInter(S.g); });
 
+    // the thumbstick: one finger (the pointer that went down on it) drives the knob;
+    // past the dead zone its dominant axis is a held turn wish, like an arrow key held
+    function st0(e) {
+      e.stopPropagation();   // not a swipe on the pad
+      if (!S || e.button > 0) return;
+      e.preventDefault();
+      S.snd.ensure();
+      if (S.stk || S.view !== 'game' || S.paused || !S.g) return;
+      if (S.g.phase === 'inter') { skipInter(S.g); return; }
+      if (S.g.phase === 'handoff' || S.g.phase === 'over') return;
+      try { S.stick.setPointerCapture(e.pointerId); } catch (x) {}
+      var r = S.stick.getBoundingClientRect();
+      S.stk = { id: e.pointerId, cx: r.left + r.width / 2, cy: r.top + r.height / 2, r: r.width * 0.28, dir: -1 };
+      S.stick.classList.add('drag');
+      st1(e);
+    }
+    function st1(e) {
+      var k = S && S.stk;
+      if (!k || k.id !== e.pointerId) return;
+      e.stopPropagation();
+      var o = stickClamp(e.clientX - k.cx, e.clientY - k.cy, k.r), d = stickDir(o[0], o[1], k.r, STICK_DZ, k.dir);
+      S.knob.style.transform = 'translate(' + o[0].toFixed(1) + 'px,' + o[1].toFixed(1) + 'px)';
+      S.stick.setAttribute('data-dir', d);
+      if (d >= 0 && d !== k.dir) { k.dir = d; steer(d); }
+      else k.dir = d;   // back in the dead zone: no wish, the heading carries on
+    }
+    function st2(e) { if (S && S.stk && S.stk.id === e.pointerId) stickRelease(); }
+    S.stick.addEventListener('pointerdown', st0);
+    S.stick.addEventListener('pointermove', st1);
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (t) { S.stick.addEventListener(t, st2); });
+
     // cards
     S.ovl.addEventListener('click', function (e) {
       if (!S) return;
@@ -1863,8 +1950,13 @@
       S.snd.ensure();
       var act = b.getAttribute('data-act'), opt = b.getAttribute('data-opt');
       if (opt) {
-        S.save.opt[opt] = b.getAttribute('data-v') === '1';
+        var ov = b.getAttribute('data-v');
+        if (opt === 'ctl') {
+          if (ov === 'off') S.save.opt.osc = false;
+          else { S.save.opt.ctl = ov; if (!S.coarse) S.save.opt.osc = true; }
+        } else S.save.opt[opt] = ov === '1';
         persist(); S.snd.tone(988, 0.05, 'sine', 0.03);
+        if (opt === 'ctl') { layout(); redraw(); }
         showCard('home');
         var nb = e.detail === 0 && S.ovl.querySelector('[data-opt="' + opt + '"][data-v="' + b.getAttribute('data-v') + '"]');
         if (nb) { try { nb.focus({ preventScroll: true }); } catch (er) {} }
