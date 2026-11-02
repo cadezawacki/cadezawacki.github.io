@@ -23663,9 +23663,35 @@ function _paintPopBtn(p) {
   b.title = out ? 'Back into the app window' : _lay.win ? 'Send to the float window' : 'Pop out into its own window';
   b.setAttribute('aria-label', out ? 'Pop back in' : 'Pop out');
 }
+// Inline handlers (onclick="timerToggleRun()") look names up on the window
+// that holds the element — in a pop-out / float window that's the other
+// window, which has none of the app's functions, so those buttons did nothing.
+// Expose the app's global functions there as live getters (they still run
+// here, in the app); re-synced on input so later-defined ones show up too.
+function _popBridgeGlobals(win) {
+  let keys;
+  try { keys = Object.keys(window); } catch { return; }
+  for (const k of keys) {
+    let has = false;
+    try { has = Object.prototype.hasOwnProperty.call(win, k) || (k in win); } catch { continue; }
+    if (has) continue;
+    let v; try { v = window[k]; } catch { continue; }
+    if (typeof v !== 'function') continue;
+    try { Object.defineProperty(win, k, { configurable: true, enumerable: false, get: () => window[k] }); } catch {}
+  }
+}
 // A new window's document gets the app's base URL, stylesheets (and ones
-// added later) and theme; returns the observer that keeps them in step.
+// added later), theme and the app's global functions; returns the observer
+// that keeps the styles and theme in step.
 function _popPrepDoc(d) {
+  const w = d.defaultView;
+  if (w) {
+    _popBridgeGlobals(w);
+    const sync = () => _popBridgeGlobals(w);
+    w.addEventListener('pointerdown', sync, true);
+    w.addEventListener('keydown', sync, true);
+    w.addEventListener('focus', sync);
+  }
   const base = d.createElement('base'); base.href = document.baseURI; d.head.appendChild(base);   // relative stylesheet / image URLs
   document.head.querySelectorAll('link[rel~="stylesheet"], style').forEach(n => _popAddSheet(d, n));
   try {   // constructed sheets (CodeMirror's) can't be shared between documents — copy their rules
