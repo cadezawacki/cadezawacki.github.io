@@ -607,6 +607,102 @@
           "description": "Convert tab or comma separated data to a Markdown table",
           "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='3' y1='15' x2='21' y2='15'/><line x1='9' y1='3' x2='9' y2='21'/><line x1='15' y1='3' x2='15' y2='21'/></svg>",
           "tags": "markdown,table,csv,tsv,convert,format"
+        },
+        {
+          "name": "CSV → JSON",
+          "description": "CSV, TSV or a Markdown table → a JSON array of objects (header row = keys; numbers, true / false and null typed, codes like 007 kept as text)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z'/><polyline points='14 2 14 8 20 8'/><path d='M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1'/><path d='M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1'/></svg>",
+          "tags": "csv,json,csv to json,tsv,markdown,table,convert,parse,objects,data"
+        },
+        {
+          "name": "JSON → JSON Schema",
+          "description": "Infer a JSON Schema (draft 2020-12) from sample JSON — types, required keys, nullable fields, email / date-time / uri formats",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1'/><path d='M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1'/><polyline points='9 12 11 14 15 10'/></svg>",
+          "tags": "json,schema,json schema,infer,generate,types,validate,draft 2020-12"
+        },
+        {
+          "name": "JSON → Python Dataclass",
+          "description": "Generate Python @dataclass classes from sample JSON — nested objects get their own classes, Optional for keys that are missing or null",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='16' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='7' y1='13' x2='14' y2='13'/><line x1='7' y1='16.5' x2='11' y2='16.5'/></svg>",
+          "tags": "json,python,dataclass,class,typing,types,generate,model,code"
+        },
+        {
+          "name": "JSON → Go Struct",
+          "description": "Generate Go structs with json tags from sample JSON — nested structs, pointers and omitempty for keys that are missing or null",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='16' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='10' y1='9' x2='10' y2='20'/></svg>",
+          "tags": "json,go,golang,struct,json tags,types,generate,model,code"
+        },
+        {
+          "name": "Dedupe JSON Array by Key…",
+          "description": "Drop JSON array items whose key (a dot path like user.email) repeats an earlier one — keeps the first and your formatting",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='9' y='9' width='13' height='13' rx='2'/><path d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/><line x1='12.5' y1='15.5' x2='18.5' y2='15.5'/></svg>",
+          "tags": "json,dedupe,duplicates,unique,distinct,array,key,remove,prompt"
+        },
+        {
+          "name": "Select CSV Columns…",
+          "description": "Keep, reorder or drop columns of a CSV, TSV or Markdown table — names or numbers like name, email, 3 (-notes drops one)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><line x1='9' y1='3' x2='9' y2='21'/><line x1='15' y1='3' x2='15' y2='21'/><line x1='12' y1='7' x2='12' y2='17'/></svg>",
+          "tags": "csv,tsv,markdown,table,columns,select,reorder,drop,remove,cut,prompt"
+        },
+        {
+          "name": "Transpose Table",
+          "description": "Swap the rows and columns of a CSV, TSV or Markdown table",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='7' height='7' rx='1'/><rect x='14' y='14' width='7' height='7' rx='1'/><path d='M14 6.5h3.5a2 2 0 0 1 2 2V11'/><polyline points='17.5 9 19.5 11 21.5 9'/><path d='M10 17.5H6.5a2 2 0 0 1-2-2V13'/><polyline points='2.5 15 4.5 13 6.5 15'/></svg>",
+          "tags": "transpose,table,csv,tsv,markdown,rows,columns,pivot,flip,swap"
+        },
+        {
+          "name": "Number Stats",
+          "description": "Count, sum, mean, median, mode, min / max, range, standard deviation and percentiles of the numbers in the selection or note",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='18' y1='20' x2='18' y2='10'/><line x1='12' y1='20' x2='12' y2='4'/><line x1='6' y1='20' x2='6' y2='14'/></svg>",
+          "tags": "stats,statistics,numbers,mean,average,median,mode,std dev,standard deviation,percentile,sum,min,max,math"
+        },
+        {
+          "name": "SQL Beautify",
+          "description": "Format SQL — uppercase keywords, one clause per line, indented select lists, joins, conditions and subqueries (strings and comments untouched)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='9' ry='3'/><path d='M21 12c0 1.66-4 3-9 3s-9-1.34-9-3'/><path d='M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5'/></svg>",
+          "tags": "sql,format,beautify,pretty,prettify,indent,query,database,code"
+        },
+        {
+          "name": "SQL Minify",
+          "description": "Squeeze SQL onto one line — comments and extra whitespace removed, strings and quoted names kept intact",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='9' ry='3'/><path d='M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5'/><polyline points='9 11 12 14 15 11'/></svg>",
+          "tags": "sql,minify,compact,compress,one line,strip comments,query,database,code"
+        },
+        {
+          "name": "Extract Phone Numbers",
+          "description": "Extract all phone numbers from text",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z'/></svg>",
+          "tags": "extract,phone,phones,telephone,mobile,numbers,parse"
+        },
+        {
+          "name": "Extract Dates",
+          "description": "Extract all dates from text (2024-01-05, 1/5/2024, Jan 5, 2024, 5 March …)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>",
+          "tags": "extract,dates,date,datetime,iso,calendar,parse"
+        },
+        {
+          "name": "Extract IP Addresses",
+          "description": "Extract all IPv4 and IPv6 addresses from text (CIDR suffixes kept)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='2' width='20' height='8' rx='2'/><rect x='2' y='14' width='20' height='8' rx='2'/><line x1='6' y1='6' x2='6.01' y2='6'/><line x1='6' y1='18' x2='6.01' y2='18'/></svg>",
+          "tags": "extract,ip,ips,ipv4,ipv6,address,network,cidr,parse"
+        },
+        {
+          "name": "Extract Hashtags & Mentions",
+          "description": "Extract all #hashtags and @mentions from text",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='4'/><path d='M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94'/></svg>",
+          "tags": "extract,hashtags,hashtag,mentions,mention,social,tags,handles,parse"
+        },
+        {
+          "name": "Extract Money Amounts",
+          "description": "Extract all money amounts from text ($1,234.56, €5, 20 EUR, £3.5M …)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='6' width='20' height='12' rx='2'/><circle cx='12' cy='12' r='2'/><path d='M6 12h.01M18 12h.01'/></svg>",
+          "tags": "extract,money,currency,amounts,prices,dollars,euros,parse"
+        },
+        {
+          "name": "Extract Hex Colours",
+          "description": "Extract all hex colours from text (#fff, #a1b2c3, #a1b2c3ff)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z'/></svg>",
+          "tags": "extract,hex,colours,colors,colour,color,css,palette,parse"
         }
       ]
     },
