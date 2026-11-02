@@ -2810,6 +2810,39 @@ body.cade-pop-body { margin: 0; height: 100vh; overflow: hidden; display: flex; 
   margin: 0 !important; border: 0; border-radius: 0; box-shadow: none; resize: none !important; transform: none !important;
 }
 .cade-popped .cade-panel-head { cursor: default; }
+/* Layouts: the snap preview in the app window, and the float window
+   (body.cade-lay-body) that tiles several popped panels in a grid. */
+.cade-snap-hint { position: fixed; z-index: 4999; display: none; pointer-events: none; border: 2px solid var(--accent); border-radius: var(--radius-lg, 10px);
+  background: color-mix(in srgb, var(--accent) 14%, transparent); transition: left 90ms, top 90ms, width 90ms, height 90ms; }
+body.cade-lay-body { display: block; }
+.cade-lay { display: flex; flex-direction: column; width: 100vw; height: 100vh; background: var(--bg); }
+.cade-lay-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--border); background: var(--surface);
+  font: 600 12px/1.2 var(--font-sans, system-ui, sans-serif); color: var(--text-muted); user-select: none; -webkit-user-select: none; }
+.cade-lay-name { letter-spacing: 0.04em; }
+.cade-lay-layouts { display: flex; gap: 2px; }
+.cade-lay-layouts button { width: 30px; height: 22px; padding: 2px 3px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--text-faint); cursor: pointer; }
+.cade-lay-layouts button svg { display: block; width: 100%; height: 100%; fill: currentColor; opacity: 0.6; }
+.cade-lay-layouts button:hover { color: var(--text); }
+.cade-lay-layouts button.on { color: var(--accent); border-color: var(--accent); }
+.cade-lay-layouts button.on svg { opacity: 0.9; }
+.cade-lay-tip { margin-left: auto; font-weight: 500; color: var(--text-faint); }
+.cade-lay-allin { font: inherit; font-weight: 600; padding: 3px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2, transparent); color: var(--text-muted); cursor: pointer; }
+.cade-lay-allin:hover { color: var(--accent); border-color: var(--accent); }
+.cade-lay-grid { position: relative; flex: 1 1 auto; min-height: 0; display: grid; gap: 6px; padding: 6px; }
+.cade-lay-slot { position: relative; min-width: 0; min-height: 0; display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.cade-lay-slot.cade-lay-target { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cade-lay-panel > .cade-panel-head { cursor: grab; }
+.cade-lay-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; margin: 6px; padding: 8px; text-align: center;
+  border: 1px dashed var(--border); border-radius: 8px; color: var(--text-faint); font: 13px/1.3 var(--font-sans, system-ui, sans-serif); }
+.cade-lay-empty select { max-width: 90%; font: inherit; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2, var(--surface)); color: var(--text); }
+.cade-lay-hint { font-size: 11px; }
+.cade-lay-gut { position: absolute; z-index: 3; border-radius: 4px; }
+.cade-lay-gut.v { width: 8px; cursor: col-resize; }
+.cade-lay-gut.h { height: 8px; cursor: row-resize; }
+.cade-lay-gut:hover, .cade-lay-dragging .cade-lay-gut:active { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.cade-lay-dragging, .cade-lay-dragging * { user-select: none; -webkit-user-select: none; }
+.cade-lay-dragging iframe { pointer-events: none; }
+.cade-lay-ghost { position: fixed; z-index: 10; pointer-events: none; padding: 4px 9px; border-radius: 6px; background: var(--accent); color: #fff; font: 600 12px var(--font-sans, system-ui, sans-serif); box-shadow: var(--shadow-lg); }
 .cade-popped .cade-panel-minbtn { display: none; }
 .cade-popped > .cade-panel-body { flex: 1 1 auto; min-height: 0; }
 /* Room lock (note-driven panels): shown in Origami, or once locked. */
@@ -4201,6 +4234,7 @@ window.Cade = (function () {
     popOut(panel) { return window.__popOutPanel ? window.__popOutPanel(panel) : undefined; },
     popIn(panel) { if (window.__popInPanel) window.__popInPanel(panel); },
     isPoppedOut(panel) { return !!(panel && panel.classList && panel.classList.contains('cade-popped')); },
+    get layouts() { return window.__cadeLayouts || null; },   // snap / float window / saved arrangements
     // ---- small per-account synced JSON store (encrypted; offline-first) ----
     syncedBlob(id, opts) { return window.__cadeSyncedBlob(id, opts); },
     // ---- Widget preferences (see WIDGET PREFERENCES in core):
@@ -23286,7 +23320,7 @@ function _mkPanel(id, title, bodyHtml) {
   p.querySelector('.cade-panel-minbtn').addEventListener('click', e => { e.stopPropagation(); _minimizePanel(p); });
   const pop = p.querySelector('.cade-panel-popbtn');
   pop.addEventListener('pointerdown', e => e.stopPropagation());   // a button, not a header drag
-  pop.addEventListener('click', e => { e.stopPropagation(); if (_popped.has(p)) _popInPanel(p); else _popOutPanel(p); });
+  pop.addEventListener('click', e => { e.stopPropagation(); if (_popped.has(p)) _popInPanel(p); else if (_lay.win) _layAdd(p); else _popOutPanel(p); });
   pop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pop.click(); } });
   if (GAME_PANEL_IDS.indexOf(id) !== -1) _watchGamePanel(p);
   p.querySelector('.cade-panel-x').addEventListener('click', () => { p.remove(); if (p._onClose) p._onClose(); });
@@ -23294,11 +23328,11 @@ function _mkPanel(id, title, bodyHtml) {
   // On a phone-width screen a drag only moves the panel up/down: switching it
   // from its CSS left/right edges to an inline left (+ right:auto) would let a
   // width:auto panel grow to its widest content and push the × off-screen.
-  let sx, sy, ox, oy, drag = false, vOnly = false;
+  let sx, sy, ox, oy, drag = false, vOnly = false, moved = false;
   head.addEventListener('pointerdown', e => {
     if (e.target.classList.contains('cade-panel-x') || e.target.classList.contains('cade-panel-minbtn')) return;
     if (p.classList.contains('cade-popped')) return;   // its own window: nothing to drag
-    drag = true; sx = e.clientX; sy = e.clientY;
+    drag = true; moved = false; sx = e.clientX; sy = e.clientY;
     vOnly = window.innerWidth < 600;
     const r = p.getBoundingClientRect(); ox = r.left; oy = r.top;
     if (!vOnly) { p.style.right = 'auto'; p.style.left = ox + 'px'; }
@@ -23307,10 +23341,30 @@ function _mkPanel(id, title, bodyHtml) {
   });
   head.addEventListener('pointermove', e => {
     if (!drag) return;
+    if (!moved) {
+      if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) < 4) return;
+      moved = true;
+      if (p.__snap && !vOnly) ox = _layUnsnapForDrag(p, sx, ox);   // a snapped panel comes away at its old size
+    }
     if (!vOnly) p.style.left = Math.max(0, Math.min(window.innerWidth - 60, ox + e.clientX - sx)) + 'px';
     p.style.top = Math.max(0, Math.min(window.innerHeight - 40, oy + e.clientY - sy)) + 'px';
+    if (!vOnly) _laySnapHint(_laySnapZoneAt(e.clientX, e.clientY));
   });
-  head.addEventListener('pointerup', e => { drag = false; try { head.releasePointerCapture(e.pointerId); } catch {} _fitPanel(p); });
+  head.addEventListener('pointerup', e => {
+    if (!drag) return;
+    drag = false; try { head.releasePointerCapture(e.pointerId); } catch {}
+    const z = moved && !vOnly ? _laySnapZoneAt(e.clientX, e.clientY) : null;
+    _laySnapHint(null);
+    if (z) _laySnap(p, z); else _fitPanel(p);
+  });
+  head.addEventListener('pointercancel', () => { drag = false; _laySnapHint(null); });
+  // double-click the title bar: fill the work area, or back to the panel's own size
+  head.addEventListener('dblclick', e => {
+    if (e.target.closest && e.target.closest('[role="button"], button, .cade-panel-x, .cade-panel-minbtn')) return;
+    if (p.classList.contains('cade-popped') || _panelNarrow() || !_laySnapOn()) return;
+    if (p.__snap === 'max') { const r = p.getBoundingClientRect(); _layUnsnap(p); p.style.left = Math.round(r.left + 40) + 'px'; p.style.top = Math.round(r.top + 40) + 'px'; _fitPanel(p); }
+    else _laySnap(p, 'max');
+  });
   if (GAME_PANEL_IDS.indexOf(id) === -1) _addPanelResize(p);
   _watchPanelFit(p);
   return p;
@@ -23343,6 +23397,7 @@ function _addPanelResize(p) {
       if (p.classList.contains('cade-popped') || (e.button && e.button !== 0)) return;
       if (_panelNarrow() && dir !== 's') return;
       e.preventDefault(); e.stopPropagation();
+      p.__snap = null; p.__preSnap = null;                 // a hand-resized panel isn't snapped any more
       const r = p.getBoundingClientRect();
       st = { x: e.clientX, y: e.clientY, l: r.left, t: r.top, w: r.width, h: r.height };
       // pin the panel by its top-left so either edge can move
@@ -23589,11 +23644,33 @@ function _paintPopBtn(p) {
   if (!b) return;
   const out = _popped.has(p);
   b.classList.toggle('on', out);
-  b.title = out ? 'Back into the app window' : 'Pop out into its own window';
+  b.title = out ? 'Back into the app window' : _lay.win ? 'Send to the float window' : 'Pop out into its own window';
   b.setAttribute('aria-label', out ? 'Pop back in' : 'Pop out');
+}
+// A new window's document gets the app's base URL, stylesheets (and ones
+// added later) and theme; returns the observer that keeps them in step.
+function _popPrepDoc(d) {
+  const base = d.createElement('base'); base.href = document.baseURI; d.head.appendChild(base);   // relative stylesheet / image URLs
+  document.head.querySelectorAll('link[rel~="stylesheet"], style').forEach(n => _popAddSheet(d, n));
+  try {   // constructed sheets (CodeMirror's) can't be shared between documents — copy their rules
+    const css = [...(document.adoptedStyleSheets || [])].map(sh => [...sh.cssRules].map(x => x.cssText).join('\n')).join('\n');
+    if (css) { const st = d.createElement('style'); st.textContent = css; d.head.appendChild(st); }
+  } catch {}
+  _popSyncTheme(d);
+  const obs = new MutationObserver(muts => {
+    for (const m of muts) {
+      if (m.type === 'childList') m.addedNodes.forEach(n => _popAddSheet(d, n));
+      else _popSyncTheme(d);
+    }
+  });
+  obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
+  obs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  obs.observe(document.head, { childList: true });
+  return obs;
 }
 async function _popOutPanel(p) {
   if (!p || _popped.has(p) || !p.isConnected) return;
+  if (_lay.win) { _layAdd(p); return; }                     // the float window is open: the panel goes there
   if (!_canPopOut()) { showToast('Pop-out windows need a desktop browser', 'info', 2500); return; }
   if (_isMinimized(p)) _restorePanel(p);
   const r = p.getBoundingClientRect(), w = Math.max(320, Math.round(r.width)), h = Math.max(220, Math.round(r.height));
@@ -23611,27 +23688,12 @@ async function _popOutPanel(p) {
   }
   if (!p.isConnected) { try { win.close(); } catch {} return; }
   const d = win.document;
-  const base = d.createElement('base'); base.href = document.baseURI; d.head.appendChild(base);   // relative stylesheet / image URLs
-  document.head.querySelectorAll('link[rel~="stylesheet"], style').forEach(n => _popAddSheet(d, n));
-  try {   // constructed sheets (CodeMirror's) can't be shared between documents — copy their rules
-    const css = [...(document.adoptedStyleSheets || [])].map(sh => [...sh.cssRules].map(x => x.cssText).join('\n')).join('\n');
-    if (css) { const st = d.createElement('style'); st.textContent = css; d.head.appendChild(st); }
-  } catch {}
-  _popSyncTheme(d);
   d.title = ((p.querySelector('.cade-panel-title') || {}).textContent || 'Panel') + ' — Cade.txt';
   const st = { win, obs: null, bodyObs: null, closing: false, style: p.getAttribute('style') };
+  st.obs = _popPrepDoc(d);
   _popped.set(p, st);
   p.classList.add('cade-popped');
   d.body.appendChild(p);                                   // adopted: listeners and state come along
-  st.obs = new MutationObserver(muts => {
-    for (const m of muts) {
-      if (m.type === 'childList') m.addedNodes.forEach(n => _popAddSheet(d, n));
-      else _popSyncTheme(d);
-    }
-  });
-  st.obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
-  st.obs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-  st.obs.observe(document.head, { childList: true });
   // Its × (or its module closing it) took it out of the window: close the window too.
   st.bodyObs = new MutationObserver(() => { if (!st.closing && p.ownerDocument !== document && !p.isConnected) _popDone(p, true); });
   st.bodyObs.observe(d.body, { childList: true });
@@ -23644,8 +23706,9 @@ function _popDone(p, closeWin) {
   if (!st) return;
   st.closing = true;
   _popped.delete(p);
-  try { st.obs.disconnect(); st.bodyObs.disconnect(); } catch {}
-  if (closeWin) { try { st.win.close(); } catch {} }
+  try { if (st.obs) st.obs.disconnect(); st.bodyObs.disconnect(); } catch {}
+  if (st.ws) { p.classList.remove('cade-lay-panel'); _layForget(p); }   // the shared window stays open
+  else if (closeWin) { try { st.win.close(); } catch {} }
   _paintPopBtn(p);
 }
 function _popInPanel(p, fromClose) {
@@ -23654,6 +23717,7 @@ function _popInPanel(p, fromClose) {
   st.closing = true;
   if (p.ownerDocument !== document && p.isConnected) {
     p.classList.remove('cade-popped');
+    p.classList.remove('cade-lay-panel');
     if (st.style == null) p.removeAttribute('style'); else p.setAttribute('style', st.style);
     document.body.appendChild(p);
     requestAnimationFrame(() => _fitPanel(p));
@@ -23665,6 +23729,499 @@ window.addEventListener('pagehide', () => { for (const st of _popped.values()) {
 window.__popOutPanel = _popOutPanel;
 window.__popInPanel = _popInPanel;
 window.__markGamePanel = (p) => { if (p && p.classList) _watchGamePanel(p); }; // Cade.markGamePanel
+
+// ---- Layouts: snap, a float (always-on-top) window, saved arrangements ----
+// Three pieces, all driven from the Layouts widget (txt/widgets/layouts/) and
+// exposed as Cade.layouts. (Not to be confused with room workspaces, ?ws=.)
+//  1. Snap: drag a panel's title bar to the work area's left / right edge (a
+//     half), a corner (a quarter) or the top (the whole area); a preview shows
+//     where it lands. Dragging a snapped panel away gives it its old size back;
+//     double-click a title bar to fill the area / restore. Desktop widths only.
+//  2. The float window: ONE extra window that holds several panels tiled
+//     in a layout (2 columns, 2×2, main + side…) with draggable dividers. In
+//     Chrome / Edge it is a Document Picture-in-Picture window, which stays on
+//     top of every other window on the screen — browsers allow one such window
+//     per page, which is why panels share it instead of each floating alone.
+//     Elsewhere it's an ordinary pop-up. While it's open a panel's pop-out
+//     button sends the panel there; panels move like any pop-out (state and
+//     listeners come along) and are registered in _popped with st.ws = true.
+//  3. Arrangements: capture() records which widget panels are open, where
+//     (snap zone or position/size as fractions of the work area), minimized or
+//     floating (slot), plus the floating window's layout; apply() reopens the
+//     widgets and puts everything back. The widget stores them by name.
+var _lay = { win: null, obs: null, layout: 'cols2', colFr: null, rowFr: null, slots: [], grid: null, bar: null, onPreset: null };
+const LAY_SNAP_KEY = 'cade-lay-snap', LAY_WIN_KEY = 'cade-lay-win';
+const LAY_LAYOUTS = {
+  single: { name: 'One', c: 1, r: 1, a: [[0]] },
+  cols2: { name: 'Side by side', c: 2, r: 1, a: [[0, 1]] },
+  rows2: { name: 'Stacked', c: 1, r: 2, a: [[0], [1]] },
+  mainside: { name: 'Main + 2', c: 2, r: 2, a: [[0, 1], [0, 2]] },
+  mainbottom: { name: 'Top + 2', c: 2, r: 2, a: [[0, 0], [1, 2]] },
+  cols3: { name: 'Three columns', c: 3, r: 1, a: [[0, 1, 2]] },
+  grid4: { name: '2 × 2', c: 2, r: 2, a: [[0, 1], [2, 3]] },
+  grid6: { name: '3 × 2', c: 3, r: 2, a: [[0, 1, 2], [3, 4, 5]] }
+};
+const LAY_GROW = ['single', 'cols2', 'mainside', 'grid4', 'grid6'];   // layouts to grow into as panels arrive
+function _laySlotCount(l) { let n = 0; for (const row of LAY_LAYOUTS[l].a) for (const i of row) n = Math.max(n, i + 1); return n; }
+function _laySnapOn() { return store.get(LAY_SNAP_KEY) !== '0' && !_solo; }
+
+// -- snapping (main window) --
+function _layArea() {
+  const mb = document.querySelector('.menubar'), ft = document.querySelector('.footer');
+  const right = document.documentElement.clientWidth || window.innerWidth;
+  let top = 0, bottom = window.innerHeight;
+  if (mb) { const r = mb.getBoundingClientRect(); if (r.height) top = Math.max(0, r.bottom); }
+  if (ft) { const r = ft.getBoundingClientRect(); if (r.height && r.top > top + 100 && r.top < bottom) bottom = r.top; }
+  return { left: 0, top, right, bottom, w: right, h: bottom - top };
+}
+// zone → [x, y, w, h] as fractions of the work area
+const LAY_ZONES = { left: [0, 0, .5, 1], right: [.5, 0, .5, 1], max: [0, 0, 1, 1], tl: [0, 0, .5, .5], tr: [.5, 0, .5, .5], bl: [0, .5, .5, .5], br: [.5, .5, .5, .5],
+  top: [0, 0, 1, .5], bottom: [0, .5, 1, .5], l3: [0, 0, 1 / 3, 1], c3: [1 / 3, 0, 1 / 3, 1], r3: [2 / 3, 0, 1 / 3, 1] };
+function _layZoneRect(z, a) {
+  a = a || _layArea();
+  const f = LAY_ZONES[z], g = 6;
+  return { left: Math.round(a.left + f[0] * a.w + g), top: Math.round(a.top + f[1] * a.h + g), width: Math.round(f[2] * a.w - 2 * g), height: Math.round(f[3] * a.h - 2 * g) };
+}
+function _laySnapZoneAt(x, y) {
+  if (!_laySnapOn() || _panelNarrow()) return null;
+  const a = _layArea(), e = 16, c = Math.max(60, a.h * 0.18);
+  const L = x <= a.left + e, R = x >= a.right - e;
+  if (L || R) { if (y <= a.top + c) return L ? 'tl' : 'tr'; if (y >= a.bottom - c) return L ? 'bl' : 'br'; return L ? 'left' : 'right'; }
+  if (y <= a.top + 6) return 'max';
+  return null;
+}
+let _layHintEl = null;
+function _laySnapHint(z) {
+  if (!z) { if (_layHintEl) _layHintEl.style.display = 'none'; return; }
+  if (!_layHintEl) { _layHintEl = document.createElement('div'); _layHintEl.className = 'cade-snap-hint'; _layHintEl.setAttribute('aria-hidden', 'true'); document.body.appendChild(_layHintEl); }
+  const r = _layZoneRect(z);
+  Object.assign(_layHintEl.style, { display: 'block', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+}
+function _laySnap(p, z) {
+  if (!p || !LAY_ZONES[z] || p.classList.contains('cade-popped')) return;
+  if (_isMinimized(p)) _restorePanel(p);
+  if (!p.__snap) p.__preSnap = { w: p.style.width, h: p.style.height, mw: p.style.maxWidth, mh: p.style.maxHeight, sized: p.classList.contains('cade-sized') };
+  const r = _layZoneRect(z);
+  Object.assign(p.style, { left: r.left + 'px', top: r.top + 'px', right: 'auto', bottom: 'auto', width: r.width + 'px', height: r.height + 'px', maxWidth: 'none', maxHeight: 'none' });
+  p.__fitMaxW = p.__fitMaxH = false;
+  p.classList.add('cade-sized');
+  p.__snap = z;
+  _layKick();
+}
+function _layUnsnap(p) {
+  const pre = p.__preSnap;
+  p.__snap = null; p.__preSnap = null;
+  if (!pre) return;
+  p.style.width = pre.w; p.style.height = pre.h; p.style.maxWidth = pre.mw; p.style.maxHeight = pre.mh;
+  p.classList.toggle('cade-sized', !!pre.sized);
+  _layKick();
+}
+// Dragging a snapped panel: back to its old size, keeping the grab point under the pointer.
+function _layUnsnapForDrag(p, sx, ox) {
+  const r0 = p.getBoundingClientRect(), frac = r0.width ? (sx - ox) / r0.width : 0.5;
+  _layUnsnap(p);
+  const w = p.getBoundingClientRect().width;
+  const nx = Math.round(sx - frac * w);
+  p.style.left = nx + 'px';
+  return nx;
+}
+// Panels re-measure (canvases, charts) after their size changes from code.
+let _layKickT = 0;
+function _layKick() { clearTimeout(_layKickT); _layKickT = setTimeout(() => { try { window.dispatchEvent(new Event('resize')); } catch {} }, 60); }
+function _layPanels() {   // widget panels in the app window, bottom of the stack first
+  return [...document.querySelectorAll('body > .cade-panel')].filter(p => !p.classList.contains('cade-popped'));
+}
+function _layTile(list) {
+  const ps = (list || _layPanels()).filter(p => !_isMinimized(p));
+  if (!ps.length || _panelNarrow()) return 0;
+  const a = _layArea(), n = ps.length, cols = Math.ceil(Math.sqrt(n * a.w / Math.max(1, a.h) / 1.4)) || 1, c = Math.min(n, Math.max(1, cols)), rows = Math.ceil(n / c), g = 6;
+  ps.forEach((p, i) => {
+    const row = Math.floor(i / c), inRow = row === rows - 1 ? n - row * c : c, col = i - row * c;
+    const w = a.w / inRow, h = a.h / rows;
+    if (!p.__snap) p.__preSnap = { w: p.style.width, h: p.style.height, mw: p.style.maxWidth, mh: p.style.maxHeight, sized: p.classList.contains('cade-sized') };
+    Object.assign(p.style, { left: Math.round(a.left + col * w + g) + 'px', top: Math.round(a.top + row * h + g) + 'px', right: 'auto', bottom: 'auto',
+      width: Math.round(w - 2 * g) + 'px', height: Math.round(h - 2 * g) + 'px', maxWidth: 'none', maxHeight: 'none' });
+    p.classList.add('cade-sized'); p.__snap = 'tile';
+  });
+  _layKick();
+  return n;
+}
+function _layCascade() {
+  const ps = _layPanels().filter(p => !_isMinimized(p));
+  const a = _layArea();
+  ps.forEach((p, i) => {
+    if (p.__snap) _layUnsnap(p);
+    p.style.right = 'auto'; p.style.bottom = 'auto';
+    p.style.left = Math.round(a.left + 24 + i * 30) + 'px'; p.style.top = Math.round(a.top + 16 + i * 30) + 'px';
+    document.body.appendChild(p);   // stack in order
+    _fitPanel(p);
+  });
+  _layKick();
+  return ps.length;
+}
+// The window changed size: snapped panels follow their zone (tiled ones keep their spot).
+window.addEventListener('resize', () => {
+  clearTimeout(_layResizeT);
+  _layResizeT = setTimeout(() => { for (const p of _layPanels()) if (p.__snap && LAY_ZONES[p.__snap]) { const pre = p.__preSnap, z = p.__snap; p.__snap = null; _laySnap(p, z); p.__preSnap = pre; } }, 200);
+});
+var _layResizeT = 0;
+
+// -- the float window --
+function _laySaved() { try { return JSON.parse(store.get(LAY_WIN_KEY) || 'null') || {}; } catch { return {}; } }
+function _layRemember() {
+  if (!_lay.win) return;
+  try { store.set(LAY_WIN_KEY, JSON.stringify({ layout: _lay.layout, colFr: _lay.colFr, rowFr: _lay.rowFr, w: _lay.win.innerWidth, h: _lay.win.innerHeight })); } catch {}
+}
+function _layFr(l, n, old) { return old && old.length === n ? old.slice() : new Array(n).fill(1); }
+async function _layOpen(opts) {
+  opts = opts || {};
+  if (_lay.win) { if (opts.layout) _laySetLayout(opts.layout, opts); return true; }
+  if (!_canPopOut()) { showToast('The float window needs a desktop browser', 'info', 2500); return false; }
+  const saved = _laySaved(), w = Math.max(360, Math.round(opts.w || saved.w || 900)), h = Math.max(260, Math.round(opts.h || saved.h || 560));
+  const pip = window.documentPictureInPicture;
+  // the one Picture-in-Picture window may hold a single popped-out panel: it joins the float window
+  let lone = null;
+  if (pip && pip.window) for (const [pp, st] of _popped) if (st.win === pip.window && !st.ws) lone = pp;
+  if (lone) _popInPanel(lone);
+  let win = null;
+  if (pip) { try { win = await pip.requestWindow({ width: w, height: h }); } catch { win = null; } }
+  if (!win) {
+    try { win = window.open('', '', 'popup=yes,width=' + w + ',height=' + h); } catch { win = null; }
+    if (!win) { showToast(pip ? 'Couldn’t open the floating window — click the button again' : 'Pop-up blocked — allow pop-ups for this site', 'error', 3500); return false; }
+    win.document.open();
+    win.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body></body></html>');
+    win.document.close();
+  }
+  const d = win.document;
+  d.title = 'Float window — Cade.txt';
+  _lay.win = win; _lay.onTop = !!pip && win === pip.window;
+  _lay.obs = _popPrepDoc(d);
+  d.body.classList.add('cade-lay-body');
+  const root = d.createElement('div'); root.className = 'cade-lay';
+  root.innerHTML = '<div class="cade-lay-bar"><span class="cade-lay-name">Float window</span><span class="cade-lay-layouts"></span>' +
+    '<span class="cade-lay-tip"></span><button type="button" class="cade-lay-allin" title="Put every panel back in the app window">Back in app</button></div>' +
+    '<div class="cade-lay-grid"></div>';
+  d.body.appendChild(root);
+  _lay.bar = root.querySelector('.cade-lay-bar'); _lay.grid = root.querySelector('.cade-lay-grid');
+  _lay.bar.querySelector('.cade-lay-tip').textContent = _lay.onTop ? 'stays on top' : '';
+  _lay.bar.querySelector('.cade-lay-allin').addEventListener('click', () => _layClose());
+  _lay.bar.querySelector('.cade-lay-layouts').addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('[data-l]');
+    if (b) _laySetLayout(b.getAttribute('data-l'));
+  });
+  _lay.layout = LAY_LAYOUTS[opts.layout] ? opts.layout : LAY_LAYOUTS[saved.layout] ? saved.layout : 'cols2';
+  const L = LAY_LAYOUTS[_lay.layout];
+  _lay.colFr = _layFr(L, L.c, opts.colFr || (_lay.layout === saved.layout ? saved.colFr : null));
+  _lay.rowFr = _layFr(L, L.r, opts.rowFr || (_lay.layout === saved.layout ? saved.rowFr : null));
+  _lay.slots = new Array(_laySlotCount(_lay.layout)).fill(null);
+  win.addEventListener('resize', () => { _layGutters(); _layKick(); clearTimeout(_lay.saveT); _lay.saveT = setTimeout(_layRemember, 400); });
+  win.addEventListener('pagehide', () => _layClosed());
+  _layInstallSwap(d);
+  _layRender();
+  if (lone) _layAdd(lone);
+  _layRemember();
+  document.querySelectorAll('.cade-panel').forEach(_paintPopBtn);
+  try { document.dispatchEvent(new CustomEvent('cade-layouts', { detail: { open: true } })); } catch {}
+  return true;
+}
+// Everything back into the app window and the window closed.
+function _layClose() {
+  if (!_lay.win) return;
+  const win = _lay.win;
+  for (const p of _lay.slots.slice()) if (p) _popInPanel(p);
+  _layClosed();
+  try { win.close(); } catch {}
+}
+function _layClosed() {
+  if (!_lay.win) return;
+  for (const p of _lay.slots.slice()) if (p) _popInPanel(p, true);
+  try { if (_lay.obs) _lay.obs.disconnect(); } catch {}
+  _lay.win = null; _lay.obs = null; _lay.grid = null; _lay.bar = null; _lay.slots = [];
+  document.querySelectorAll('.cade-panel').forEach(_paintPopBtn);
+  try { document.dispatchEvent(new CustomEvent('cade-layouts', { detail: { open: false } })); } catch {}
+}
+function _layForget(p) {
+  const i = _lay.slots.indexOf(p);
+  if (i < 0) return;
+  _lay.slots[i] = null;
+  if (_lay.win) _layRender();
+}
+// Put a panel into the float window (a free slot, or `slot`; grows the layout when full).
+function _layAdd(p, slot) {
+  if (!_lay.win || !p || !p.isConnected) return false;
+  if (_lay.slots.indexOf(p) >= 0) { if (slot != null && slot !== _lay.slots.indexOf(p)) _laySwap(_lay.slots.indexOf(p), slot); return true; }
+  if (p.id === 'layouts-panel') { showToast('The Layouts panel stays in the app window', 'info', 2000); return false; }
+  if (_popped.has(p)) _popInPanel(p);
+  if (_isMinimized(p)) _restorePanel(p);
+  if (slot == null || slot >= _lay.slots.length || _lay.slots[slot]) slot = _lay.slots.indexOf(null);
+  if (slot < 0) {
+    const used = _lay.slots.length + 1, next = LAY_GROW.find(l => _laySlotCount(l) >= used);
+    if (!next) { showToast('The float window is full (6 panels)', 'info', 2200); return false; }
+    _laySetLayout(next);
+    slot = _lay.slots.indexOf(null);
+  }
+  if (p.__snap) { p.__snap = null; p.__preSnap = null; }
+  const st = { win: _lay.win, ws: true, obs: null, bodyObs: null, closing: false, style: p.getAttribute('style') };
+  _popped.set(p, st);
+  _lay.slots[slot] = p;
+  p.classList.add('cade-popped', 'cade-lay-panel');
+  _layRender();
+  // closed from inside (its × or its module removed it): forget it
+  st.bodyObs = new MutationObserver(() => { if (!st.closing && !p.isConnected) _popDone(p, false); });
+  st.bodyObs.observe(_lay.grid, { childList: true, subtree: true });
+  _paintPopBtn(p);
+  try { p.dispatchEvent(new CustomEvent('cade-panel-popout', { bubbles: true })); } catch {}
+  return true;
+}
+function _laySwap(i, j) {
+  if (i === j || i < 0 || j < 0 || i >= _lay.slots.length || j >= _lay.slots.length) return;
+  const t = _lay.slots[i]; _lay.slots[i] = _lay.slots[j]; _lay.slots[j] = t;
+  _layRender();
+}
+function _laySetLayout(l, opts) {
+  if (!_lay.win || !LAY_LAYOUTS[l]) return;
+  const L = LAY_LAYOUTS[l], n = _laySlotCount(l), keep = _lay.slots.filter(Boolean);
+  for (const p of keep.slice(n)) _popInPanel(p);   // more panels than the layout holds: the rest go home
+  _lay.layout = l;
+  _lay.colFr = _layFr(L, L.c, opts && opts.colFr); _lay.rowFr = _layFr(L, L.r, opts && opts.rowFr);
+  _lay.slots = new Array(n).fill(null);
+  keep.slice(0, n).forEach((p, i) => { _lay.slots[i] = p; });
+  _layRender();
+  _layRemember();
+}
+function _layRender() {
+  if (!_lay.win || !_lay.grid) return;
+  const d = _lay.win.document, L = LAY_LAYOUTS[_lay.layout], g = _lay.grid;
+  _lay.bar.querySelector('.cade-lay-layouts').innerHTML = Object.keys(LAY_LAYOUTS).map(k => {
+    const M = LAY_LAYOUTS[k];
+    let svg = '<svg viewBox="0 0 24 16" aria-hidden="true">';
+    const cw = 22 / M.c, rh = 14 / M.r, seen = {};
+    M.a.forEach((row, ri) => row.forEach((i, ci) => {
+      if (seen[i]) return; seen[i] = 1;
+      let cs = 1, rs = 1;
+      while (ci + cs < M.c && M.a[ri][ci + cs] === i) cs++;
+      while (ri + rs < M.r && M.a[ri + rs][ci] === i) rs++;
+      svg += '<rect x="' + (1 + ci * cw + 0.6) + '" y="' + (1 + ri * rh + 0.6) + '" width="' + (cs * cw - 1.2) + '" height="' + (rs * rh - 1.2) + '" rx="1"/>';
+    }));
+    return '<button type="button" data-l="' + k + '" class="' + (k === _lay.layout ? 'on' : '') + '" title="' + M.name + '" aria-label="Layout: ' + M.name + '">' + svg + '</svg></button>';
+  }).join('');
+  g.style.gridTemplateColumns = _lay.colFr.map(f => f + 'fr').join(' ');
+  g.style.gridTemplateRows = _lay.rowFr.map(f => f + 'fr').join(' ');
+  g.style.gridTemplateAreas = L.a.map(row => '"' + row.map(i => 's' + i).join(' ') + '"').join(' ');
+  // slots: reuse the elements, keep panels where they are when possible
+  const old = {};
+  g.querySelectorAll(':scope > .cade-lay-slot').forEach(el => { old[el.getAttribute('data-i')] = el; });
+  for (let i = 0; i < _lay.slots.length; i++) {
+    let el = old[i];
+    if (!el) { el = d.createElement('div'); el.className = 'cade-lay-slot'; el.setAttribute('data-i', i); g.appendChild(el); }
+    delete old[i];
+    el.style.gridArea = 's' + i;
+    const p = _lay.slots[i];
+    if (p) {
+      if (p.parentNode !== el) { el.textContent = ''; el.appendChild(p); }
+    } else {
+      [...el.children].forEach(c => { if (!c.classList.contains('cade-lay-empty')) c.remove(); });
+      if (!el.querySelector('.cade-lay-empty')) {
+        const e = d.createElement('div'); e.className = 'cade-lay-empty';
+        e.innerHTML = '<div>Empty slot</div><select aria-label="Put an open panel here"></select><div class="cade-lay-hint">or use a panel’s pop-out button</div>';
+        el.appendChild(e);
+        e.querySelector('select').addEventListener('change', ev => {
+          const id = ev.target.value; ev.target.value = '';
+          const pp = id && document.getElementById(id);
+          if (pp) _layAdd(pp, +el.getAttribute('data-i'));
+        });
+        e.querySelector('select').addEventListener('focus', () => _layFillPicker(e.querySelector('select')));
+        e.querySelector('select').addEventListener('pointerdown', () => _layFillPicker(e.querySelector('select')));
+      }
+      _layFillPicker(el.querySelector('select'));
+    }
+  }
+  for (const k in old) old[k].remove();
+  _layGutters();
+  _layKick();
+}
+function _layFillPicker(sel) {
+  if (!sel) return;
+  const ps = _layPanels().filter(p => p.id !== 'layouts-panel');
+  sel.innerHTML = '<option value="">' + (ps.length ? 'Add an open panel…' : 'No open panels in the app') + '</option>' +
+    ps.map(p => '<option value="' + escapeHtml(p.id) + '">' + escapeHtml((p.querySelector('.cade-panel-title') || {}).textContent || p.id) + '</option>').join('');
+}
+// Dividers: one handle per run of cells a track boundary actually separates.
+function _layGutters() {
+  if (!_lay.win || !_lay.grid) return;
+  const d = _lay.win.document, g = _lay.grid, L = LAY_LAYOUTS[_lay.layout];
+  g.querySelectorAll(':scope > .cade-lay-gut').forEach(el => el.remove());
+  const W = g.clientWidth, H = g.clientHeight, pad = 6, gap = 6;
+  function tracks(fr, total) {
+    const sum = fr.reduce((x, y) => x + y, 0), avail = total - 2 * pad - gap * (fr.length - 1), out = [];
+    let pos = pad;
+    for (let i = 0; i < fr.length; i++) { const sz = avail * fr[i] / sum; out.push({ a: pos, b: pos + sz }); pos += sz + gap; }
+    return out;
+  }
+  const cx = tracks(_lay.colFr, W), ry = tracks(_lay.rowFr, H);
+  function add(kind, i, from, to) {
+    const el = d.createElement('div'); el.className = 'cade-lay-gut ' + kind;
+    if (kind === 'v') Object.assign(el.style, { left: (cx[i].b + gap / 2 - 4) + 'px', top: ry[from].a + 'px', height: (ry[to].b - ry[from].a) + 'px' });
+    else Object.assign(el.style, { top: (ry[i].b + gap / 2 - 4) + 'px', left: cx[from].a + 'px', width: (cx[to].b - cx[from].a) + 'px' });
+    g.appendChild(el);
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      const fr = kind === 'v' ? _lay.colFr : _lay.rowFr, tr = kind === 'v' ? cx : ry, total = (tr[i].b - tr[i].a) + (tr[i + 1].b - tr[i + 1].a), sumFr = fr[i] + fr[i + 1];
+      const start = kind === 'v' ? e.clientX : e.clientY, a0 = tr[i].b - tr[i].a;
+      try { el.setPointerCapture(e.pointerId); } catch {}
+      g.classList.add('cade-lay-dragging');
+      const move = ev => {
+        const a = Math.max(total * 0.12, Math.min(total * 0.88, a0 + ((kind === 'v' ? ev.clientX : ev.clientY) - start)));
+        fr[i] = sumFr * a / total; fr[i + 1] = sumFr - fr[i];
+        if (kind === 'v') g.style.gridTemplateColumns = _lay.colFr.map(f => f + 'fr').join(' ');
+        else g.style.gridTemplateRows = _lay.rowFr.map(f => f + 'fr').join(' ');
+      };
+      const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); g.classList.remove('cade-lay-dragging'); _layGutters(); _layKick(); _layRemember(); };
+      el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    });
+  }
+  for (let i = 0; i < L.c - 1; i++) {        // vertical boundaries between columns i | i+1
+    let run = -1;
+    for (let r = 0; r <= L.r; r++) {
+      const sep = r < L.r && L.a[r][i] !== L.a[r][i + 1];
+      if (sep && run < 0) run = r;
+      if (!sep && run >= 0) { add('v', i, run, r - 1); run = -1; }
+    }
+  }
+  for (let j = 0; j < L.r - 1; j++) {        // horizontal boundaries between rows j / j+1
+    let run = -1;
+    for (let c = 0; c <= L.c; c++) {
+      const sep = c < L.c && L.a[j][c] !== L.a[j + 1][c];
+      if (sep && run < 0) run = c;
+      if (!sep && run >= 0) { add('h', j, run, c - 1); run = -1; }
+    }
+  }
+}
+// Drag a panel's title bar onto another slot to swap them.
+function _layInstallSwap(d) {
+  let from = -1, ghost = null, sx = 0, sy = 0, on = false;
+  d.addEventListener('pointerdown', e => {
+    const head = e.target.closest && e.target.closest('.cade-lay-panel > .cade-panel-head');
+    if (!head || e.button > 0 || e.target.closest('[role="button"], button, input, select, .cade-panel-x')) return;
+    const slot = head.closest('.cade-lay-slot');
+    from = slot ? +slot.getAttribute('data-i') : -1; sx = e.clientX; sy = e.clientY; on = false;
+  }, true);
+  d.addEventListener('pointermove', e => {
+    if (from < 0) return;
+    if (!on && Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) < 8) return;
+    if (!on) { on = true; ghost = d.createElement('div'); ghost.className = 'cade-lay-ghost'; ghost.textContent = ((_lay.slots[from] || {}).querySelector ? (_lay.slots[from].querySelector('.cade-panel-title') || {}).textContent : '') || 'Panel'; d.body.appendChild(ghost); _lay.grid.classList.add('cade-lay-dragging'); }
+    ghost.style.left = (e.clientX + 12) + 'px'; ghost.style.top = (e.clientY + 8) + 'px';
+    d.querySelectorAll('.cade-lay-slot').forEach(s => s.classList.toggle('cade-lay-target', s.contains(d.elementFromPoint(e.clientX, e.clientY)) && +s.getAttribute('data-i') !== from));
+  });
+  const end = e => {
+    if (from < 0) return;
+    if (on) {
+      const el = d.elementFromPoint(e.clientX, e.clientY), s = el && el.closest && el.closest('.cade-lay-slot');
+      if (s) _laySwap(from, +s.getAttribute('data-i'));
+      if (ghost) ghost.remove(); ghost = null;
+      d.querySelectorAll('.cade-lay-target').forEach(s2 => s2.classList.remove('cade-lay-target'));
+      if (_lay.grid) _lay.grid.classList.remove('cade-lay-dragging');
+    }
+    from = -1; on = false;
+  };
+  d.addEventListener('pointerup', end);
+  d.addEventListener('pointercancel', end);
+}
+
+// -- arrangements --
+function _layCapture() {
+  const a = _layArea(), out = { v: 1, at: Date.now(), area: { w: a.w, h: a.h }, panels: [], ws: null };
+  const all = [..._layPanels(), ..._lay.slots.filter(Boolean)];
+  for (const p of all) {
+    if (!p.__cadeWidget || p.id === 'layouts-panel' || p.classList.contains('cade-solo-panel')) continue;
+    const e = { widget: p.__cadeWidget, id: p.id };
+    const slot = _lay.slots.indexOf(p);
+    if (slot >= 0) { e.state = 'float'; e.slot = slot; }
+    else {
+      e.state = _isMinimized(p) ? 'min' : 'open';
+      if (p.__snap && LAY_ZONES[p.__snap]) e.snap = p.__snap;
+      else {
+        const r = p.getBoundingClientRect(), sized = p.classList.contains('cade-sized');
+        if (r.width && r.height) e.rect = { x: (r.left - a.left) / a.w, y: (r.top - a.top) / a.h, w: sized ? r.width / a.w : null, h: sized ? r.height / a.h : null };
+      }
+    }
+    out.panels.push(e);
+  }
+  if (_lay.win) out.ws = { layout: _lay.layout, colFr: _lay.colFr.slice(), rowFr: _lay.rowFr.slice(), w: _lay.win.innerWidth, h: _lay.win.innerHeight };
+  return out;
+}
+function _layWaitPanel(id, ms) {
+  return new Promise(res => {
+    const t0 = Date.now();
+    (function poll() {
+      const p = document.getElementById(id);
+      if (p) return res(p);
+      if (Date.now() - t0 > ms) return res(null);
+      setTimeout(poll, 80);
+    })();
+  });
+}
+// Put an arrangement back. opts.replace (default true): close widget panels it doesn't list.
+// Call from a click: the floating window (if the arrangement has one) opens first, while the gesture counts.
+async function _layApply(arr, opts) {
+  opts = opts || {};
+  if (!arr || !Array.isArray(arr.panels)) return { opened: 0, missing: [] };
+  const wantFloat = arr.ws && arr.panels.some(e => e.state === 'float');
+  let floatOk = false;
+  if (wantFloat) floatOk = _lay.win ? (_laySetLayout(arr.ws.layout, arr.ws), true) : await _layOpen({ layout: arr.ws.layout, colFr: arr.ws.colFr, rowFr: arr.ws.rowFr, w: arr.ws.w, h: arr.ws.h });
+  else if (_lay.win && opts.replace !== false) _layClose();
+  const keep = new Set(arr.panels.map(e => e.id));
+  if (opts.replace !== false) {
+    for (const p of [..._layPanels(), ..._lay.slots.filter(Boolean)]) {
+      if (!p.__cadeWidget || keep.has(p.id) || p.id === 'layouts-panel') continue;
+      const x = p.querySelector('.cade-panel-x');
+      if (x) x.click(); else { p.remove(); if (p._onClose) p._onClose(); }
+    }
+  }
+  const a = _layArea(), missing = [];
+  let opened = 0;
+  for (const e of arr.panels) {
+    let p = document.getElementById(e.id);
+    if (!p) {
+      if (!(window.__cadeRunCommand && window.__cadeRunCommand(e.widget))) { missing.push(e.widget); continue; }
+      p = await _layWaitPanel(e.id, 8000);
+      if (!p) { missing.push(e.widget); continue; }
+    }
+    opened++;
+    if (e.state === 'float' && floatOk) { _layAdd(p, e.slot); continue; }
+    if (_lay.slots.indexOf(p) >= 0 || _popped.has(p)) _popInPanel(p);
+    if (_isMinimized(p) && e.state !== 'min') _restorePanel(p);
+    document.body.appendChild(p);           // stacking follows the saved order
+    if (_panelNarrow()) { _fitPanel(p); }
+    else if (e.snap) _laySnap(p, e.snap);
+    else if (e.rect) {
+      if (p.__snap) _layUnsnap(p);
+      const r = e.rect;
+      p.style.right = 'auto'; p.style.bottom = 'auto';
+      p.style.left = Math.round(a.left + r.x * a.w) + 'px'; p.style.top = Math.round(a.top + r.y * a.h) + 'px';
+      if (r.w) { p.style.width = Math.round(r.w * a.w) + 'px'; p.style.maxWidth = 'none'; p.classList.add('cade-sized'); }
+      if (r.h) { p.style.height = Math.round(r.h * a.h) + 'px'; p.style.maxHeight = 'none'; p.classList.add('cade-sized'); }
+      _fitPanel(p);
+    }
+    if (e.state === 'min' && !_isMinimized(p)) _minimizePanel(p);
+  }
+  if (wantFloat && !floatOk) for (const e of arr.panels) if (e.state === 'float') { const p = document.getElementById(e.id); if (p) _fitPanel(p); }
+  _layKick();
+  return { opened, missing, floated: floatOk };
+}
+window.__cadeLayouts = {
+  supported() { return { snap: !_panelNarrow() && !_solo, float: _canPopOut() && !_solo, onTop: !!window.documentPictureInPicture }; },
+  snapping(on) { if (on !== undefined) store.set(LAY_SNAP_KEY, on ? '1' : '0'); return _laySnapOn(); },
+  snap(p, z) { if (z) _laySnap(p, z); else _layUnsnap(p); },
+  tile() { return _layTile(); }, cascade() { return _layCascade(); },
+  layouts() { return Object.keys(LAY_LAYOUTS).map(k => ({ id: k, name: LAY_LAYOUTS[k].name, slots: _laySlotCount(k) })); },
+  isOpen() { return !!_lay.win; }, onTop() { return !!_lay.win && !!_lay.onTop; },
+  open(opts) { return _layOpen(opts); }, close() { _layClose(); },
+  layout(l) { if (l) _laySetLayout(l); return _lay.layout; },
+  add(p, slot) { return _layAdd(p, slot); }, remove(p) { if (_lay.slots.indexOf(p) >= 0) _popInPanel(p); },
+  floating() { return _lay.slots.filter(Boolean); },
+  capture() { return _layCapture(); }, apply(arr, opts) { return _layApply(arr, opts); }
+};
 
 // B6: floating panels are absolutely positioned, so a viewport resize can leave
 // them orphaned off-screen. On a real width change (ignore mobile keyboard

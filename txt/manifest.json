@@ -3358,6 +3358,16 @@
       "css": "widgets/arcade/arcade.css"
     },
     {
+      "id": "layouts",
+      "type": "widget",
+      "name": "Layouts",
+      "description": "Snap and tile panels, float several in one always-on-top window, and save / load the whole arrangement",
+      "icon": "🗔️",
+      "tags": "layout,layouts,workspace,arrange,snap,tile,cascade,float,always on top,pip,picture in picture,pop out,save,load,windows,panels,bloomberg,launchpad",
+      "entry": "widgets/layouts/layouts.js",
+      "css": "widgets/layouts/layouts.css"
+    },
+    {
       "id": "snippets",
       "type": "widget",
       "name": "Snippets",

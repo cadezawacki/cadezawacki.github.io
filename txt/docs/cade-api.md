@@ -344,7 +344,7 @@ hidden until it is.
 
 ## Pop out — a panel in its own window (desktop)
 Every panel header has a pop-out button on desktop (hidden on touch screens and game
-panels). Chrome / Edge open an always-on-top Picture-in-Picture window; other browsers a
+panels). While the Layouts float window is open (see below) it sends the panel there instead. Chrome / Edge open an always-on-top Picture-in-Picture window; other browsers a
 pop-up window. The panel's DOM moves there with its listeners and state; stylesheets
 (including ones loaded later) and the theme are mirrored. Closing that window, or the
 button again, brings it back; the panel's × closes both. `document.getElementById` also
@@ -356,6 +356,38 @@ reloads when it moves (listen for `message` on `panel.ownerDocument.defaultView`
 | `Cade.popOut(panel)` / `Cade.popIn(panel)` | do it from code (`popOut` needs a user gesture) |
 | `Cade.isPoppedOut(panel)` | `true` while it lives in its own window |
 | `cade-panel-popout` / `cade-panel-popin` | bubbling events dispatched on the panel after the move |
+
+## Layouts — `Cade.layouts` (snap, float window, saved arrangements)
+Driven by the **Layouts** widget (`txt/widgets/layouts/`); not to be confused with room
+workspaces (`?ws=`). Desktop widths only; `supported()` says what's available.
+- **Snap:** drag a panel's title bar to the left / right edge (half), a corner (quarter) or
+  the top (fill); a preview shows the target. Dragging a snapped panel away restores its old
+  size; double-click a title bar to fill / restore. Snapped panels follow window resizes.
+- **Float window:** one extra window that tiles up to 6 panels in a layout with draggable
+  dividers (drag a title bar onto another slot to swap). In Chrome / Edge it is the page's
+  Document Picture-in-Picture window, so it **stays on top of other windows**; browsers allow
+  only one per page, hence one shared window. Elsewhere it's a normal pop-up. While it's open,
+  a panel's pop-out button (and `Cade.popOut`) sends the panel there. Floating panels count as
+  popped out (`Cade.isPoppedOut`, `.cade-popped`, plus `.cade-lay-panel`); the same pop-out
+  caveats apply (keys / resize on the app's `document` / `window` aren't seen there).
+- **Arrangements:** `capture()` records the widget panels (by widget name and panel id):
+  open (snap zone, or position / size as fractions of the work area), minimized or floating
+  (slot), plus the float window's layout. `apply()` reopens missing widgets via
+  `Cade.runCommand`, closes others (unless `{ replace: false }`) and restores everything.
+
+| Call | Does |
+| --- | --- |
+| `Cade.layouts.supported()` | `{ snap, float, onTop }` |
+| `Cade.layouts.snapping(on?)` | get / set snapping (persisted) |
+| `Cade.layouts.snap(panel, zone)` | `left right max tl tr bl br top bottom l3 c3 r3`; falsy zone unsnaps |
+| `Cade.layouts.tile()` / `.cascade()` | arrange the app window's panels; returns how many |
+| `Cade.layouts.open({ layout, colFr, rowFr, w, h })` | open the float window (**needs a user gesture**); Promise → `true` |
+| `Cade.layouts.close()` | every floating panel back into the app; window closed |
+| `Cade.layouts.isOpen()` / `.onTop()` | float window state |
+| `Cade.layouts.layouts()` / `.layout(id?)` | layout list `{ id, name, slots }` / get or switch |
+| `Cade.layouts.add(panel, slot?)` / `.remove(panel)` / `.floating()` | move panels in / out; list them |
+| `Cade.layouts.capture()` / `.apply(arr, { replace })` | arrangement object / restore it (call `apply` from a click if it has floating panels) → Promise `{ opened, missing, floated }` |
+| `cade-layouts` (event on `document`, `detail.open`) | the float window opened / closed |
 
 ## Storage — `Cade.storage`
 | Call | Does |

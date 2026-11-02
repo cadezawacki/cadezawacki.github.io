@@ -1,0 +1,45 @@
+/* Layouts widget (loaded on demand via Cade.loadCSS). */
+#layouts-panel { top: calc(var(--menubar-h, 36px) + 12px); right: 12px; width: 340px; max-width: calc(100vw - 24px); }
+#layouts-panel .cade-panel-body { padding: 0; overflow: auto; overscroll-behavior: contain; }
+.lay { display: flex; flex-direction: column; font-size: var(--text-sm); color: var(--text); }
+.lay-sec { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border); }
+.lay-sec:last-child { border-bottom: 0; }
+.lay-h { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); }
+.lay-sub { font-size: 11px; font-weight: 600; color: var(--text-muted); margin-top: 2px; }
+.lay-note { margin: 0; font-size: var(--text-xs); line-height: 1.45; color: var(--text-muted); }
+.lay-note b { color: var(--text); font-weight: 600; }
+.lay-dim { font-size: var(--text-xs); color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lay-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lay-btn, .lay-mini, .lay-chip {
+  font: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-2, var(--surface)); color: var(--text); -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.lay-btn { padding: 6px 12px; border-radius: var(--radius-md, 6px); font-weight: 600; }
+.lay-mini { padding: 3px 8px; border-radius: 6px; font-size: var(--text-xs); flex: none; }
+.lay-btn:hover, .lay-mini:hover, .lay-chip:hover { border-color: var(--accent); color: var(--accent); }
+.lay-btn.primary, .lay-mini.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.lay-btn.primary:hover, .lay-mini.primary:hover { color: #fff; filter: brightness(1.08); }
+.lay-mini.danger { color: var(--error, #dc2626); border-color: var(--error, #dc2626); }
+.lay-btn:focus-visible, .lay-mini:focus-visible, .lay-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.lay-layouts { display: flex; flex-wrap: wrap; gap: 4px; }
+.lay-chip { padding: 3px 9px; border-radius: 999px; font-size: var(--text-xs); }
+.lay-chip.on { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.lay-list { display: flex; flex-direction: column; }
+.lay-item { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px dashed var(--border); min-width: 0; }
+.lay-item:last-child { border-bottom: 0; }
+.lay-name { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lay-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.lay-info .lay-name { flex: none; }
+.lay-save, .lay-ren { display: flex; gap: 6px; }
+.lay-save input, .lay-ren input {
+  flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-md, 6px);
+  background: var(--bg); color: var(--text);
+}
+.lay-save input:focus, .lay-ren input:focus { outline: none; border-color: var(--accent); }
+.lay-check { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); color: var(--text-muted); cursor: pointer; }
+.lay-check input { accent-color: var(--accent); }
+@media (pointer: coarse) {
+  .lay-mini { min-height: 32px; padding: 4px 10px; }
+  .lay-btn { min-height: 38px; }
+  .lay-chip { min-height: 30px; }
+}
