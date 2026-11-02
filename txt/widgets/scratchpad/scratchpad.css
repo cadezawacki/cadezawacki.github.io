@@ -1,0 +1,50 @@
+/* Scratchpad — a note editor in a panel (see scratchpad.js). Theme variables only. */
+#scratchpad-panel { top: 64px; right: 14px; width: 400px; height: 380px; min-height: 170px; }
+#scratchpad-panel > .cade-panel-body {
+  flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 0;
+  display: flex; flex-direction: column;
+}
+.sp-bar {
+  flex: none; display: flex; align-items: center; gap: 4px; padding: 5px 6px;
+  border-bottom: 1px solid var(--border); background: var(--surface-2, var(--surface));
+}
+.sp-room {
+  flex: 0 1 auto; min-width: 0; max-width: 58%; height: 26px; padding: 0 6px;
+  font: inherit; font-family: var(--font-mono); font-size: var(--text-xs, 12px);
+  color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+}
+.sp-room:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sp-btn {
+  flex: none; width: 26px; height: 26px; padding: 0; line-height: 1;
+  font: 600 14px/1 var(--font-sans, system-ui, sans-serif); color: var(--text-muted);
+  background: none; border: 1px solid transparent; border-radius: 6px; cursor: pointer;
+}
+.sp-btn:hover, .sp-btn:focus-visible { color: var(--accent); border-color: var(--border); background: var(--surface-hover, rgba(127,127,127,0.15)); outline: none; }
+.sp-status {
+  margin-left: auto; min-width: 0; padding-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--text-xs, 12px); color: var(--text-faint);
+}
+.sp-status.ok { color: var(--text-faint); }
+.sp-status.live { color: var(--accent); font-weight: 600; }
+.sp-status.err { color: var(--error, #dc2626); font-weight: 600; }
+.sp-banner {
+  flex: none; padding: 5px 10px; font-size: var(--text-xs, 12px); line-height: 1.4; color: var(--text);
+  background: color-mix(in srgb, var(--error, #dc2626) 12%, var(--surface)); border-bottom: 1px solid var(--border);
+}
+.sp-banner.info { color: var(--text-muted); background: var(--accent-bg, rgba(20,184,166,0.12)); }
+.sp-banner[hidden] { display: none; }
+.sp-link { font: inherit; font-weight: 600; color: var(--accent); background: none; border: 0; padding: 0 2px; cursor: pointer; text-decoration: underline; }
+/* CodeMirror's base theme pins .cm-editor to position: relative — fill by flex instead */
+.sp-ed { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+.sp-ed > .cm-editor { flex: 1 1 0; min-height: 0; height: auto; }
+.sp-ed .cm-scroller { min-height: 0; }
+.sp-ed .cm-editor.cm-focused { outline: none; }
+.sp-ed .cm-scroller { padding: 8px 14px 28px; }
+.sp-ed .cm-gutters { display: none; }
+#scratchpad-panel.sp-linked { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+/* phones: a full-width sheet */
+@media (max-width: 600px) {
+  #scratchpad-panel { left: 6px; right: 6px; width: auto; height: 46vh; }
+  .sp-room { max-width: 62%; }
+  .sp-ed .cm-scroller { padding: 6px 10px 24px; }
+}

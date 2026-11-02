@@ -1,5 +1,5 @@
 /* Fancy Text Pack — Unicode fancy text styles.
-   Script-pack module: one file registering 5 palette scripts.
+   Script-pack module: one file registering 9 palette scripts.
    Extracted verbatim from txt.html (core slimming). */
 (function () {
   'use strict';
@@ -123,8 +123,154 @@ function main(ctx) {
 
 registerScript(`/**
   {
+    "name": "Bubble Text (ⓑⓤⓑⓑⓛⓔ)",
+    "description": "Convert letters and digits to Unicode circled (bubble) characters — toggles off",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><text x='12' y='16.5' font-size='12' font-weight='bold' text-anchor='middle' fill='currentColor' stroke='none'>b</text></svg>",
+    "tags": "bubble,circled,circle,enclosed,fancy,unicode,text,format"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  // Ⓐ-Ⓩ U+24B6, ⓐ-ⓩ U+24D0, ⓪ U+24EA, ①-⑨ U+2460
+  function toBubble(ch) {
+    const c = ch.codePointAt(0);
+    if (c >= 0x41 && c <= 0x5A) return String.fromCodePoint(0x24B6 + c - 0x41);
+    if (c >= 0x61 && c <= 0x7A) return String.fromCodePoint(0x24D0 + c - 0x61);
+    if (c === 0x30) return String.fromCodePoint(0x24EA);
+    if (c >= 0x31 && c <= 0x39) return String.fromCodePoint(0x2460 + c - 0x31);
+    return null;
+  }
+  function fromBubble(cp) {
+    if (cp >= 0x24B6 && cp <= 0x24CF) return String.fromCodePoint(0x41 + cp - 0x24B6);
+    if (cp >= 0x24D0 && cp <= 0x24E9) return String.fromCodePoint(0x61 + cp - 0x24D0);
+    if (cp === 0x24EA) return '0';
+    if (cp >= 0x2460 && cp <= 0x2468) return String.fromCodePoint(0x31 + cp - 0x2460);
+    return null;
+  }
+  const cps = [...text];
+  const isBubble = cps.some(ch => fromBubble(ch.codePointAt(0)));
+  const result = cps.map(ch => {
+    const cp = ch.codePointAt(0);
+    if (isBubble) return fromBubble(cp) || ch;
+    return toBubble(ch) || ch;
+  }).join('');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Superscript (ˢᵘᵖᵉʳ)",
+    "description": "Convert to Unicode superscript letters, digits and + − = ( ) — closest available form, toggles off",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 19l8-8'/><path d='M12 19l-8-8'/><path d='M20 12h-4c0-1.5.44-2 1.5-2.5S20 8.33 20 7.3c0-.6-.25-1.07-.75-1.3-.5-.23-1.13-.2-1.6.06-.42.24-.65.56-.65.94'/></svg>",
+    "tags": "superscript,super,exponent,power,raised,small,fancy,unicode,text,format,math"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  // Unicode has no superscript capital C F Q S X Y Z and no small q: capitals
+  // fall back to the lowercase form, q stays as it is.
+  const SUP = {
+    a:0x1D43,b:0x1D47,c:0x1D9C,d:0x1D48,e:0x1D49,f:0x1DA0,g:0x1D4D,h:0x02B0,i:0x2071,j:0x02B2,k:0x1D4F,l:0x02E1,m:0x1D50,
+    n:0x207F,o:0x1D52,p:0x1D56,r:0x02B3,s:0x02E2,t:0x1D57,u:0x1D58,v:0x1D5B,w:0x02B7,x:0x02E3,y:0x02B8,z:0x1DBB,
+    A:0x1D2C,B:0x1D2E,D:0x1D30,E:0x1D31,G:0x1D33,H:0x1D34,I:0x1D35,J:0x1D36,K:0x1D37,L:0x1D38,M:0x1D39,N:0x1D3A,
+    O:0x1D3C,P:0x1D3E,R:0x1D3F,T:0x1D40,U:0x1D41,V:0x2C7D,W:0x1D42,
+    0:0x2070,1:0x00B9,2:0x00B2,3:0x00B3,4:0x2074,5:0x2075,6:0x2076,7:0x2077,8:0x2078,9:0x2079,
+    '+':0x207A,'-':0x207B,'\\u2212':0x207B,'=':0x207C,'(':0x207D,')':0x207E
+  };
+  const rev = {};
+  for (const [k, v] of Object.entries(SUP)) if (!(v in rev)) rev[v] = k;
+  function toSup(ch) {
+    if (SUP[ch] !== undefined) return String.fromCodePoint(SUP[ch]);
+    const lo = ch.toLowerCase();
+    if (/^[A-Z]$/.test(ch) && SUP[lo] !== undefined) return String.fromCodePoint(SUP[lo]);
+    return null;
+  }
+  const cps = [...text];
+  const isSup = cps.some(ch => rev[ch.codePointAt(0)] !== undefined);
+  const result = cps.map(ch => {
+    if (isSup) { const r = rev[ch.codePointAt(0)]; return r !== undefined ? r : ch; }
+    return toSup(ch) || ch;
+  }).join('');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Subscript (ₛᵤᵦ)",
+    "description": "Convert to Unicode subscript digits, + − = ( ) and the letters that exist (a e h i j k l m n o p r s t u v x, β-style b, γ-style y) — toggles off",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 5l8 8'/><path d='M12 5l-8 8'/><path d='M20 19h-4c0-1.5.44-2 1.5-2.5S20 15.33 20 14.3c0-.6-.25-1.07-.75-1.3-.5-.23-1.13-.2-1.6.06-.42.24-.65.56-.65.94'/></svg>",
+    "tags": "subscript,sub,index,chemistry,formula,lowered,small,fancy,unicode,text,format,math"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  // Only these letters have subscript forms; b and y borrow the Greek ᵦ / ᵧ.
+  // Capitals use the lowercase form; anything else is left as it is.
+  const SUB = {
+    a:0x2090,e:0x2091,o:0x2092,x:0x2093,h:0x2095,k:0x2096,l:0x2097,m:0x2098,n:0x2099,p:0x209A,s:0x209B,t:0x209C,
+    i:0x1D62,r:0x1D63,u:0x1D64,v:0x1D65,j:0x2C7C,b:0x1D66,y:0x1D67,
+    0:0x2080,1:0x2081,2:0x2082,3:0x2083,4:0x2084,5:0x2085,6:0x2086,7:0x2087,8:0x2088,9:0x2089,
+    '+':0x208A,'-':0x208B,'\\u2212':0x208B,'=':0x208C,'(':0x208D,')':0x208E
+  };
+  const rev = {};
+  for (const [k, v] of Object.entries(SUB)) if (!(v in rev)) rev[v] = k;
+  function toSub(ch) {
+    if (SUB[ch] !== undefined) return String.fromCodePoint(SUB[ch]);
+    const lo = ch.toLowerCase();
+    if (/^[A-Z]$/.test(ch) && SUB[lo] !== undefined) return String.fromCodePoint(SUB[lo]);
+    return null;
+  }
+  const cps = [...text];
+  const isSub = cps.some(ch => rev[ch.codePointAt(0)] !== undefined);
+  const result = cps.map(ch => {
+    if (isSub) { const r = rev[ch.codePointAt(0)]; return r !== undefined ? r : ch; }
+    return toSub(ch) || ch;
+  }).join('');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Monospace (𝚖𝚘𝚗𝚘)",
+    "description": "Convert to Unicode mathematical monospace (typewriter) letters and digits — toggles off",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><text x='12' y='16' font-size='11' font-family='monospace' text-anchor='middle' fill='currentColor' stroke='none'>mo</text></svg>",
+    "tags": "monospace,mono,typewriter,code,fixed,fancy,unicode,text,format,math"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  // 𝙰-𝚉 U+1D670, 𝚊-𝚣 U+1D68A, 𝟶-𝟿 U+1D7F6 (no gaps in this block)
+  function toMono(ch) {
+    const c = ch.codePointAt(0);
+    if (c >= 0x41 && c <= 0x5A) return String.fromCodePoint(0x1D670 + c - 0x41);
+    if (c >= 0x61 && c <= 0x7A) return String.fromCodePoint(0x1D68A + c - 0x61);
+    if (c >= 0x30 && c <= 0x39) return String.fromCodePoint(0x1D7F6 + c - 0x30);
+    return null;
+  }
+  function fromMono(cp) {
+    if (cp >= 0x1D670 && cp <= 0x1D689) return String.fromCodePoint(0x41 + cp - 0x1D670);
+    if (cp >= 0x1D68A && cp <= 0x1D6A3) return String.fromCodePoint(0x61 + cp - 0x1D68A);
+    if (cp >= 0x1D7F6 && cp <= 0x1D7FF) return String.fromCodePoint(0x30 + cp - 0x1D7F6);
+    return null;
+  }
+  const cps = [...text];
+  const isMono = cps.some(ch => fromMono(ch.codePointAt(0)));
+  const result = cps.map(ch => {
+    const cp = ch.codePointAt(0);
+    if (isMono) return fromMono(cp) || ch;
+    return toMono(ch) || ch;
+  }).join('');
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
     "name": "Defancify",
-    "description": "Strip all Unicode fancy formatting — bold, italic, double-struck, small caps, combining marks",
+    "description": "Strip all Unicode fancy formatting — bold, italic, double-struck, monospace, small caps, bubble, superscript, subscript, fullwidth, combining marks",
     "author": "Cade",
     "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='4' y1='4' x2='20' y2='20'/><line x1='4' y1='20' x2='20' y2='4'/></svg>",
     "tags": "defancify,strip,clean,plain,unicode,remove,format,reset"
@@ -188,6 +334,19 @@ function main(ctx) {
   // Fullwidth ASCII (Ａ-Ｚ, ａ-ｚ, ０-９)
   for (let i = 0; i < 26; i++) { map[0xFF21 + i] = 0x41 + i; map[0xFF41 + i] = 0x61 + i; }
   for (let i = 0; i < 10; i++) map[0xFF10 + i] = 0x30 + i;
+  // Superscript (letters, digits, + − = ( )) — capitals with no superscript
+  // form were written as the lowercase one, so those come back lowercase
+  var sup = {0x1D43:0x61,0x1D47:0x62,0x1D9C:0x63,0x1D48:0x64,0x1D49:0x65,0x1DA0:0x66,0x1D4D:0x67,0x02B0:0x68,0x2071:0x69,0x02B2:0x6A,0x1D4F:0x6B,0x02E1:0x6C,0x1D50:0x6D,0x207F:0x6E,0x1D52:0x6F,0x1D56:0x70,0x02B3:0x72,0x02E2:0x73,0x1D57:0x74,0x1D58:0x75,0x1D5B:0x76,0x02B7:0x77,0x02E3:0x78,0x02B8:0x79,0x1DBB:0x7A,
+    0x1D2C:0x41,0x1D2E:0x42,0x1D30:0x44,0x1D31:0x45,0x1D33:0x47,0x1D34:0x48,0x1D35:0x49,0x1D36:0x4A,0x1D37:0x4B,0x1D38:0x4C,0x1D39:0x4D,0x1D3A:0x4E,0x1D3C:0x4F,0x1D3E:0x50,0x1D3F:0x52,0x1D40:0x54,0x1D41:0x55,0x2C7D:0x56,0x1D42:0x57,
+    0x2070:0x30,0x00B9:0x31,0x00B2:0x32,0x00B3:0x33,0x2074:0x34,0x2075:0x35,0x2076:0x36,0x2077:0x37,0x2078:0x38,0x2079:0x39,
+    0x207A:0x2B,0x207B:0x2D,0x207C:0x3D,0x207D:0x28,0x207E:0x29};
+  for (var k in sup) map[parseInt(k)] = sup[k];
+  // Subscript (ᵦ / ᵧ stand in for b / y)
+  var sub = {0x2090:0x61,0x2091:0x65,0x2092:0x6F,0x2093:0x78,0x2095:0x68,0x2096:0x6B,0x2097:0x6C,0x2098:0x6D,0x2099:0x6E,0x209A:0x70,0x209B:0x73,0x209C:0x74,
+    0x1D62:0x69,0x1D63:0x72,0x1D64:0x75,0x1D65:0x76,0x2C7C:0x6A,0x1D66:0x62,0x1D67:0x79,
+    0x208A:0x2B,0x208B:0x2D,0x208C:0x3D,0x208D:0x28,0x208E:0x29};
+  for (var k in sub) map[parseInt(k)] = sub[k];
+  addDigits(0x2080);
   // Strip combining marks: underline, double underline, strikethrough, enclosing marks
   var combining = new Set([0x0332, 0x0333, 0x0336, 0x0305, 0x20E3, 0x0489, 0xFE0F]);
   var result = [...text].map(function(ch) {

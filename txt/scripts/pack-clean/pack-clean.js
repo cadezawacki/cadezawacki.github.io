@@ -1,5 +1,5 @@
 /* Clean & Restructure Pack — whitespace, list, table and code cleanup
-   transforms. Script-pack module: one file registering 17 palette scripts.
+   transforms. Script-pack module: one file registering 19 palette scripts.
    Follows the idiom: read ctx.selection || ctx.fullText, write back to the
    same target. */
 (function () {
@@ -381,5 +381,155 @@ function main(ctx) {
   }).join('\\n');
   if (ctx.selection) ctx.selection = out; else ctx.fullText = out;
 }`);
+
+// ---------------------------------------------------------------------------
+// Invisible characters. Written with String.raw (no doubled escapes); both
+// scripts get the same detector appended to their source, since the core runs
+// every script in isolation.
+// ---------------------------------------------------------------------------
+var INVIS_HELPERS = String.raw`
+
+// Names for invisible / format / control characters: ⟦NAME⟧ tags, and what
+// Remove turns them into ('space' → " ", 'line' → newline, else dropped).
+var INVIS_NAMES = {
+  0x0085: 'NEL', 0x007F: 'DEL', 0x00A0: 'NBSP', 0x00AD: 'SHY', 0x034F: 'CGJ', 0x061C: 'ALM',
+  0x115F: 'HCF', 0x1160: 'HJF', 0x17B4: 'KIVAQ', 0x17B5: 'KIVAA', 0x180E: 'MVS',
+  0x2000: 'NQSP', 0x2001: 'MQSP', 0x2002: 'ENSP', 0x2003: 'EMSP', 0x2004: '3/MSP', 0x2005: '4/MSP',
+  0x2006: '6/MSP', 0x2007: 'FSP', 0x2008: 'PSP', 0x2009: 'THSP', 0x200A: 'HSP',
+  0x200B: 'ZWSP', 0x200C: 'ZWNJ', 0x200D: 'ZWJ', 0x200E: 'LRM', 0x200F: 'RLM',
+  0x2028: 'LSEP', 0x2029: 'PSEP', 0x202A: 'LRE', 0x202B: 'RLE', 0x202C: 'PDF', 0x202D: 'LRO',
+  0x202E: 'RLO', 0x202F: 'NNBSP', 0x205F: 'MMSP', 0x2060: 'WJ', 0x2061: 'FA', 0x2062: 'IT',
+  0x2063: 'IS', 0x2064: 'IP', 0x2066: 'LRI', 0x2067: 'RLI', 0x2068: 'FSI', 0x2069: 'PDI',
+  0x2800: 'BLANK', 0x3000: 'IDSP', 0x3164: 'HF', 0xFEFF: 'BOM', 0xFFA0: 'HWHF',
+  0xFFF9: 'IAA', 0xFFFA: 'IAS', 0xFFFB: 'IAT', 0xE0001: 'TAG-LANG', 0xE007F: 'TAG-END'
+};
+var INVIS_C0 = ['NUL','SOH','STX','ETX','EOT','ENQ','ACK','BEL','BS','HT','LF','VT','FF','CR','SO','SI',
+  'DLE','DC1','DC2','DC3','DC4','NAK','SYN','ETB','CAN','EM','SUB','ESC','FS','GS','RS','US'];
+var INVIS_SPACE = 'NBSP NQSP MQSP ENSP EMSP 3/MSP 4/MSP 6/MSP FSP PSP THSP HSP NNBSP MMSP IDSP BLANK'.split(' ');
+var INVIS_LINE = 'NEL LSEP PSEP VT FF'.split(' ');
+
+function invisKind(name) {
+  return INVIS_SPACE.indexOf(name) >= 0 ? 'space' : INVIS_LINE.indexOf(name) >= 0 ? 'line' : 'drop';
+}
+
+function invisHex(cp) {
+  var h = cp.toString(16).toUpperCase();
+  return 'U+' + (h.length < 4 ? '0000'.slice(h.length) + h : h);
+}
+
+// Joining scripts (Arabic, Indic, …) use ZWJ / ZWNJ inside words on purpose.
+function invisJoinLetter(ch) {
+  return !!ch && /[\p{L}\p{M}]/u.test(ch) && !/[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}]/u.test(ch);
+}
+
+// Tag name for the code point at cps[i], or null to leave it alone. Legit uses
+// are kept: ZWJ inside emoji (👨‍👩‍👧) and joining-script words, variation
+// selectors right after an emoji / CJK ideograph (❤️, 1️⃣), plus tab / newline / CR.
+function invisName(cps, i) {
+  var ch = cps[i], cp = ch.codePointAt(0);
+  if (cp === 9 || cp === 10 || cp === 13) return null;
+  if (cp < 32) return INVIS_C0[cp];
+  if (cp >= 0xFE00 && cp <= 0xFE0F || cp >= 0xE0100 && cp <= 0xE01EF) {
+    var prev = cps[i - 1];
+    if (prev && /[\p{Emoji}\p{Ideographic}]/u.test(prev) && !/[︀-️\u{E0100}-\u{E01EF}]/u.test(prev)) return null;
+    return 'VS' + (cp <= 0xFE0F ? cp - 0xFE00 + 1 : cp - 0xE0100 + 17);
+  }
+  if (cp === 0x200D || cp === 0x200C) {
+    var j = i - 1;
+    while (j >= 0 && /[︎️\u{1F3FB}-\u{1F3FF}]/u.test(cps[j])) j--;
+    var before = cps[j], after = cps[i + 1];
+    if (cp === 0x200D && before && after && /\p{Extended_Pictographic}/u.test(before) && /[\p{Extended_Pictographic}\p{Emoji}]/u.test(after)) return null;
+    if (invisJoinLetter(cps[i - 1]) && invisJoinLetter(after)) return null;
+  }
+  if (INVIS_NAMES[cp]) return INVIS_NAMES[cp];
+  // Prepended concatenation marks (Arabic number signs …) are Cf but visible.
+  if (cp >= 0x0600 && cp <= 0x0605 || cp === 0x06DD || cp === 0x070F || cp === 0x0890 || cp === 0x0891 ||
+      cp === 0x08E2 || cp === 0x110BD || cp === 0x110CD) return null;
+  if (/[\p{Cc}\p{Cf}]/u.test(ch)) return invisHex(cp);
+  return null;
+}
+
+// Walks the text and splices in hit(name, count) for each invisible (a run of
+// ASCII tag characters — hidden "ASCII smuggling" text — comes as one hit,
+// TAG:the hidden text). Flag tag sequences (🏴 + tags + cancel tag) are kept.
+function invisWalk(text, hit) {
+  var cps = Array.from(text), out = '', i = 0, n = cps.length;
+  function isTag(c) { var x = c && c.codePointAt(0); return x >= 0xE0020 && x <= 0xE007F; }
+  while (i < n) {
+    var ch = cps[i], cp = ch.codePointAt(0);
+    if (cp === 0x1F3F4 && isTag(cps[i + 1])) {
+      var j = i + 1;
+      while (j < n && isTag(cps[j]) && cps[j].codePointAt(0) !== 0xE007F) j++;
+      if (j < n && cps[j].codePointAt(0) === 0xE007F) { out += cps.slice(i, j + 1).join(''); i = j + 1; continue; }
+    }
+    if (cp >= 0xE0020 && cp <= 0xE007E) {
+      var hidden = '';
+      while (i < n && cps[i].codePointAt(0) >= 0xE0020 && cps[i].codePointAt(0) <= 0xE007E) {
+        hidden += String.fromCharCode(cps[i].codePointAt(0) - 0xE0000); i++;
+      }
+      out += hit('TAG:' + hidden, hidden.length);
+      continue;
+    }
+    var name = invisName(cps, i);
+    out += name ? hit(name, 1) : ch;
+    i++;
+  }
+  return out;
+}
+
+// Matches the ⟦NAME⟧ tags Reveal writes (and only those).
+function invisTagRe() {
+  var names = Object.keys(INVIS_NAMES).map(function (k) { return INVIS_NAMES[k]; }).concat(INVIS_C0);
+  var alt = names.map(function (s) { return s.replace(/[.*+?^$()|[\]\\\/{}-]/g, '\\$&'); }).join('|');
+  return new RegExp('⟦(' + alt + '|U\\+[0-9A-F]{4,6}|VS\\d{1,3}|TAG:[\\x20-\\x7E]*?)⟧', 'g');
+}
+
+function invisSummary(counts) {
+  return Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; }).slice(0, 6)
+    .map(function (k) { return counts[k] + '× ' + k; }).join(', ') + (Object.keys(counts).length > 6 ? ', …' : '');
+}
+`;
+
+registerScript(String.raw`/**
+  {
+    "name": "Reveal Invisible Characters",
+    "description": "Show hidden characters as tags — ⟦ZWSP⟧ ⟦NBSP⟧ ⟦BOM⟧ ⟦SHY⟧ ⟦RLO⟧, control codes, stray variation selectors, hidden tag text — with a count of each",
+    "author": "Cade",
+    "icon": "👁",
+    "tags": "invisible,hidden,reveal,show,zero-width,zwsp,zwj,nbsp,bom,soft hyphen,bidi,rtl,control,characters,unicode,watermark,smuggling,debug,clean"
+  }
+**/
+function main(ctx) {
+  var t = ctx.selection || ctx.fullText;
+  var counts = {}, total = 0;
+  var out = invisWalk(t, function (name, n) {
+    var key = name.indexOf('TAG:') === 0 ? 'TAG' : name;
+    counts[key] = (counts[key] || 0) + n; total += n;
+    return '⟦' + name + '⟧';
+  });
+  if (!total) { showToast('No invisible characters found', 'info', 2500); return; }
+  showToast('Found ' + total + ' invisible character' + (total === 1 ? '' : 's') + ': ' + invisSummary(counts), 'success', 4500);
+  if (ctx.selection) ctx.selection = out; else ctx.fullText = out;
+}` + INVIS_HELPERS);
+
+registerScript(String.raw`/**
+  {
+    "name": "Remove Invisible Characters",
+    "description": "Strip zero-width characters, BOMs, soft hyphens, bidi and control codes (and Reveal's ⟦…⟧ tags) — odd spaces like NBSP become normal spaces; tabs, newlines and emoji joiners are kept",
+    "author": "Cade",
+    "icon": "✨",
+    "tags": "invisible,hidden,remove,strip,delete,zero-width,zwsp,zwj,nbsp,bom,soft hyphen,bidi,control,characters,unicode,watermark,clean,sanitize"
+  }
+**/
+function main(ctx) {
+  var t = ctx.selection || ctx.fullText;
+  var total = 0;
+  function swap(name) { var k = invisKind(name); return k === 'space' ? ' ' : k === 'line' ? '\n' : ''; }
+  var out = t.replace(invisTagRe(), function (m, name) { total++; return swap(name); });
+  out = invisWalk(out, function (name, n) { total += n; return swap(name); });
+  if (!total) { showToast('No invisible characters found', 'info', 2500); return; }
+  showToast('Removed ' + total + ' invisible character' + (total === 1 ? '' : 's'), 'success', 3000);
+  if (ctx.selection) ctx.selection = out; else ctx.fullText = out;
+}` + INVIS_HELPERS);
 
 })();
