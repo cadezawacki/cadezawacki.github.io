@@ -857,6 +857,20 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 }
 .editor-wrap .cm-scroller::-webkit-scrollbar-thumb:hover { background: var(--accent); background-clip: padding-box; }
 .editor-wrap .cm-scroller::-webkit-scrollbar-corner { background: transparent; }
+/* Every other scroll area (panels, menus, modals, cards, the float window): no
+   track, a slim accent thumb — softer at rest, full accent while you're over it.
+   A low-specificity default: the editor's own rules above, and anything that
+   hides or styles its scrollbar on purpose, still win. */
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--accent) 45%, transparent) transparent; }
+*:hover { scrollbar-color: color-mix(in srgb, var(--accent) 85%, transparent) transparent; }
+/* Safari has no scrollbar-color: the same look with the WebKit pseudo-elements. */
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; min-height: 32px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); background-clip: padding-box; }
+}
 
 .editor-wrap .cm-content {
   caret-color: var(--accent);
