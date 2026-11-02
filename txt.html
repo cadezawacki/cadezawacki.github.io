@@ -2828,9 +2828,25 @@ body.cade-lay-body { display: block; }
 .cade-lay-tip { margin-left: auto; font-weight: 500; color: var(--text-faint); }
 .cade-lay-allin { font: inherit; font-weight: 600; padding: 3px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2, transparent); color: var(--text-muted); cursor: pointer; }
 .cade-lay-allin:hover { color: var(--accent); border-color: var(--accent); }
-.cade-lay-grid { position: relative; flex: 1 1 auto; min-height: 0; display: grid; gap: 6px; padding: 6px; }
-.cade-lay-slot { position: relative; min-width: 0; min-height: 0; display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
-.cade-lay-slot.cade-lay-target { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cade-lay-grid { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.cade-lay-slot { position: absolute; box-sizing: border-box; min-width: 0; min-height: 0; display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+/* tile tools: split either way / remove — shown on empty tiles, and on every tile in edit mode */
+.cade-lay-tools { position: absolute; right: 6px; bottom: 6px; z-index: 4; display: none; gap: 3px; padding: 3px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg); }
+.cade-lay-slot-empty > .cade-lay-tools, .cade-lay-editing .cade-lay-tools { display: flex; }
+.cade-lay-tools button { width: 26px; height: 24px; padding: 0; font: 600 14px/1 var(--font-sans, system-ui, sans-serif); border: 1px solid var(--border); border-radius: 5px;
+  background: var(--surface-2, var(--surface)); color: var(--text-muted); cursor: pointer; }
+.cade-lay-tools button:hover { color: var(--accent); border-color: var(--accent); }
+.cade-lay-tools button[data-t="remove"]:hover { color: var(--error, #dc2626); border-color: var(--error, #dc2626); }
+.cade-lay-editing .cade-lay-slot { outline: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: -3px; }
+.cade-lay-editing .cade-lay-slot > .cade-panel { opacity: 0.55; }
+.cade-lay-editbtn { font: inherit; font-weight: 600; padding: 3px 9px; border: 1px solid var(--border); border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; }
+.cade-lay-editbtn:hover, .cade-lay-editbtn.on { color: var(--accent); border-color: var(--accent); }
+/* dragging a title bar: where it lands (swap, or dock on an edge) */
+.cade-lay-drop { position: absolute; z-index: 5; display: none; pointer-events: none; box-sizing: border-box; border: 2px solid var(--accent); border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); font: 700 12px var(--font-sans, system-ui, sans-serif);
+  align-items: center; justify-content: center; text-align: center; padding-top: 8px; }
+.cade-lay-dragging .cade-lay-gut:not(.active) { visibility: hidden; }
 .cade-lay-panel > .cade-panel-head { cursor: grab; }
 .cade-lay-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; margin: 6px; padding: 8px; text-align: center;
   border: 1px dashed var(--border); border-radius: 8px; color: var(--text-faint); font: 13px/1.3 var(--font-sans, system-ui, sans-serif); }
@@ -2839,7 +2855,7 @@ body.cade-lay-body { display: block; }
 .cade-lay-gut { position: absolute; z-index: 3; border-radius: 4px; }
 .cade-lay-gut.v { width: 8px; cursor: col-resize; }
 .cade-lay-gut.h { height: 8px; cursor: row-resize; }
-.cade-lay-gut:hover, .cade-lay-dragging .cade-lay-gut:active { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.cade-lay-gut:hover, .cade-lay-gut.active { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 .cade-lay-dragging, .cade-lay-dragging * { user-select: none; -webkit-user-select: none; }
 .cade-lay-dragging iframe { pointer-events: none; }
 .cade-lay-ghost { position: fixed; z-index: 10; pointer-events: none; padding: 4px 9px; border-radius: 6px; background: var(--accent); color: #fff; font: 600 12px var(--font-sans, system-ui, sans-serif); box-shadow: var(--shadow-lg); }
@@ -23749,20 +23765,45 @@ window.__markGamePanel = (p) => { if (p && p.classList) _watchGamePanel(p); }; /
 //     (snap zone or position/size as fractions of the work area), minimized or
 //     floating (slot), plus the floating window's layout; apply() reopens the
 //     widgets and puts everything back. The widget stores them by name.
-var _lay = { win: null, obs: null, layout: 'cols2', colFr: null, rowFr: null, slots: [], grid: null, bar: null, onPreset: null };
-const LAY_SNAP_KEY = 'cade-lay-snap', LAY_WIN_KEY = 'cade-lay-win';
-const LAY_LAYOUTS = {
-  single: { name: 'One', c: 1, r: 1, a: [[0]] },
-  cols2: { name: 'Side by side', c: 2, r: 1, a: [[0, 1]] },
-  rows2: { name: 'Stacked', c: 1, r: 2, a: [[0], [1]] },
-  mainside: { name: 'Main + 2', c: 2, r: 2, a: [[0, 1], [0, 2]] },
-  mainbottom: { name: 'Top + 2', c: 2, r: 2, a: [[0, 0], [1, 2]] },
-  cols3: { name: 'Three columns', c: 3, r: 1, a: [[0, 1, 2]] },
-  grid4: { name: '2 × 2', c: 2, r: 2, a: [[0, 1], [2, 3]] },
-  grid6: { name: '3 × 2', c: 3, r: 2, a: [[0, 1, 2], [3, 4, 5]] }
+var _lay = { win: null, obs: null, tree: null, preset: 'cols2', grid: null, bar: null, edit: false };
+const LAY_SNAP_KEY = 'cade-lay-snap', LAY_WIN_KEY = 'cade-lay-win', LAY_MAX = 8;
+// The float window's tiles are a split tree, like a tiling window manager:
+// a leaf { p: panel | null } or a split { d, r, a, b } — d 'h' puts a left of
+// b, 'v' puts a above b, r is a's share. Every split has its own divider, so
+// the left column can break at a different height from the right one.
+// Presets are just starting shapes ('L' = a leaf).
+const LAY_PRESETS = {
+  single: { name: 'One', t: 'L' },
+  cols2: { name: 'Side by side', t: ['h', 0.5, 'L', 'L'] },
+  rows2: { name: 'Stacked', t: ['v', 0.5, 'L', 'L'] },
+  mainside: { name: 'Main + 2', t: ['h', 0.6, 'L', ['v', 0.5, 'L', 'L']] },
+  mainbottom: { name: 'Top + 2', t: ['v', 0.6, 'L', ['h', 0.5, 'L', 'L']] },
+  cols3: { name: 'Three columns', t: ['h', 1 / 3, 'L', ['h', 0.5, 'L', 'L']] },
+  grid4: { name: '2 × 2', t: ['h', 0.5, ['v', 0.5, 'L', 'L'], ['v', 0.5, 'L', 'L']] },
+  twothree: { name: '2 + 3', t: ['h', 0.5, ['v', 0.5, 'L', 'L'], ['v', 1 / 3, 'L', ['v', 0.5, 'L', 'L']]] },
+  grid6: { name: '3 × 2', t: ['h', 1 / 3, ['v', 0.5, 'L', 'L'], ['h', 0.5, ['v', 0.5, 'L', 'L'], ['v', 0.5, 'L', 'L']]] }
 };
-const LAY_GROW = ['single', 'cols2', 'mainside', 'grid4', 'grid6'];   // layouts to grow into as panels arrive
-function _laySlotCount(l) { let n = 0; for (const row of LAY_LAYOUTS[l].a) for (const i of row) n = Math.max(n, i + 1); return n; }
+function _layShapeOk(t, depth) {
+  depth = depth || 0;
+  if (t === 'L') return true;
+  return depth < 10 && Array.isArray(t) && t.length === 4 && (t[0] === 'h' || t[0] === 'v') && typeof t[1] === 'number' && t[1] > 0.02 && t[1] < 0.98 &&
+    _layShapeOk(t[2], depth + 1) && _layShapeOk(t[3], depth + 1);
+}
+function _layBuild(t) { return t === 'L' ? { p: null } : { d: t[0], r: t[1], a: _layBuild(t[2]), b: _layBuild(t[3]) }; }
+function _layShape(n) { return n.d ? [n.d, Math.round(n.r * 10000) / 10000, _layShape(n.a), _layShape(n.b)] : 'L'; }
+function _layLeaves(n, out) { out = out || []; if (n) { if (n.d) { _layLeaves(n.a, out); _layLeaves(n.b, out); } else out.push(n); } return out; }
+function _layShapeLeaves(t) { return t === 'L' ? 1 : _layShapeLeaves(t[2]) + _layShapeLeaves(t[3]); }
+function _laySlots() { return _layLeaves(_lay.tree).map(l => l.p); }
+function _layParent(n, child) {
+  if (!n || !n.d) return null;
+  if (n.a === child || n.b === child) return n;
+  return _layParent(n.a, child) || _layParent(n.b, child);
+}
+function _layReplace(old, neu) {   // put `neu` where `old` is in the tree
+  if (_lay.tree === old) { _lay.tree = neu; return; }
+  const par = _layParent(_lay.tree, old);
+  if (par) { if (par.a === old) par.a = neu; else par.b = neu; }
+}
 function _laySnapOn() { return store.get(LAY_SNAP_KEY) !== '0' && !_solo; }
 
 // -- snapping (main window) --
@@ -23869,13 +23910,13 @@ var _layResizeT = 0;
 // -- the float window --
 function _laySaved() { try { return JSON.parse(store.get(LAY_WIN_KEY) || 'null') || {}; } catch { return {}; } }
 function _layRemember() {
-  if (!_lay.win) return;
-  try { store.set(LAY_WIN_KEY, JSON.stringify({ layout: _lay.layout, colFr: _lay.colFr, rowFr: _lay.rowFr, w: _lay.win.innerWidth, h: _lay.win.innerHeight })); } catch {}
+  if (!_lay.win || !_lay.tree) return;
+  try { store.set(LAY_WIN_KEY, JSON.stringify({ preset: _lay.preset, shape: _layShape(_lay.tree), w: _lay.win.innerWidth, h: _lay.win.innerHeight })); } catch {}
 }
-function _layFr(l, n, old) { return old && old.length === n ? old.slice() : new Array(n).fill(1); }
+// opts: { layout: preset id, shape: saved tree shape, w, h }
 async function _layOpen(opts) {
   opts = opts || {};
-  if (_lay.win) { if (opts.layout) _laySetLayout(opts.layout, opts); return true; }
+  if (_lay.win) { if (opts.shape || opts.layout) _laySetShape(opts.shape, opts.layout); return true; }
   if (!_canPopOut()) { showToast('The float window needs a desktop browser', 'info', 2500); return false; }
   const saved = _laySaved(), w = Math.max(360, Math.round(opts.w || saved.w || 900)), h = Math.max(260, Math.round(opts.h || saved.h || 560));
   const pip = window.documentPictureInPicture;
@@ -23894,29 +23935,31 @@ async function _layOpen(opts) {
   }
   const d = win.document;
   d.title = 'Float window — Cade.txt';
-  _lay.win = win; _lay.onTop = !!pip && win === pip.window;
+  _lay.win = win; _lay.onTop = !!pip && win === pip.window; _lay.edit = false;
   _lay.obs = _popPrepDoc(d);
   d.body.classList.add('cade-lay-body');
   const root = d.createElement('div'); root.className = 'cade-lay';
   root.innerHTML = '<div class="cade-lay-bar"><span class="cade-lay-name">Float window</span><span class="cade-lay-layouts"></span>' +
+    '<button type="button" class="cade-lay-editbtn" aria-pressed="false" title="Split, merge and remove tiles">Edit tiles</button>' +
     '<span class="cade-lay-tip"></span><button type="button" class="cade-lay-allin" title="Put every panel back in the app window">Back in app</button></div>' +
     '<div class="cade-lay-grid"></div>';
   d.body.appendChild(root);
   _lay.bar = root.querySelector('.cade-lay-bar'); _lay.grid = root.querySelector('.cade-lay-grid');
   _lay.bar.querySelector('.cade-lay-tip').textContent = _lay.onTop ? 'stays on top' : '';
   _lay.bar.querySelector('.cade-lay-allin').addEventListener('click', () => _layClose());
+  _lay.bar.querySelector('.cade-lay-editbtn').addEventListener('click', () => { _lay.edit = !_lay.edit; _layRender(); });
   _lay.bar.querySelector('.cade-lay-layouts').addEventListener('click', e => {
     const b = e.target.closest && e.target.closest('[data-l]');
-    if (b) _laySetLayout(b.getAttribute('data-l'));
+    if (b) _laySetShape(null, b.getAttribute('data-l'));
   });
-  _lay.layout = LAY_LAYOUTS[opts.layout] ? opts.layout : LAY_LAYOUTS[saved.layout] ? saved.layout : 'cols2';
-  const L = LAY_LAYOUTS[_lay.layout];
-  _lay.colFr = _layFr(L, L.c, opts.colFr || (_lay.layout === saved.layout ? saved.colFr : null));
-  _lay.rowFr = _layFr(L, L.r, opts.rowFr || (_lay.layout === saved.layout ? saved.rowFr : null));
-  _lay.slots = new Array(_laySlotCount(_lay.layout)).fill(null);
-  win.addEventListener('resize', () => { _layGutters(); _layKick(); clearTimeout(_lay.saveT); _lay.saveT = setTimeout(_layRemember, 400); });
+  // shape: an explicit one, else the preset asked for, else what was last used
+  let shape = _layShapeOk(opts.shape) ? opts.shape : null, preset = LAY_PRESETS[opts.layout] ? opts.layout : null;
+  if (!shape && !preset) { if (_layShapeOk(saved.shape)) { shape = saved.shape; preset = saved.preset || 'custom'; } else preset = LAY_PRESETS[saved.preset] ? saved.preset : 'cols2'; }
+  _lay.tree = _layBuild(shape || LAY_PRESETS[preset].t);
+  _lay.preset = preset || 'custom';
+  win.addEventListener('resize', () => { _layPlace(); _layKick(); clearTimeout(_lay.saveT); _lay.saveT = setTimeout(_layRemember, 400); });
   win.addEventListener('pagehide', () => _layClosed());
-  _layInstallSwap(d);
+  _layInstallDrag(d);
   _layRender();
   if (lone) _layAdd(lone);
   _layRemember();
@@ -23928,42 +23971,66 @@ async function _layOpen(opts) {
 function _layClose() {
   if (!_lay.win) return;
   const win = _lay.win;
-  for (const p of _lay.slots.slice()) if (p) _popInPanel(p);
+  for (const p of _laySlots()) if (p) _popInPanel(p);
   _layClosed();
   try { win.close(); } catch {}
 }
 function _layClosed() {
   if (!_lay.win) return;
-  for (const p of _lay.slots.slice()) if (p) _popInPanel(p, true);
+  for (const p of _laySlots()) if (p) _popInPanel(p, true);
   try { if (_lay.obs) _lay.obs.disconnect(); } catch {}
-  _lay.win = null; _lay.obs = null; _lay.grid = null; _lay.bar = null; _lay.slots = [];
+  _lay.win = null; _lay.obs = null; _lay.grid = null; _lay.bar = null; _lay.tree = null; _lay.edit = false;
   document.querySelectorAll('.cade-panel').forEach(_paintPopBtn);
   try { document.dispatchEvent(new CustomEvent('cade-layouts', { detail: { open: false } })); } catch {}
 }
+function _layLeafOf(p) { return _layLeaves(_lay.tree).find(l => l.p === p) || null; }
 function _layForget(p) {
-  const i = _lay.slots.indexOf(p);
-  if (i < 0) return;
-  _lay.slots[i] = null;
+  const l = _layLeafOf(p);
+  if (!l) return;
+  l.p = null;
   if (_lay.win) _layRender();
 }
-// Put a panel into the float window (a free slot, or `slot`; grows the layout when full).
+// Split leaf `l`: a new empty tile goes on `side` ('left' 'right' 'top' 'bottom'). Returns it.
+function _laySplit(l, side) {
+  if (_layLeaves(_lay.tree).length >= LAY_MAX) { showToast('The float window holds ' + LAY_MAX + ' tiles at most', 'info', 2200); return null; }
+  const fresh = { p: null }, d = side === 'left' || side === 'right' ? 'h' : 'v', first = side === 'left' || side === 'top';
+  const node = { d, r: 0.5, a: first ? fresh : l, b: first ? l : fresh };
+  _layReplace(l, node);
+  _lay.preset = 'custom';
+  return fresh;
+}
+// Remove a tile: its panel goes back to the app; its sibling takes the space.
+function _layRemoveLeaf(l, keepPanel) {
+  if (l.p && !keepPanel) _popInPanel(l.p);   // (re-renders through _layForget)
+  if (_lay.tree === l) { l.p = null; return; }   // the last tile stays, empty
+  const par = _layParent(_lay.tree, l);
+  if (!par) return;
+  _layReplace(par, par.a === l ? par.b : par.a);
+  if (l.el) { l.el.remove(); l.el = null; }
+  _lay.preset = 'custom';
+}
+// The tile with the most room, split along its longer side (where a new panel goes when all are full).
+function _layGrowLeaf() {
+  let best = null, area = -1;
+  for (const l of _layLeaves(_lay.tree)) { const r = l.rect || { w: 1, h: 1 }, a = r.w * r.h; if (a > area) { area = a; best = l; } }
+  if (!best) return null;
+  const r = best.rect || { w: 2, h: 1 };
+  return _laySplit(best, r.w >= r.h ? 'right' : 'bottom');
+}
+// Put a panel into the float window: tile `slot` (a leaf index) if free, else the first free tile, else a new one.
 function _layAdd(p, slot) {
   if (!_lay.win || !p || !p.isConnected) return false;
-  if (_lay.slots.indexOf(p) >= 0) { if (slot != null && slot !== _lay.slots.indexOf(p)) _laySwap(_lay.slots.indexOf(p), slot); return true; }
+  const leaves = _layLeaves(_lay.tree), cur = _layLeafOf(p);
+  if (cur) { if (slot != null && leaves[slot] && leaves[slot] !== cur) _laySwap(leaves.indexOf(cur), slot); return true; }
   if (p.id === 'layouts-panel') { showToast('The Layouts panel stays in the app window', 'info', 2000); return false; }
   if (_popped.has(p)) _popInPanel(p);
   if (_isMinimized(p)) _restorePanel(p);
-  if (slot == null || slot >= _lay.slots.length || _lay.slots[slot]) slot = _lay.slots.indexOf(null);
-  if (slot < 0) {
-    const used = _lay.slots.length + 1, next = LAY_GROW.find(l => _laySlotCount(l) >= used);
-    if (!next) { showToast('The float window is full (6 panels)', 'info', 2200); return false; }
-    _laySetLayout(next);
-    slot = _lay.slots.indexOf(null);
-  }
+  let l = slot != null && leaves[slot] && !leaves[slot].p ? leaves[slot] : leaves.find(x => !x.p);
+  if (!l) { l = _layGrowLeaf(); if (!l) return false; }
   if (p.__snap) { p.__snap = null; p.__preSnap = null; }
   const st = { win: _lay.win, ws: true, obs: null, bodyObs: null, closing: false, style: p.getAttribute('style') };
   _popped.set(p, st);
-  _lay.slots[slot] = p;
+  l.p = p;
   p.classList.add('cade-popped', 'cade-lay-panel');
   _layRender();
   // closed from inside (its × or its module removed it): forget it
@@ -23974,71 +24041,97 @@ function _layAdd(p, slot) {
   return true;
 }
 function _laySwap(i, j) {
-  if (i === j || i < 0 || j < 0 || i >= _lay.slots.length || j >= _lay.slots.length) return;
-  const t = _lay.slots[i]; _lay.slots[i] = _lay.slots[j]; _lay.slots[j] = t;
+  const L = _layLeaves(_lay.tree);
+  if (i === j || !L[i] || !L[j]) return;
+  const t = L[i].p; L[i].p = L[j].p; L[j].p = t;
   _layRender();
 }
-function _laySetLayout(l, opts) {
-  if (!_lay.win || !LAY_LAYOUTS[l]) return;
-  const L = LAY_LAYOUTS[l], n = _laySlotCount(l), keep = _lay.slots.filter(Boolean);
-  for (const p of keep.slice(n)) _popInPanel(p);   // more panels than the layout holds: the rest go home
-  _lay.layout = l;
-  _lay.colFr = _layFr(L, L.c, opts && opts.colFr); _lay.rowFr = _layFr(L, L.r, opts && opts.rowFr);
-  _lay.slots = new Array(n).fill(null);
-  keep.slice(0, n).forEach((p, i) => { _lay.slots[i] = p; });
+// Switch to a preset (or a saved shape); panels keep their order, extra panels get new tiles.
+function _laySetShape(shape, preset) {
+  if (!_lay.win) return;
+  const t = _layShapeOk(shape) ? shape : LAY_PRESETS[preset] ? LAY_PRESETS[preset].t : null;
+  if (!t) return;
+  const ps = _laySlots().filter(Boolean);
+  _layLeaves(_lay.tree).forEach(l => { if (l.el) { l.el.remove(); l.el = null; } });   // panels are re-homed below
+  _lay.tree = _layBuild(t);
+  _lay.preset = _layShapeOk(shape) ? (preset || 'custom') : preset;
+  let leaves = _layLeaves(_lay.tree);
+  ps.forEach((p, i) => {
+    if (i < leaves.length) leaves[i].p = p;
+    else { _layPlace(); const l = _layGrowLeaf(); if (l) { l.p = p; leaves = _layLeaves(_lay.tree); } else _popInPanel(p); }
+  });
   _layRender();
   _layRemember();
 }
+// Build / update the tiles: every leaf has one slot element (kept while the leaf lives,
+// so a panel isn't moved around needlessly), placed absolutely from the tree.
 function _layRender() {
   if (!_lay.win || !_lay.grid) return;
-  const d = _lay.win.document, L = LAY_LAYOUTS[_lay.layout], g = _lay.grid;
-  _lay.bar.querySelector('.cade-lay-layouts').innerHTML = Object.keys(LAY_LAYOUTS).map(k => {
-    const M = LAY_LAYOUTS[k];
-    let svg = '<svg viewBox="0 0 24 16" aria-hidden="true">';
-    const cw = 22 / M.c, rh = 14 / M.r, seen = {};
-    M.a.forEach((row, ri) => row.forEach((i, ci) => {
-      if (seen[i]) return; seen[i] = 1;
-      let cs = 1, rs = 1;
-      while (ci + cs < M.c && M.a[ri][ci + cs] === i) cs++;
-      while (ri + rs < M.r && M.a[ri + rs][ci] === i) rs++;
-      svg += '<rect x="' + (1 + ci * cw + 0.6) + '" y="' + (1 + ri * rh + 0.6) + '" width="' + (cs * cw - 1.2) + '" height="' + (rs * rh - 1.2) + '" rx="1"/>';
-    }));
-    return '<button type="button" data-l="' + k + '" class="' + (k === _lay.layout ? 'on' : '') + '" title="' + M.name + '" aria-label="Layout: ' + M.name + '">' + svg + '</svg></button>';
-  }).join('');
-  g.style.gridTemplateColumns = _lay.colFr.map(f => f + 'fr').join(' ');
-  g.style.gridTemplateRows = _lay.rowFr.map(f => f + 'fr').join(' ');
-  g.style.gridTemplateAreas = L.a.map(row => '"' + row.map(i => 's' + i).join(' ') + '"').join(' ');
-  // slots: reuse the elements, keep panels where they are when possible
-  const old = {};
-  g.querySelectorAll(':scope > .cade-lay-slot').forEach(el => { old[el.getAttribute('data-i')] = el; });
-  for (let i = 0; i < _lay.slots.length; i++) {
-    let el = old[i];
-    if (!el) { el = d.createElement('div'); el.className = 'cade-lay-slot'; el.setAttribute('data-i', i); g.appendChild(el); }
-    delete old[i];
-    el.style.gridArea = 's' + i;
-    const p = _lay.slots[i];
-    if (p) {
-      if (p.parentNode !== el) { el.textContent = ''; el.appendChild(p); }
+  const d = _lay.win.document, g = _lay.grid;
+  _lay.bar.querySelector('.cade-lay-layouts').innerHTML = Object.keys(LAY_PRESETS).map(k =>
+    '<button type="button" data-l="' + k + '" class="' + (k === _lay.preset ? 'on' : '') + '" title="' + LAY_PRESETS[k].name + '" aria-label="Layout: ' + LAY_PRESETS[k].name + '">' + _layIcon(LAY_PRESETS[k].t) + '</button>').join('');
+  const eb = _lay.bar.querySelector('.cade-lay-editbtn');
+  eb.classList.toggle('on', _lay.edit); eb.setAttribute('aria-pressed', _lay.edit ? 'true' : 'false');
+  g.classList.toggle('cade-lay-editing', _lay.edit);
+  const leaves = _layLeaves(_lay.tree), live = new Set();
+  leaves.forEach((l, i) => {
+    let el = l.el;
+    if (!el) { el = l.el = d.createElement('div'); el.className = 'cade-lay-slot'; g.appendChild(el); }
+    live.add(el);
+    el.setAttribute('data-i', i);
+    if (l.p) {
+      if (l.p.parentNode !== el) el.insertBefore(l.p, el.firstChild);
+      [...el.children].forEach(c => { if (c !== l.p && c.classList.contains('cade-lay-empty')) c.remove(); });
     } else {
-      [...el.children].forEach(c => { if (!c.classList.contains('cade-lay-empty')) c.remove(); });
-      if (!el.querySelector('.cade-lay-empty')) {
-        const e = d.createElement('div'); e.className = 'cade-lay-empty';
-        e.innerHTML = '<div>Empty slot</div><select aria-label="Put an open panel here"></select><div class="cade-lay-hint">or use a panel’s pop-out button</div>';
+      [...el.children].forEach(c => { if (c.classList.contains('cade-panel')) c.remove(); });
+      let e = el.querySelector('.cade-lay-empty');
+      if (!e) {
+        e = d.createElement('div'); e.className = 'cade-lay-empty';
+        e.innerHTML = '<div>Empty tile</div><select aria-label="Put an open panel here"></select><div class="cade-lay-hint">or use a panel’s pop-out button</div>';
         el.appendChild(e);
-        e.querySelector('select').addEventListener('change', ev => {
+        const sel = e.querySelector('select');
+        sel.addEventListener('change', ev => {
           const id = ev.target.value; ev.target.value = '';
           const pp = id && document.getElementById(id);
           if (pp) _layAdd(pp, +el.getAttribute('data-i'));
         });
-        e.querySelector('select').addEventListener('focus', () => _layFillPicker(e.querySelector('select')));
-        e.querySelector('select').addEventListener('pointerdown', () => _layFillPicker(e.querySelector('select')));
+        sel.addEventListener('focus', () => _layFillPicker(sel));
+        sel.addEventListener('pointerdown', () => _layFillPicker(sel));
       }
-      _layFillPicker(el.querySelector('select'));
+      _layFillPicker(e.querySelector('select'));
     }
-  }
-  for (const k in old) old[k].remove();
-  _layGutters();
+    // tile tools: split either way, remove (always on empty tiles, on every tile in edit mode)
+    let tools = el.querySelector(':scope > .cade-lay-tools');
+    if (!tools) {
+      tools = d.createElement('div'); tools.className = 'cade-lay-tools';
+      tools.innerHTML = '<button type="button" data-t="right" title="Split: new tile to the right">⇆</button>' +
+        '<button type="button" data-t="bottom" title="Split: new tile below">⇅</button>' +
+        '<button type="button" data-t="remove" title="Remove this tile (its panel goes back to the app)">×</button>';
+      tools.addEventListener('pointerdown', ev => ev.stopPropagation());
+      tools.addEventListener('click', ev => {
+        const b = ev.target.closest && ev.target.closest('[data-t]');
+        const leaf = b && _layLeaves(_lay.tree).find(x => x.el === el);
+        if (!leaf) return;
+        const t = b.getAttribute('data-t');
+        if (t === 'remove') _layRemoveLeaf(leaf); else _laySplit(leaf, t);
+        _layRender(); _layRemember();
+      });
+    }
+    el.appendChild(tools);   // keep it last (on top)
+    el.classList.toggle('cade-lay-slot-empty', !l.p);
+  });
+  [...g.querySelectorAll(':scope > .cade-lay-slot')].forEach(el => { if (!live.has(el)) el.remove(); });
+  _layPlace();
   _layKick();
+}
+function _layIcon(t) {
+  let s = '<svg viewBox="0 0 24 16" aria-hidden="true">';
+  (function walk(n, x, y, w, h) {
+    if (n === 'L') { s += '<rect x="' + (x + 0.6).toFixed(2) + '" y="' + (y + 0.6).toFixed(2) + '" width="' + Math.max(0.5, w - 1.2).toFixed(2) + '" height="' + Math.max(0.5, h - 1.2).toFixed(2) + '" rx="1"/>'; return; }
+    if (n[0] === 'h') { walk(n[2], x, y, w * n[1], h); walk(n[3], x + w * n[1], y, w * (1 - n[1]), h); }
+    else { walk(n[2], x, y, w, h * n[1]); walk(n[3], x, y + h * n[1], w, h * (1 - n[1])); }
+  })(t, 1, 1, 22, 14);
+  return s + '</svg>';
 }
 function _layFillPicker(sel) {
   if (!sel) return;
@@ -24046,83 +24139,114 @@ function _layFillPicker(sel) {
   sel.innerHTML = '<option value="">' + (ps.length ? 'Add an open panel…' : 'No open panels in the app') + '</option>' +
     ps.map(p => '<option value="' + escapeHtml(p.id) + '">' + escapeHtml((p.querySelector('.cade-panel-title') || {}).textContent || p.id) + '</option>').join('');
 }
-// Dividers: one handle per run of cells a track boundary actually separates.
-function _layGutters() {
-  if (!_lay.win || !_lay.grid) return;
-  const d = _lay.win.document, g = _lay.grid, L = LAY_LAYOUTS[_lay.layout];
+// Lay the tree out in the window: tile rects, then one divider per split.
+const LAY_PAD = 6, LAY_GAP = 6, LAY_MIN = 70;
+function _layPlace() {
+  if (!_lay.win || !_lay.grid || !_lay.tree) return;
+  const d = _lay.win.document, g = _lay.grid;
   g.querySelectorAll(':scope > .cade-lay-gut').forEach(el => el.remove());
-  const W = g.clientWidth, H = g.clientHeight, pad = 6, gap = 6;
-  function tracks(fr, total) {
-    const sum = fr.reduce((x, y) => x + y, 0), avail = total - 2 * pad - gap * (fr.length - 1), out = [];
-    let pos = pad;
-    for (let i = 0; i < fr.length; i++) { const sz = avail * fr[i] / sum; out.push({ a: pos, b: pos + sz }); pos += sz + gap; }
-    return out;
-  }
-  const cx = tracks(_lay.colFr, W), ry = tracks(_lay.rowFr, H);
-  function add(kind, i, from, to) {
-    const el = d.createElement('div'); el.className = 'cade-lay-gut ' + kind;
-    if (kind === 'v') Object.assign(el.style, { left: (cx[i].b + gap / 2 - 4) + 'px', top: ry[from].a + 'px', height: (ry[to].b - ry[from].a) + 'px' });
-    else Object.assign(el.style, { top: (ry[i].b + gap / 2 - 4) + 'px', left: cx[from].a + 'px', width: (cx[to].b - cx[from].a) + 'px' });
-    g.appendChild(el);
-    el.addEventListener('pointerdown', e => {
+  const W = g.clientWidth, H = g.clientHeight;
+  (function walk(n, x, y, w, h) {
+    n.rect = { x, y, w, h };
+    if (!n.d) {
+      if (n.el) Object.assign(n.el.style, { left: x + 'px', top: y + 'px', width: Math.max(0, w) + 'px', height: Math.max(0, h) + 'px' });
+      return;
+    }
+    const span = (n.d === 'h' ? w : h) - LAY_GAP, a = Math.round(span * n.r);
+    if (n.d === 'h') { walk(n.a, x, y, a, h); walk(n.b, x + a + LAY_GAP, y, span - a, h); }
+    else { walk(n.a, x, y, w, a); walk(n.b, x, y + a + LAY_GAP, w, span - a); }
+    const gut = d.createElement('div');
+    gut.className = 'cade-lay-gut ' + (n.d === 'h' ? 'v' : 'h');
+    gut.title = 'Drag to resize · double-click to even out';
+    if (n.d === 'h') Object.assign(gut.style, { left: (x + a + LAY_GAP / 2 - 4) + 'px', top: y + 'px', height: h + 'px' });
+    else Object.assign(gut.style, { top: (y + a + LAY_GAP / 2 - 4) + 'px', left: x + 'px', width: w + 'px' });
+    g.appendChild(gut);
+    gut.addEventListener('dblclick', () => { n.r = 0.5; _layPlace(); _layKick(); _layRemember(); });
+    gut.addEventListener('pointerdown', e => {
       e.preventDefault();
-      const fr = kind === 'v' ? _lay.colFr : _lay.rowFr, tr = kind === 'v' ? cx : ry, total = (tr[i].b - tr[i].a) + (tr[i + 1].b - tr[i + 1].a), sumFr = fr[i] + fr[i + 1];
-      const start = kind === 'v' ? e.clientX : e.clientY, a0 = tr[i].b - tr[i].a;
-      try { el.setPointerCapture(e.pointerId); } catch {}
-      g.classList.add('cade-lay-dragging');
+      const start = n.d === 'h' ? e.clientX : e.clientY, a0 = a, lo = Math.min(LAY_MIN, span / 2), hi = Math.max(span - LAY_MIN, span / 2);
+      try { gut.setPointerCapture(e.pointerId); } catch {}
+      g.classList.add('cade-lay-dragging'); gut.classList.add('active');
       const move = ev => {
-        const a = Math.max(total * 0.12, Math.min(total * 0.88, a0 + ((kind === 'v' ? ev.clientX : ev.clientY) - start)));
-        fr[i] = sumFr * a / total; fr[i + 1] = sumFr - fr[i];
-        if (kind === 'v') g.style.gridTemplateColumns = _lay.colFr.map(f => f + 'fr').join(' ');
-        else g.style.gridTemplateRows = _lay.rowFr.map(f => f + 'fr').join(' ');
+        const v = Math.max(lo, Math.min(hi, a0 + ((n.d === 'h' ? ev.clientX : ev.clientY) - start)));
+        n.r = v / span;
+        _layPlaceLive(n);
+        if (n.d === 'h') gut.style.left = (n.rect.x + Math.round(span * n.r) + LAY_GAP / 2 - 4) + 'px';
+        else gut.style.top = (n.rect.y + Math.round(span * n.r) + LAY_GAP / 2 - 4) + 'px';
       };
-      const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); g.classList.remove('cade-lay-dragging'); _layGutters(); _layKick(); _layRemember(); };
-      el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+      const up = () => { gut.removeEventListener('pointermove', move); gut.removeEventListener('pointerup', up); gut.removeEventListener('pointercancel', up); g.classList.remove('cade-lay-dragging'); _layPlace(); _layKick(); _layRemember(); };
+      gut.addEventListener('pointermove', move); gut.addEventListener('pointerup', up); gut.addEventListener('pointercancel', up);
     });
-  }
-  for (let i = 0; i < L.c - 1; i++) {        // vertical boundaries between columns i | i+1
-    let run = -1;
-    for (let r = 0; r <= L.r; r++) {
-      const sep = r < L.r && L.a[r][i] !== L.a[r][i + 1];
-      if (sep && run < 0) run = r;
-      if (!sep && run >= 0) { add('v', i, run, r - 1); run = -1; }
-    }
-  }
-  for (let j = 0; j < L.r - 1; j++) {        // horizontal boundaries between rows j / j+1
-    let run = -1;
-    for (let c = 0; c <= L.c; c++) {
-      const sep = c < L.c && L.a[j][c] !== L.a[j + 1][c];
-      if (sep && run < 0) run = c;
-      if (!sep && run >= 0) { add('h', j, run, c - 1); run = -1; }
-    }
-  }
+  })(_lay.tree, LAY_PAD, LAY_PAD, W - 2 * LAY_PAD, H - 2 * LAY_PAD);
 }
-// Drag a panel's title bar onto another slot to swap them.
-function _layInstallSwap(d) {
-  let from = -1, ghost = null, sx = 0, sy = 0, on = false;
+// While a divider drags: re-place only that split's tiles (nested dividers hide until it's dropped).
+function _layPlaceLive(n) {
+  const r = n.rect;
+  (function walk(m, x, y, w, h) {
+    m.rect = { x, y, w, h };
+    if (!m.d) { if (m.el) Object.assign(m.el.style, { left: x + 'px', top: y + 'px', width: Math.max(0, w) + 'px', height: Math.max(0, h) + 'px' }); return; }
+    const sp = (m.d === 'h' ? w : h) - LAY_GAP, b = Math.round(sp * m.r);
+    if (m.d === 'h') { walk(m.a, x, y, b, h); walk(m.b, x + b + LAY_GAP, y, sp - b, h); }
+    else { walk(m.a, x, y, w, b); walk(m.b, x, y + b + LAY_GAP, w, sp - b); }
+  })(n, r.x, r.y, r.w, r.h);
+}
+// Drag a panel's title bar onto another tile: the middle swaps the two, an edge
+// docks it there (that tile splits, Origami-style; the tile it left closes up).
+function _layDropZone(el, x, y) {
+  const r = el.getBoundingClientRect(), fx = (x - r.left) / r.width, fy = (y - r.top) / r.height, e = 0.28;
+  const m = Math.min(fx, 1 - fx, fy, 1 - fy);
+  if (m > e) return 'swap';
+  return m === fx ? 'left' : m === 1 - fx ? 'right' : m === fy ? 'top' : 'bottom';
+}
+function _layInstallDrag(d) {
+  let from = null, ghost = null, hint = null, sx = 0, sy = 0, on = false;
   d.addEventListener('pointerdown', e => {
     const head = e.target.closest && e.target.closest('.cade-lay-panel > .cade-panel-head');
     if (!head || e.button > 0 || e.target.closest('[role="button"], button, input, select, .cade-panel-x')) return;
     const slot = head.closest('.cade-lay-slot');
-    from = slot ? +slot.getAttribute('data-i') : -1; sx = e.clientX; sy = e.clientY; on = false;
+    from = slot ? _layLeaves(_lay.tree).find(l => l.el === slot) || null : null;
+    sx = e.clientX; sy = e.clientY; on = false;
   }, true);
   d.addEventListener('pointermove', e => {
-    if (from < 0) return;
+    if (!from) return;
     if (!on && Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) < 8) return;
-    if (!on) { on = true; ghost = d.createElement('div'); ghost.className = 'cade-lay-ghost'; ghost.textContent = ((_lay.slots[from] || {}).querySelector ? (_lay.slots[from].querySelector('.cade-panel-title') || {}).textContent : '') || 'Panel'; d.body.appendChild(ghost); _lay.grid.classList.add('cade-lay-dragging'); }
+    if (!on) {
+      on = true;
+      ghost = d.createElement('div'); ghost.className = 'cade-lay-ghost';
+      ghost.textContent = (from.p && (from.p.querySelector('.cade-panel-title') || {}).textContent) || 'Panel';
+      hint = d.createElement('div'); hint.className = 'cade-lay-drop';
+      d.body.appendChild(ghost); _lay.grid.appendChild(hint); _lay.grid.classList.add('cade-lay-dragging');
+    }
     ghost.style.left = (e.clientX + 12) + 'px'; ghost.style.top = (e.clientY + 8) + 'px';
-    d.querySelectorAll('.cade-lay-slot').forEach(s => s.classList.toggle('cade-lay-target', s.contains(d.elementFromPoint(e.clientX, e.clientY)) && +s.getAttribute('data-i') !== from));
+    const el = d.elementFromPoint(e.clientX, e.clientY), s = el && el.closest && el.closest('.cade-lay-slot');
+    const to = s && _layLeaves(_lay.tree).find(l => l.el === s);
+    if (!to || to === from) { hint.style.display = 'none'; return; }
+    const z = _layDropZone(s, e.clientX, e.clientY), r = to.rect;
+    let x = r.x, y = r.y, w = r.w, h = r.h;
+    if (z === 'left') w = w / 2; else if (z === 'right') { x += w / 2; w = w / 2; } else if (z === 'top') h = h / 2; else if (z === 'bottom') { y += h / 2; h = h / 2; }
+    Object.assign(hint.style, { display: 'block', left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' });
+    hint.textContent = z === 'swap' ? 'Swap' : 'Dock here';
   });
   const end = e => {
-    if (from < 0) return;
+    if (!from) return;
     if (on) {
       const el = d.elementFromPoint(e.clientX, e.clientY), s = el && el.closest && el.closest('.cade-lay-slot');
-      if (s) _laySwap(from, +s.getAttribute('data-i'));
-      if (ghost) ghost.remove(); ghost = null;
-      d.querySelectorAll('.cade-lay-target').forEach(s2 => s2.classList.remove('cade-lay-target'));
+      const to = s && _layLeaves(_lay.tree).find(l => l.el === s);
+      if (to && to !== from && from.p) {
+        const z = _layDropZone(s, e.clientX, e.clientY), L = _layLeaves(_lay.tree);
+        if (z === 'swap') _laySwap(L.indexOf(from), L.indexOf(to));
+        else {                                  // tile count stays the same: one closes, one opens
+          const p = from.p;
+          from.p = null;
+          _layRemoveLeaf(from, true);           // the tile it left closes up
+          _laySplit(to, z).p = p;
+          _layRender(); _layRemember();
+        }
+      }
+      if (ghost) ghost.remove(); if (hint) hint.remove(); ghost = hint = null;
       if (_lay.grid) _lay.grid.classList.remove('cade-lay-dragging');
     }
-    from = -1; on = false;
+    from = null; on = false;
   };
   d.addEventListener('pointerup', end);
   d.addEventListener('pointercancel', end);
@@ -24131,11 +24255,11 @@ function _layInstallSwap(d) {
 // -- arrangements --
 function _layCapture() {
   const a = _layArea(), out = { v: 1, at: Date.now(), area: { w: a.w, h: a.h }, panels: [], ws: null };
-  const all = [..._layPanels(), ..._lay.slots.filter(Boolean)];
+  const slots = _lay.win ? _laySlots() : [], all = [..._layPanels(), ...slots.filter(Boolean)];
   for (const p of all) {
     if (!p.__cadeWidget || p.id === 'layouts-panel' || p.classList.contains('cade-solo-panel')) continue;
     const e = { widget: p.__cadeWidget, id: p.id };
-    const slot = _lay.slots.indexOf(p);
+    const slot = slots.indexOf(p);
     if (slot >= 0) { e.state = 'float'; e.slot = slot; }
     else {
       e.state = _isMinimized(p) ? 'min' : 'open';
@@ -24147,7 +24271,7 @@ function _layCapture() {
     }
     out.panels.push(e);
   }
-  if (_lay.win) out.ws = { layout: _lay.layout, colFr: _lay.colFr.slice(), rowFr: _lay.rowFr.slice(), w: _lay.win.innerWidth, h: _lay.win.innerHeight };
+  if (_lay.win) out.ws = { layout: _lay.preset, shape: _layShape(_lay.tree), w: _lay.win.innerWidth, h: _lay.win.innerHeight };
   return out;
 }
 function _layWaitPanel(id, ms) {
@@ -24168,11 +24292,12 @@ async function _layApply(arr, opts) {
   if (!arr || !Array.isArray(arr.panels)) return { opened: 0, missing: [] };
   const wantFloat = arr.ws && arr.panels.some(e => e.state === 'float');
   let floatOk = false;
-  if (wantFloat) floatOk = _lay.win ? (_laySetLayout(arr.ws.layout, arr.ws), true) : await _layOpen({ layout: arr.ws.layout, colFr: arr.ws.colFr, rowFr: arr.ws.rowFr, w: arr.ws.w, h: arr.ws.h });
+  // (older saves have a preset name only; newer ones the whole tile tree)
+  if (wantFloat) floatOk = _lay.win ? (_laySetShape(arr.ws.shape, arr.ws.layout), true) : await _layOpen({ shape: arr.ws.shape, layout: arr.ws.layout, w: arr.ws.w, h: arr.ws.h });
   else if (_lay.win && opts.replace !== false) _layClose();
   const keep = new Set(arr.panels.map(e => e.id));
   if (opts.replace !== false) {
-    for (const p of [..._layPanels(), ..._lay.slots.filter(Boolean)]) {
+    for (const p of [..._layPanels(), ...(_lay.win ? _laySlots() : []).filter(Boolean)]) {
       if (!p.__cadeWidget || keep.has(p.id) || p.id === 'layouts-panel') continue;
       const x = p.querySelector('.cade-panel-x');
       if (x) x.click(); else { p.remove(); if (p._onClose) p._onClose(); }
@@ -24189,7 +24314,7 @@ async function _layApply(arr, opts) {
     }
     opened++;
     if (e.state === 'float' && floatOk) { _layAdd(p, e.slot); continue; }
-    if (_lay.slots.indexOf(p) >= 0 || _popped.has(p)) _popInPanel(p);
+    if (_popped.has(p)) _popInPanel(p);
     if (_isMinimized(p) && e.state !== 'min') _restorePanel(p);
     document.body.appendChild(p);           // stacking follows the saved order
     if (_panelNarrow()) { _fitPanel(p); }
@@ -24214,12 +24339,15 @@ window.__cadeLayouts = {
   snapping(on) { if (on !== undefined) store.set(LAY_SNAP_KEY, on ? '1' : '0'); return _laySnapOn(); },
   snap(p, z) { if (z) _laySnap(p, z); else _layUnsnap(p); },
   tile() { return _layTile(); }, cascade() { return _layCascade(); },
-  layouts() { return Object.keys(LAY_LAYOUTS).map(k => ({ id: k, name: LAY_LAYOUTS[k].name, slots: _laySlotCount(k) })); },
+  layouts() { return Object.keys(LAY_PRESETS).map(k => ({ id: k, name: LAY_PRESETS[k].name, slots: _layShapeLeaves(LAY_PRESETS[k].t) })); },
   isOpen() { return !!_lay.win; }, onTop() { return !!_lay.win && !!_lay.onTop; },
   open(opts) { return _layOpen(opts); }, close() { _layClose(); },
-  layout(l) { if (l) _laySetLayout(l); return _lay.layout; },
-  add(p, slot) { return _layAdd(p, slot); }, remove(p) { if (_lay.slots.indexOf(p) >= 0) _popInPanel(p); },
-  floating() { return _lay.slots.filter(Boolean); },
+  layout(l) { if (l) _laySetShape(null, l); return _lay.win ? _lay.preset : null; },   // a preset id, or 'custom'
+  shape(t) { if (t !== undefined && _layShapeOk(t)) _laySetShape(t, 'custom'); return _lay.tree ? _layShape(_lay.tree) : null; },
+  split(slot, side) { const l = _layLeaves(_lay.tree)[slot]; const f = l && _laySplit(l, side); if (f) { _layRender(); _layRemember(); } return !!f; },
+  removeTile(slot) { const l = _layLeaves(_lay.tree)[slot]; if (!l) return false; _layRemoveLeaf(l); _layRender(); _layRemember(); return true; },
+  add(p, slot) { return _layAdd(p, slot); }, remove(p) { if (_layLeafOf(p)) _popInPanel(p); },
+  floating() { return _lay.win ? _laySlots().filter(Boolean) : []; },
   capture() { return _layCapture(); }, apply(arr, opts) { return _layApply(arr, opts); }
 };
 

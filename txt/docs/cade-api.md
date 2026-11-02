@@ -363,8 +363,11 @@ workspaces (`?ws=`). Desktop widths only; `supported()` says what's available.
 - **Snap:** drag a panel's title bar to the left / right edge (half), a corner (quarter) or
   the top (fill); a preview shows the target. Dragging a snapped panel away restores its old
   size; double-click a title bar to fill / restore. Snapped panels follow window resizes.
-- **Float window:** one extra window that tiles up to 6 panels in a layout with draggable
-  dividers (drag a title bar onto another slot to swap). In Chrome / Edge it is the page's
+- **Float window:** one extra window that tiles up to 8 panels. Its tiles are a split tree
+  (like a tiling window manager): every split has its own divider, so columns can break at
+  different heights. Start from a preset, then drag a title bar onto another tile — the middle
+  swaps them, an edge docks the panel there (that tile splits; the one it left closes up) — or
+  use **Edit tiles** to split / remove tiles. Double-click a divider to even it out. In Chrome / Edge it is the page's
   Document Picture-in-Picture window, so it **stays on top of other windows**; browsers allow
   only one per page, hence one shared window. Elsewhere it's a normal pop-up. While it's open,
   a panel's pop-out button (and `Cade.popOut`) sends the panel there. Floating panels count as
@@ -372,7 +375,7 @@ workspaces (`?ws=`). Desktop widths only; `supported()` says what's available.
   caveats apply (keys / resize on the app's `document` / `window` aren't seen there).
 - **Arrangements:** `capture()` records the widget panels (by widget name and panel id):
   open (snap zone, or position / size as fractions of the work area), minimized or floating
-  (slot), plus the float window's layout. `apply()` reopens missing widgets via
+  (tile), plus the float window's tile tree. `apply()` reopens missing widgets via
   `Cade.runCommand`, closes others (unless `{ replace: false }`) and restores everything.
 
 | Call | Does |
@@ -384,7 +387,9 @@ workspaces (`?ws=`). Desktop widths only; `supported()` says what's available.
 | `Cade.layouts.open({ layout, colFr, rowFr, w, h })` | open the float window (**needs a user gesture**); Promise → `true` |
 | `Cade.layouts.close()` | every floating panel back into the app; window closed |
 | `Cade.layouts.isOpen()` / `.onTop()` | float window state |
-| `Cade.layouts.layouts()` / `.layout(id?)` | layout list `{ id, name, slots }` / get or switch |
+| `Cade.layouts.layouts()` / `.layout(id?)` | preset list `{ id, name, slots }` / get (`'custom'` once edited) or apply one |
+| `Cade.layouts.shape(tree?)` | get / set the tile tree: `'L'` (a tile) or `['h' \| 'v', ratio, a, b]` (`h`: a left of b) |
+| `Cade.layouts.split(slot, side)` / `.removeTile(slot)` | split tile `slot` (tiles in tree order), a new one on `left right top bottom` / remove a tile |
 | `Cade.layouts.add(panel, slot?)` / `.remove(panel)` / `.floating()` | move panels in / out; list them |
 | `Cade.layouts.capture()` / `.apply(arr, { replace })` | arrangement object / restore it (call `apply` from a click if it has floating panels) → Promise `{ opened, missing, floated }` |
 | `cade-layouts` (event on `document`, `detail.open`) | the float window opened / closed |
