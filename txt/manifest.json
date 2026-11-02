@@ -242,6 +242,102 @@
           "description": "Add or remove thousands-place commas from numbers (1234567 ↔ 1,234,567)",
           "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='20' x2='12' y2='10'/><line x1='18' y1='20' x2='18' y2='4'/><line x1='6' y1='20' x2='6' y2='16'/></svg>",
           "tags": "comma,commas,thousands,number,format,1000"
+        },
+        {
+          "name": "Natural Sort",
+          "description": "Sort lines (or one line of comma-separated items) in human order — file2 before file10, v1.9 before v1.10 — ignoring case; equal lines keep their order and blank lines go last",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 6h7'/><path d='M4 12h7'/><path d='M4 18h7'/><path d='M17 4v16'/><polyline points='14 17 17 20 20 17'/><path d='M14 7l1.5-1.5V10'/></svg>",
+          "tags": "sort,natural,human,numeric,version,numbers,alphanumeric,file2,file10,list,order,asc,case-insensitive"
+        },
+        {
+          "name": "Natural Sort (Descending)",
+          "description": "Sort lines (or comma-separated items) in reverse human order — file10 before file2, v1.10 before v1.9 — ignoring case; ties keep their order, blank lines go last",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 6h7'/><path d='M4 12h7'/><path d='M4 18h7'/><path d='M17 20V4'/><polyline points='14 7 17 4 20 7'/></svg>",
+          "tags": "sort,natural,human,numeric,version,descending,desc,reverse,z-a,largest first,list,order"
+        },
+        {
+          "name": "Sort by Nth Word…",
+          "description": "Sort lines by one word — asks which (2 = the second word, -1 = the last, -2 = second to last); natural order, punctuation around the word ignored, lines without that word go after",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h4'/><path d='M3 12h4'/><path d='M3 18h4'/><path d='M10 6h5' stroke-width='3'/><path d='M10 12h5' stroke-width='3'/><path d='M10 18h5' stroke-width='3'/><path d='M20 4v16'/><polyline points='17.5 17.5 20 20 22.5 17.5'/></svg>",
+          "tags": "sort,word,nth,column,field,key,second word,last word,surname,by word,awk,sort -k"
+        },
+        {
+          "name": "Sort by Last Word",
+          "description": "Sort lines by their last word (surnames, trailing numbers or tags) in natural order, punctuation around it ignored; ties keep their order",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h7'/><path d='M3 12h7'/><path d='M3 18h7'/><path d='M13 6h3' stroke-width='3'/><path d='M13 12h3' stroke-width='3'/><path d='M13 18h3' stroke-width='3'/><path d='M20 4v16'/><polyline points='17.5 17.5 20 20 22.5 17.5'/></svg>",
+          "tags": "sort,last word,surname,last name,family name,end,word,by word,natural"
+        },
+        {
+          "name": "Sort by Frequency",
+          "description": "Most common lines first, with duplicates grouped together; equally common lines keep their first-appearance order, blank lines go last",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><rect x='3' y='10' width='12' height='4' rx='1'/><rect x='3' y='16' width='6' height='4' rx='1'/></svg>",
+          "tags": "sort,frequency,most common,popular,count,duplicates,group,repeated,occurrences,histogram"
+        },
+        {
+          "name": "Count Duplicates",
+          "description": "Like sort | uniq -c: each distinct line once, prefixed with how many times it appears (right-aligned), most frequent first, ties in first-appearance order; blank lines dropped",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 5v6'/><path d='M6 5v6'/><path d='M9 5v6'/><path d='M2 10l8-4'/><path d='M13 8h8'/><path d='M3 16h3'/><path d='M13 16h8'/></svg>",
+          "tags": "count,duplicates,uniq,uniq -c,frequency,occurrences,tally,histogram,distinct,how many,dedupe"
+        },
+        {
+          "name": "Every Nth Line…",
+          "description": "Keep every Nth line — asks for N: \"3\" keeps lines 3, 6, 9…; \"3+1\" (or \"3n+1\") keeps lines 1, 4, 7…; \"2+1\" / \"odd\" every other line from the first, \"even\" from the second",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='4' y1='5' x2='20' y2='5'/><line x1='4' y1='10' x2='20' y2='10' opacity='0.35'/><line x1='4' y1='15' x2='20' y2='15'/><line x1='4' y1='20' x2='20' y2='20' opacity='0.35'/></svg>",
+          "tags": "every,nth,line,odd,even,alternate,every other,skip,pick,sample,stride,step,filter,keep"
+        },
+        {
+          "name": "Chunk into Groups…",
+          "description": "Split a list into groups of N lines with a blank line between groups — asks for N; existing blank lines are dropped first, so it can be re-run with a new size",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 4h16'/><path d='M4 8h16'/><path d='M4 16h16'/><path d='M4 20h16'/></svg>",
+          "tags": "chunk,group,batch,split,paragraphs,blocks,every n,partition,blank line,sets of"
+        },
+        {
+          "name": "Group by First Letter",
+          "description": "Sort lines naturally and put a heading line (A, B, C…) above each initial — accents folded (É → E), digits and symbols under \"#\" at the end, a blank line between groups, blank lines dropped",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 11l3-8 3 8'/><path d='M4.2 8h3.6'/><path d='M12 5h9'/><path d='M12 9h9'/><path d='M7 15h14'/><path d='M7 19h14'/></svg>",
+          "tags": "group,first letter,initial,alphabet,alphabetical,index,a-z,headings,glossary,directory,sort"
+        },
+        {
+          "name": "Group by Prefix…",
+          "description": "Group lines that share the text before a separator — asks for it (blank = auto: \":\", \" - \", \"|\", \"/\", \"=\" or else the first word); each key becomes a heading with the rest of its lines as indented \"- \" bullets, groups in first-appearance order",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 4h8'/><path d='M5 4v11'/><path d='M5 9h3'/><path d='M5 15h3'/><path d='M11 9h10'/><path d='M11 15h10'/><path d='M3 21h8' opacity='0.35'/></svg>",
+          "tags": "group,prefix,key,category,before colon,separator,outline,bullets,tree,nest,cluster,by key,first word"
+        },
+        {
+          "name": "List Intersection",
+          "description": "Items in both lists (A ∩ B) — two lists separated by a line of --- (or a blank line); items trimmed, compared case-sensitively, no duplicates, A’s order then B’s",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='9' cy='12' r='6'/><circle cx='15' cy='12' r='6'/><path d='M12 6.8A6 6 0 0 1 12 17.2A6 6 0 0 1 12 6.8Z' fill='currentColor' stroke='none' opacity='0.5'/></svg>",
+          "tags": "intersection,intersect,common,both,in both,shared,and,set,compare,lists,overlap,venn"
+        },
+        {
+          "name": "List Union",
+          "description": "Every item from either list, once (A ∪ B) — two lists separated by a line of --- (or a blank line); items trimmed, compared case-sensitively, no duplicates, A’s order then B’s",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='9' cy='12' r='6' fill='currentColor' fill-opacity='0.3'/><circle cx='15' cy='12' r='6' fill='currentColor' fill-opacity='0.3'/></svg>",
+          "tags": "union,merge,combine,either,or,set,lists,all,distinct,dedupe,venn"
+        },
+        {
+          "name": "List Difference (A − B)",
+          "description": "Items in the first list that are not in the second (A − B) — two lists separated by a line of --- (or a blank line); items trimmed, compared case-sensitively, no duplicates, A’s order then B’s",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='9' cy='12' r='6'/><circle cx='15' cy='12' r='6'/><path d='M12 6.8A6 6 0 1 0 12 17.2A6 6 0 0 1 12 6.8Z' fill='currentColor' stroke='none' opacity='0.5'/></svg>",
+          "tags": "difference,minus,subtract,except,not in,missing,a - b,set,compare,lists,diff,venn"
+        },
+        {
+          "name": "List Symmetric Difference",
+          "description": "Items in exactly one of the two lists (A △ B) — two lists separated by a line of --- (or a blank line); items trimmed, compared case-sensitively, no duplicates, A’s order then B’s",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='9' cy='12' r='6'/><circle cx='15' cy='12' r='6'/><path d='M12 6.8A6 6 0 1 0 12 17.2A6 6 0 0 1 12 6.8Z' fill='currentColor' stroke='none' opacity='0.5'/><path d='M12 6.8A6 6 0 1 1 12 17.2A6 6 0 0 0 12 6.8Z' fill='currentColor' stroke='none' opacity='0.5'/></svg>",
+          "tags": "symmetric difference,xor,either but not both,unique,only one,set,compare,lists,diff,venn"
+        },
+        {
+          "name": "Zip Lines",
+          "description": "Interleave two lists line by line — a1, b1, a2, b2… — separated by a line of --- (or a blank line); leftovers of the longer list go at the end",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 5h10'/><path d='M10 10h10'/><path d='M4 15h10'/><path d='M10 20h10'/></svg>",
+          "tags": "zip,interleave,merge,alternate,weave,shuffle together,combine,two lists,pair"
+        },
+        {
+          "name": "Zip Into Columns…",
+          "description": "Pair two lists side by side — \"a1 | b1\" — asks for the separator (default \" | \", \\t = tab); lists separated by a line of --- (or a blank line), a missing partner leaves its side empty",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='16' rx='2'/><line x1='12' y1='4' x2='12' y2='20'/><path d='M6 9h3'/><path d='M15 9h3'/><path d='M6 14h3'/><path d='M15 14h3'/></svg>",
+          "tags": "zip,columns,side by side,pair,join,combine,paste,two lists,table,tab,csv,merge"
         }
       ]
     },
