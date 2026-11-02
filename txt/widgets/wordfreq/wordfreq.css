@@ -1,0 +1,90 @@
+/* Word Frequency widget (loaded on demand via Cade.loadCSS). Theme colours come
+   from the app's variables; dark is the default, [data-theme="light"] overrides. */
+#wordfreq-panel {
+  top: calc(var(--menubar-h, 36px) + 16px); right: 12px; width: 340px; max-width: calc(100vw - 24px);
+  height: 520px; max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px);
+}
+#wordfreq-panel .cade-panel-body { padding: 0; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+.wf-hbtn { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 22px; margin-right: 2px; cursor: pointer; opacity: 0.6;
+  border-radius: 4px; color: var(--text-muted); flex: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.wf-hbtn svg { width: 15px; height: 15px; }
+.wf-hbtn:hover, .wf-hbtn:focus-visible { opacity: 1; background: var(--surface-hover, rgba(127,127,127,0.15)); outline: none; }
+.wf-hbtn.on { opacity: 1; color: var(--accent); }
+
+.wf { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; font-size: var(--text-sm); color: var(--text); }
+.wf-head { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 8px; border-bottom: 1px solid var(--border); flex: none; }
+.wf-tabs { display: flex; padding: 2px; gap: 2px; border-radius: 8px; background: var(--surface-2, var(--bg)); border: 1px solid var(--border); }
+.wf-tab { flex: 1; font: inherit; font-size: var(--text-xs); font-weight: 600; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--text-muted); cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.wf-tab:hover { color: var(--text); }
+.wf-tab.on { background: var(--surface); color: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,0.18); }
+.wf-search { position: relative; display: flex; align-items: center; }
+.wf-search svg { position: absolute; left: 9px; width: 14px; height: 14px; color: var(--text-faint); pointer-events: none; }
+.wf-q { width: 100%; min-width: 0; height: 32px; box-sizing: border-box; padding: 0 10px 0 29px; font: inherit; font-size: var(--text-sm); color: var(--text);
+  background: var(--bg, var(--surface)); border: 1px solid var(--border); border-radius: var(--radius-md, 6px); outline: none; -webkit-appearance: none; appearance: none; }
+.wf-q:focus { border-color: var(--accent); }
+.wf-q::placeholder { color: var(--text-faint); }
+.wf-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.wf-tog { font: inherit; font-size: var(--text-xs); display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--text-muted); touch-action: manipulation; -webkit-tap-highlight-color: transparent; white-space: nowrap; }
+.wf-tog i { width: 10px; height: 10px; border-radius: 3px; border: 1.5px solid var(--text-faint); box-sizing: border-box; flex: none; position: relative; }
+.wf-tog.on { color: var(--text); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.wf-tog.on i { background: var(--accent); border-color: var(--accent); }
+.wf-tog.on i::after { content: ''; position: absolute; left: 2px; top: 0; width: 3px; height: 5px; border: solid #fff; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.wf-tog:hover { border-color: var(--accent); }
+.wf-min { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; font-size: var(--text-xs); color: var(--text-muted); white-space: nowrap; }
+.wf-min > span { margin-right: 3px; }
+.wf-min button { font: inherit; width: 22px; height: 22px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text); cursor: pointer; line-height: 1; touch-action: manipulation; }
+.wf-min button:hover { border-color: var(--accent); color: var(--accent); }
+.wf-min b { min-width: 16px; text-align: center; font-variant-numeric: tabular-nums; color: var(--text); }
+.wf-min.off { opacity: 0.4; pointer-events: none; }
+.wf-tab:focus-visible, .wf-tog:focus-visible, .wf-min button:focus-visible, .wf-row:focus-visible, .wf-btn:focus-visible, .wf-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.wf-scope { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 6px 12px 4px; font-size: var(--text-xs); flex: none; }
+.wf-scope:empty { display: none; }
+.wf-scope-l { color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; white-space: nowrap; }
+.wf-scope-r { color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.wf-list { flex: 1 1 auto; min-height: 80px; overflow: auto; overscroll-behavior: contain; padding: 2px 6px 8px; }
+.wf-empty { padding: 18px 8px; text-align: center; color: var(--text-faint); font-size: var(--text-xs); line-height: 1.5; }
+.wf-row { font: inherit; width: 100%; display: flex; align-items: center; gap: 8px; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--text); cursor: pointer; text-align: left; font-size: var(--text-sm); -webkit-tap-highlight-color: transparent; }
+.wf-row:hover { background: var(--surface-hover, rgba(127,127,127,0.12)); }
+.wf-row.cur { background: var(--accent-bg, rgba(127,127,127,0.15)); box-shadow: inset 2px 0 0 var(--accent); }
+.wf-rank { flex: 0 0 22px; text-align: right; font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.wf-w { flex: 0 1 auto; width: 38%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-w sup { font-size: 9px; color: var(--text-faint); margin-left: 2px; }
+.wf-track { flex: 1 1 auto; min-width: 24px; height: 6px; border-radius: 3px; background: var(--surface-hover, rgba(127,127,127,0.15)); overflow: hidden; }
+.wf-fill { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.wf-n { flex: none; min-width: 26px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.wf-n em { font-style: normal; font-weight: 400; color: var(--accent); }
+.wf-pct { flex: 0 0 40px; text-align: right; font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.wf-more { font: inherit; font-size: var(--text-xs); display: block; margin: 6px auto 2px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted); cursor: pointer; }
+.wf-more:hover { color: var(--accent); border-color: var(--accent); }
+
+.wf-foot { display: flex; gap: 6px; padding: 8px 12px 10px; border-top: 1px solid var(--border); flex: none; }
+.wf-btn { flex: 1; font: inherit; font-size: var(--text-xs); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 8px;
+  border-radius: var(--radius-md, 6px); border: 1px solid var(--border); background: var(--surface-2, var(--surface)); color: var(--text); cursor: pointer; white-space: nowrap;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.wf-btn svg { width: 14px; height: 14px; flex: none; }
+.wf-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.wf-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* popped out / float window: fill the frame */
+#wordfreq-panel.cade-popped { height: auto; }
+
+@media (max-width: 599px) {
+  #wordfreq-panel { left: 6px !important; right: 6px; width: auto; max-width: none; top: 48px; height: auto; max-height: calc(100vh - 110px); max-height: calc(100dvh - 110px); }
+  #wordfreq-panel .wf-list { min-height: 160px; }
+}
+@media (pointer: coarse) {
+  .wf-hbtn { width: 36px; height: 32px; }
+  .wf-q { height: 40px; font-size: 16px; }   /* no iOS focus zoom */
+  .wf-tab { padding: 8px 6px; }
+  .wf-tog { min-height: 32px; padding: 4px 10px; }
+  .wf-min button { width: 32px; height: 32px; }
+  .wf-row { min-height: 38px; }
+  .wf-btn { min-height: 40px; }
+}
