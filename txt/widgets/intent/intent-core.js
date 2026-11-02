@@ -216,7 +216,8 @@
     [/\btime ?zones?\b/g, ' zone '], [/\bbullet points?\b/g, ' bullet '], [/\bline numbers\b/g, ' number line '],
     [/\b(\d+) ?(min|mins|minute|minutes|sec|secs|second|seconds|hr|hrs|hour|hours)\b/g, ' $1 countdown '],
     [/\bmark ?down\b/g, ' markdown '], [/\bwhite ?space\b/g, ' whitespace '],
-    [/\b(flip|toss)( a| the)? coins?\b/g, ' coin '], [/\bcoin (flip|toss)\b/g, ' coin '], [/\broll( a| the| some)? (dice|die)\b/g, ' dice '],
+    [/\b(flip|toss)( a| the)? coins?\b/g, ' coin '], [/\bcoin (flip|toss)\b/g, ' coin '], [/\broll( a| the| some)? (dice|die)\b/g, ' dice roll random '],
+    [/\b(wrap|put|surround|enclose)( each| every| all| the)?( lines?| items?| words?| list)? (in|with|inside) (double |single )?quot(es?|ation marks)\b/g, ' quoter quote '],
     [/\bdark mode\b/g, ' dark '], [/\bfocus mode\b/g, ' zen focus '], [/\bdistraction free\b/g, ' zen distraction '],
   ];
 

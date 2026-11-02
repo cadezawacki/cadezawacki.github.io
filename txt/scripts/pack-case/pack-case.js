@@ -1,5 +1,5 @@
 /* Case Pack — Text case transforms.
-   Script-pack module: one file registering 7 palette scripts.
+   Script-pack module: one file registering 8 palette scripts.
    Extracted verbatim from txt.html (core slimming). */
 (function () {
   'use strict';
@@ -121,6 +121,32 @@ function main(ctx) {
     .replace(/([a-z])([A-Z])/g, '$1_$2')
     .replace(/[-\\s]+/g, '_')
     .toUpperCase();
+  if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
+}`);
+
+registerScript(`/**
+  {
+    "name": "Swap Case",
+    "description": "sWAP the case of every letter — Hello → hELLO (any alphabet: Ä, Σ, Ж…)",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><text x='2' y='19' font-size='16' font-weight='bold' fill='currentColor' stroke='none'>A</text><text x='14' y='19' font-size='12' fill='currentColor' stroke='none'>a</text><path d='M6 5h11l-2.5-2.5'/></svg>",
+    "tags": "swap,case,swapcase,invert,toggle,flip,reverse,upper,lower,caps lock"
+  }
+**/
+function main(ctx) {
+  const text = ctx.selection || ctx.fullText;
+  // Per code point, so astral letters (𐐀 Deseret…) work. A letter whose other
+  // case is a different length (ß → SS, ŉ → ʼN, ﬁ → FI) keeps its glyph so the
+  // swap stays reversible — except ß ↔ ẞ, which has a one-letter capital.
+  // Title-case digraphs (ǅ) are neither upper nor lower and are left alone.
+  const result = Array.from(text, ch => {
+    if (ch === 'ß') return 'ẞ';
+    const lo = ch.toLowerCase(), up = ch.toUpperCase();
+    if (lo === up) return ch;
+    const next = ch === up && ch !== lo ? lo : ch === lo && ch !== up ? up : ch;
+    return next.length === ch.length ? next : ch;
+  }).join('');
+  if (result === text) return;
   if (ctx.selection) ctx.selection = result; else ctx.fullText = result;
 }`);
 

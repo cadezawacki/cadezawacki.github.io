@@ -269,7 +269,9 @@ window.togglePomodoro = window.openTimer; // back-compat (restore hook / old cal
 // Resize auto-minimize hook (core calls this on real width changes so an
 // off-screen panel keeps running as the footer chip instead of orphaning).
 window.__timerAutoMin = function () {
-  if (document.getElementById('timer-panel') && !_timerFlashing) { try { window.timerMinimize(); } catch (e) {} }
+  const p = document.getElementById('timer-panel');
+  // (a popped-out / floating timer lives in its own window: the app window's width doesn't matter)
+  if (p && !_timerFlashing && !(Cade.isPoppedOut && Cade.isPoppedOut(p))) { try { window.timerMinimize(); } catch (e) {} }
 };
 
 // Widget-scoped settings (appear in Settings once the module has loaded).

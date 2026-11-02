@@ -217,7 +217,7 @@ test('empty / garbage input returns nothing confident', function () {
   assert.deepStrictEqual(I.rank('the it this', INDEX), []);
   assert.deepStrictEqual(I.rank('asdfgh qwerty zxcv', INDEX), []);
   assert.deepStrictEqual(I.rank('!!!???', INDEX), []);
-  ['hello there', 'banana', 'xyz 123', 'lorem ipsum dolor'].forEach(function (q) {
+  ['hello there', 'banana', 'xyz 123', 'zorblax wibble quux'].forEach(function (q) {
     I.rank(q, INDEX).forEach(function (r) { assert.ok(!r.confident, q + ' → ' + r.name + ' marked confident'); });
   });
 });

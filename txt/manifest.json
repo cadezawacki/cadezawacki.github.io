@@ -131,6 +131,12 @@
           "description": "Convert text to CONSTANT_CASE (screaming snake)",
           "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 7V4h16v3'/><path d='M9 20h6'/><path d='M12 4v16'/></svg>",
           "tags": "constant,case,screaming,snake,upper,variable,env"
+        },
+        {
+          "name": "Swap Case",
+          "description": "sWAP the case of every letter — Hello → hELLO (any alphabet: Ä, Σ, Ж…)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><text x='2' y='19' font-size='16' font-weight='bold' fill='currentColor' stroke='none'>A</text><text x='14' y='19' font-size='12' fill='currentColor' stroke='none'>a</text><path d='M6 5h11l-2.5-2.5'/></svg>",
+          "tags": "swap,case,swapcase,invert,toggle,flip,reverse,upper,lower,caps lock"
         }
       ]
     },
@@ -242,6 +248,102 @@
           "description": "Add or remove thousands-place commas from numbers (1234567 ↔ 1,234,567)",
           "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='20' x2='12' y2='10'/><line x1='18' y1='20' x2='18' y2='4'/><line x1='6' y1='20' x2='6' y2='16'/></svg>",
           "tags": "comma,commas,thousands,number,format,1000"
+        },
+        {
+          "name": "Natural Sort",
+          "description": "Sort lines (or one line of comma-separated items) in human order — file2 before file10, v1.9 before v1.10 — ignoring case; equal lines keep their order and blank lines go last",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 6h7'/><path d='M4 12h7'/><path d='M4 18h7'/><path d='M17 4v16'/><polyline points='14 17 17 20 20 17'/><path d='M14 7l1.5-1.5V10'/></svg>",
+          "tags": "sort,natural,human,numeric,version,numbers,alphanumeric,file2,file10,list,order,asc,case-insensitive"
+        },
+        {
+          "name": "Natural Sort (Descending)",
+          "description": "Sort lines (or comma-separated items) in reverse human order — file10 before file2, v1.10 before v1.9 — ignoring case; ties keep their order, blank lines go last",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 6h7'/><path d='M4 12h7'/><path d='M4 18h7'/><path d='M17 20V4'/><polyline points='14 7 17 4 20 7'/></svg>",
+          "tags": "sort,natural,human,numeric,version,descending,desc,reverse,z-a,largest first,list,order"
+        },
+        {
+          "name": "Sort by Nth Word…",
+          "description": "Sort lines by one word — asks which (2 = the second word, -1 = the last, -2 = second to last); natural order, punctuation around the word ignored, lines without that word go after",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h4'/><path d='M3 12h4'/><path d='M3 18h4'/><path d='M10 6h5' stroke-width='3'/><path d='M10 12h5' stroke-width='3'/><path d='M10 18h5' stroke-width='3'/><path d='M20 4v16'/><polyline points='17.5 17.5 20 20 22.5 17.5'/></svg>",
+          "tags": "sort,word,nth,column,field,key,second word,last word,surname,by word,awk,sort -k"
+        },
+        {
+          "name": "Sort by Last Word",
+          "description": "Sort lines by their last word (surnames, trailing numbers or tags) in natural order, punctuation around it ignored; ties keep their order",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h7'/><path d='M3 12h7'/><path d='M3 18h7'/><path d='M13 6h3' stroke-width='3'/><path d='M13 12h3' stroke-width='3'/><path d='M13 18h3' stroke-width='3'/><path d='M20 4v16'/><polyline points='17.5 17.5 20 20 22.5 17.5'/></svg>",
+          "tags": "sort,last word,surname,last name,family name,end,word,by word,natural"
+        },
+        {
+          "name": "Sort by Frequency",
+          "description": "Most common lines first, with duplicates grouped together; equally common lines keep their first-appearance order, blank lines go last",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='4' rx='1'/><rect x='3' y='10' width='12' height='4' rx='1'/><rect x='3' y='16' width='6' height='4' rx='1'/></svg>",
+          "tags": "sort,frequency,most common,popular,count,duplicates,group,repeated,occurrences,histogram"
+        },
+        {
+          "name": "Count Duplicates",
+          "description": "Like sort | uniq -c: each distinct line once, prefixed with how many times it appears (right-aligned), most frequent first, ties in first-appearance order; blank lines dropped",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 5v6'/><path d='M6 5v6'/><path d='M9 5v6'/><path d='M2 10l8-4'/><path d='M13 8h8'/><path d='M3 16h3'/><path d='M13 16h8'/></svg>",
+          "tags": "count,duplicates,uniq,uniq -c,frequency,occurrences,tally,histogram,distinct,how many,dedupe"
+        },
+        {
+          "name": "Every Nth Line…",
+          "description": "Keep every Nth line — asks for N: \"3\" keeps lines 3, 6, 9…; \"3+1\" (or \"3n+1\") keeps lines 1, 4, 7…; \"2+1\" / \"odd\" every other line from the first, \"even\" from the second",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='4' y1='5' x2='20' y2='5'/><line x1='4' y1='10' x2='20' y2='10' opacity='0.35'/><line x1='4' y1='15' x2='20' y2='15'/><line x1='4' y1='20' x2='20' y2='20' opacity='0.35'/></svg>",
+          "tags": "every,nth,line,odd,even,alternate,every other,skip,pick,sample,stride,step,filter,keep"
+        },
+        {
+          "name": "Chunk into Groups…",
+          "description": "Split a list into groups of N lines with a blank line between groups — asks for N; existing blank lines are dropped first, so it can be re-run with a new size",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 4h16'/><path d='M4 8h16'/><path d='M4 16h16'/><path d='M4 20h16'/></svg>",
+          "tags": "chunk,group,batch,split,paragraphs,blocks,every n,partition,blank line,sets of"
+        },
+        {
+          "name": "Group by First Letter",
+          "description": "Sort lines naturally and put a heading line (A, B, C…) above each initial — accents folded (É → E), digits and symbols under \"#\" at the end, a blank line between groups, blank lines dropped",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 11l3-8 3 8'/><path d='M4.2 8h3.6'/><path d='M12 5h9'/><path d='M12 9h9'/><path d='M7 15h14'/><path d='M7 19h14'/></svg>",
+          "tags": "group,first letter,initial,alphabet,alphabetical,index,a-z,headings,glossary,directory,sort"
+        },
+        {
+          "name": "Group by Prefix…",
+          "description": "Group lines that share the text before a separator — asks for it (blank = auto: \":\", \" - \", \"|\", \"/\", \"=\" or else the first word); each key becomes a heading with the rest of its lines as indented \"- \" bullets, groups in first-appearance order",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 4h8'/><path d='M5 4v11'/><path d='M5 9h3'/><path d='M5 15h3'/><path d='M11 9h10'/><path d='M11 15h10'/><path d='M3 21h8' opacity='0.35'/></svg>",
+          "tags": "group,prefix,key,category,before colon,separator,outline,bullets,tree,nest,cluster,by key,first word"
+        },
+        {
+          "name": "List Intersection",
+          "description": "Items in both lists (A ∩ B) — two lists separated by a line of --- (or a blank line); items trimmed, compared case-sensitively, no duplicates, A’s order then B’s",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='9' cy='12' r='6'/><circle cx='15' cy='12' r='6'/><path d='M12 6.8A6 6 0 0 1 12 17.2A6 6 0 0 1 12 6.8Z' fill='currentColor' stroke='none' opacity='0.5'/></svg>",
+          "tags": "intersection,intersect,common,both,in both,shared,and,set,compare,lists,overlap,venn"
+        },
+        {
+          "name": "List Union",
+          "description": "Every item from either list, once (A ∪ B) — two lists separated by a line of --- (or a blank line); items trimmed, compared case-sensitively, no duplicates, A’s order then B’s",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='9' cy='12' r='6' fill='currentColor' fill-opacity='0.3'/><circle cx='15' cy='12' r='6' fill='currentColor' fill-opacity='0.3'/></svg>",
+          "tags": "union,merge,combine,either,or,set,lists,all,distinct,dedupe,venn"
+        },
+        {
+          "name": "List Difference (A − B)",
+          "description": "Items in the first list that are not in the second (A − B) — two lists separated by a line of --- (or a blank line); items trimmed, compared case-sensitively, no duplicates, A’s order then B’s",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='9' cy='12' r='6'/><circle cx='15' cy='12' r='6'/><path d='M12 6.8A6 6 0 1 0 12 17.2A6 6 0 0 1 12 6.8Z' fill='currentColor' stroke='none' opacity='0.5'/></svg>",
+          "tags": "difference,minus,subtract,except,not in,missing,a - b,set,compare,lists,diff,venn"
+        },
+        {
+          "name": "List Symmetric Difference",
+          "description": "Items in exactly one of the two lists (A △ B) — two lists separated by a line of --- (or a blank line); items trimmed, compared case-sensitively, no duplicates, A’s order then B’s",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='9' cy='12' r='6'/><circle cx='15' cy='12' r='6'/><path d='M12 6.8A6 6 0 1 0 12 17.2A6 6 0 0 1 12 6.8Z' fill='currentColor' stroke='none' opacity='0.5'/><path d='M12 6.8A6 6 0 1 1 12 17.2A6 6 0 0 0 12 6.8Z' fill='currentColor' stroke='none' opacity='0.5'/></svg>",
+          "tags": "symmetric difference,xor,either but not both,unique,only one,set,compare,lists,diff,venn"
+        },
+        {
+          "name": "Zip Lines",
+          "description": "Interleave two lists line by line — a1, b1, a2, b2… — separated by a line of --- (or a blank line); leftovers of the longer list go at the end",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 5h10'/><path d='M10 10h10'/><path d='M4 15h10'/><path d='M10 20h10'/></svg>",
+          "tags": "zip,interleave,merge,alternate,weave,shuffle together,combine,two lists,pair"
+        },
+        {
+          "name": "Zip Into Columns…",
+          "description": "Pair two lists side by side — \"a1 | b1\" — asks for the separator (default \" | \", \\t = tab); lists separated by a line of --- (or a blank line), a missing partner leaves its side empty",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='16' rx='2'/><line x1='12' y1='4' x2='12' y2='20'/><path d='M6 9h3'/><path d='M15 9h3'/><path d='M6 14h3'/><path d='M15 14h3'/></svg>",
+          "tags": "zip,columns,side by side,pair,join,combine,paste,two lists,table,tab,csv,merge"
         }
       ]
     },
@@ -277,8 +379,32 @@
           "tags": "strikethrough,strike,cross,fancy,unicode,text,format"
         },
         {
+          "name": "Bubble Text (ⓑⓤⓑⓑⓛⓔ)",
+          "description": "Convert letters and digits to Unicode circled (bubble) characters — toggles off",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><text x='12' y='16.5' font-size='12' font-weight='bold' text-anchor='middle' fill='currentColor' stroke='none'>b</text></svg>",
+          "tags": "bubble,circled,circle,enclosed,fancy,unicode,text,format"
+        },
+        {
+          "name": "Superscript (ˢᵘᵖᵉʳ)",
+          "description": "Convert to Unicode superscript letters, digits and + − = ( ) — closest available form, toggles off",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 19l8-8'/><path d='M12 19l-8-8'/><path d='M20 12h-4c0-1.5.44-2 1.5-2.5S20 8.33 20 7.3c0-.6-.25-1.07-.75-1.3-.5-.23-1.13-.2-1.6.06-.42.24-.65.56-.65.94'/></svg>",
+          "tags": "superscript,super,exponent,power,raised,small,fancy,unicode,text,format,math"
+        },
+        {
+          "name": "Subscript (ₛᵤᵦ)",
+          "description": "Convert to Unicode subscript digits, + − = ( ) and the letters that exist (a e h i j k l m n o p r s t u v x, β-style b, γ-style y) — toggles off",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 5l8 8'/><path d='M12 5l-8 8'/><path d='M20 19h-4c0-1.5.44-2 1.5-2.5S20 15.33 20 14.3c0-.6-.25-1.07-.75-1.3-.5-.23-1.13-.2-1.6.06-.42.24-.65.56-.65.94'/></svg>",
+          "tags": "subscript,sub,index,chemistry,formula,lowered,small,fancy,unicode,text,format,math"
+        },
+        {
+          "name": "Monospace (𝚖𝚘𝚗𝚘)",
+          "description": "Convert to Unicode mathematical monospace (typewriter) letters and digits — toggles off",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><text x='12' y='16' font-size='11' font-family='monospace' text-anchor='middle' fill='currentColor' stroke='none'>mo</text></svg>",
+          "tags": "monospace,mono,typewriter,code,fixed,fancy,unicode,text,format,math"
+        },
+        {
           "name": "Defancify",
-          "description": "Strip all Unicode fancy formatting — bold, italic, double-struck, small caps, combining marks",
+          "description": "Strip all Unicode fancy formatting — bold, italic, double-struck, monospace, small caps, bubble, superscript, subscript, fullwidth, combining marks",
           "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='4' y1='4' x2='20' y2='20'/><line x1='4' y1='20' x2='20' y2='4'/></svg>",
           "tags": "defancify,strip,clean,plain,unicode,remove,format,reset"
         }
@@ -511,6 +637,102 @@
           "description": "Convert tab or comma separated data to a Markdown table",
           "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='3' y1='15' x2='21' y2='15'/><line x1='9' y1='3' x2='9' y2='21'/><line x1='15' y1='3' x2='15' y2='21'/></svg>",
           "tags": "markdown,table,csv,tsv,convert,format"
+        },
+        {
+          "name": "CSV → JSON",
+          "description": "CSV, TSV or a Markdown table → a JSON array of objects (header row = keys; numbers, true / false and null typed, codes like 007 kept as text)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z'/><polyline points='14 2 14 8 20 8'/><path d='M10 12a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1 1 1 0 0 1 1 1v1a1 1 0 0 0 1 1'/><path d='M14 18a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1'/></svg>",
+          "tags": "csv,json,csv to json,tsv,markdown,table,convert,parse,objects,data"
+        },
+        {
+          "name": "JSON → JSON Schema",
+          "description": "Infer a JSON Schema (draft 2020-12) from sample JSON — types, required keys, nullable fields, email / date-time / uri formats",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1'/><path d='M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1'/><polyline points='9 12 11 14 15 10'/></svg>",
+          "tags": "json,schema,json schema,infer,generate,types,validate,draft 2020-12"
+        },
+        {
+          "name": "JSON → Python Dataclass",
+          "description": "Generate Python @dataclass classes from sample JSON — nested objects get their own classes, Optional for keys that are missing or null",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='16' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='7' y1='13' x2='14' y2='13'/><line x1='7' y1='16.5' x2='11' y2='16.5'/></svg>",
+          "tags": "json,python,dataclass,class,typing,types,generate,model,code"
+        },
+        {
+          "name": "JSON → Go Struct",
+          "description": "Generate Go structs with json tags from sample JSON — nested structs, pointers and omitempty for keys that are missing or null",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='16' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='10' y1='9' x2='10' y2='20'/></svg>",
+          "tags": "json,go,golang,struct,json tags,types,generate,model,code"
+        },
+        {
+          "name": "Dedupe JSON Array by Key…",
+          "description": "Drop JSON array items whose key (a dot path like user.email) repeats an earlier one — keeps the first and your formatting",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='9' y='9' width='13' height='13' rx='2'/><path d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/><line x1='12.5' y1='15.5' x2='18.5' y2='15.5'/></svg>",
+          "tags": "json,dedupe,duplicates,unique,distinct,array,key,remove,prompt"
+        },
+        {
+          "name": "Select CSV Columns…",
+          "description": "Keep, reorder or drop columns of a CSV, TSV or Markdown table — names or numbers like name, email, 3 (-notes drops one)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><line x1='9' y1='3' x2='9' y2='21'/><line x1='15' y1='3' x2='15' y2='21'/><line x1='12' y1='7' x2='12' y2='17'/></svg>",
+          "tags": "csv,tsv,markdown,table,columns,select,reorder,drop,remove,cut,prompt"
+        },
+        {
+          "name": "Transpose Table",
+          "description": "Swap the rows and columns of a CSV, TSV or Markdown table",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='7' height='7' rx='1'/><rect x='14' y='14' width='7' height='7' rx='1'/><path d='M14 6.5h3.5a2 2 0 0 1 2 2V11'/><polyline points='17.5 9 19.5 11 21.5 9'/><path d='M10 17.5H6.5a2 2 0 0 1-2-2V13'/><polyline points='2.5 15 4.5 13 6.5 15'/></svg>",
+          "tags": "transpose,table,csv,tsv,markdown,rows,columns,pivot,flip,swap"
+        },
+        {
+          "name": "Number Stats",
+          "description": "Count, sum, mean, median, mode, min / max, range, standard deviation and percentiles of the numbers in the selection or note",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='18' y1='20' x2='18' y2='10'/><line x1='12' y1='20' x2='12' y2='4'/><line x1='6' y1='20' x2='6' y2='14'/></svg>",
+          "tags": "stats,statistics,numbers,mean,average,median,mode,std dev,standard deviation,percentile,sum,min,max,math"
+        },
+        {
+          "name": "SQL Beautify",
+          "description": "Format SQL — uppercase keywords, one clause per line, indented select lists, joins, conditions and subqueries (strings and comments untouched)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='9' ry='3'/><path d='M21 12c0 1.66-4 3-9 3s-9-1.34-9-3'/><path d='M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5'/></svg>",
+          "tags": "sql,format,beautify,pretty,prettify,indent,query,database,code"
+        },
+        {
+          "name": "SQL Minify",
+          "description": "Squeeze SQL onto one line — comments and extra whitespace removed, strings and quoted names kept intact",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='9' ry='3'/><path d='M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5'/><polyline points='9 11 12 14 15 11'/></svg>",
+          "tags": "sql,minify,compact,compress,one line,strip comments,query,database,code"
+        },
+        {
+          "name": "Extract Phone Numbers",
+          "description": "Extract all phone numbers from text",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z'/></svg>",
+          "tags": "extract,phone,phones,telephone,mobile,numbers,parse"
+        },
+        {
+          "name": "Extract Dates",
+          "description": "Extract all dates from text (2024-01-05, 1/5/2024, Jan 5, 2024, 5 March …)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>",
+          "tags": "extract,dates,date,datetime,iso,calendar,parse"
+        },
+        {
+          "name": "Extract IP Addresses",
+          "description": "Extract all IPv4 and IPv6 addresses from text (CIDR suffixes kept)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='2' width='20' height='8' rx='2'/><rect x='2' y='14' width='20' height='8' rx='2'/><line x1='6' y1='6' x2='6.01' y2='6'/><line x1='6' y1='18' x2='6.01' y2='18'/></svg>",
+          "tags": "extract,ip,ips,ipv4,ipv6,address,network,cidr,parse"
+        },
+        {
+          "name": "Extract Hashtags & Mentions",
+          "description": "Extract all #hashtags and @mentions from text",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='4'/><path d='M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94'/></svg>",
+          "tags": "extract,hashtags,hashtag,mentions,mention,social,tags,handles,parse"
+        },
+        {
+          "name": "Extract Money Amounts",
+          "description": "Extract all money amounts from text ($1,234.56, €5, 20 EUR, £3.5M …)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='6' width='20' height='12' rx='2'/><circle cx='12' cy='12' r='2'/><path d='M6 12h.01M18 12h.01'/></svg>",
+          "tags": "extract,money,currency,amounts,prices,dollars,euros,parse"
+        },
+        {
+          "name": "Extract Hex Colours",
+          "description": "Extract all hex colours from text (#fff, #a1b2c3, #a1b2c3ff)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z'/></svg>",
+          "tags": "extract,hex,colours,colors,colour,color,css,palette,parse"
         }
       ]
     },
@@ -670,9 +892,9 @@
         },
         {
           "name": "Renumber Lists",
-          "description": "Fix numbered lists so each run counts 1. 2. 3. again (indent-aware)",
+          "description": "Fix numbered lists so each run counts 1. 2. 3. again — supports 1. 1) and [1] (indent-aware)",
           "icon": "🔢",
-          "tags": "renumber,list,numbered,markdown,restructure,fix"
+          "tags": "renumber,list,numbered,bracket,markdown,restructure,fix"
         },
         {
           "name": "Fix Checkboxes",
@@ -721,6 +943,18 @@
           "description": "Add a prefix to every line — or remove it if every line already has it",
           "icon": "▶",
           "tags": "prefix,comment,quote,lines,toggle,restructure,code"
+        },
+        {
+          "name": "Reveal Invisible Characters",
+          "description": "Show hidden characters as tags — ⟦ZWSP⟧ ⟦NBSP⟧ ⟦BOM⟧ ⟦SHY⟧ ⟦RLO⟧, control codes, stray variation selectors, hidden tag text — with a count of each",
+          "icon": "👁",
+          "tags": "invisible,hidden,reveal,show,zero-width,zwsp,zwj,nbsp,bom,soft hyphen,bidi,rtl,control,characters,unicode,watermark,smuggling,debug,clean"
+        },
+        {
+          "name": "Remove Invisible Characters",
+          "description": "Strip zero-width characters, BOMs, soft hyphens, bidi and control codes (and Reveal's ⟦…⟧ tags) — odd spaces like NBSP become normal spaces; tabs, newlines and emoji joiners are kept",
+          "icon": "✨",
+          "tags": "invisible,hidden,remove,strip,delete,zero-width,zwsp,zwj,nbsp,bom,soft hyphen,bidi,control,characters,unicode,watermark,clean,sanitize"
         }
       ]
     },
@@ -1004,7 +1238,7 @@
       "id": "pack-dev",
       "type": "script-pack",
       "name": "Dev Pack",
-      "description": "Developer tools: JWT decode, MD5/SHA hashes, timestamp <-> date (unix, ISO, Excel, kdb+/q), cURL -> fetch / Python requests, number bases",
+      "description": "Developer tools: JWT decode, hashes, timestamps ↔ dates, cURL ↔ fetch, number bases, Base32 / Base58, colour conversion and shades, px ↔ rem, array / SQL IN literals, line endings, byte and duration helpers",
       "entry": "scripts/pack-dev/pack-dev.js",
       "scripts": [
         {
@@ -1090,6 +1324,108 @@
           "description": "Convert 0x… / 0b… / 0o… numbers (or a lone bare hex like ff) in place to decimal",
           "icon": "<svg viewBox='0 0 24 24'><text x='12' y='16.5' text-anchor='middle' font-size='12' font-weight='700' font-family='ui-monospace,Menlo,Consolas,monospace' fill='currentColor'>10</text></svg>",
           "tags": "decimal,number,base,convert,radix,hex,binary,octal,dev"
+        },
+        {
+          "name": "Lines → Array Literal…",
+          "description": "Turn lines into a JavaScript / JSON / Python / Go array literal — ['a', 'b'] with the right escaping, numbers bare when every line is one, one item per line past 80 characters",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M8 3H5v18h3'/><path d='M16 3h3v18h-3'/><path d='M9 12h.01M12 12h.01M15 12h.01'/></svg>",
+          "tags": "array,list,literal,lines,javascript,js,json,python,py,go,golang,quote,escape,convert,dev"
+        },
+        {
+          "name": "Lines → SQL IN List",
+          "description": "Turn lines into IN ('a', 'b') — '' escaping, numbers bare when every line is one, duplicates and blank lines dropped",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='12' cy='5' rx='8' ry='3'/><path d='M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5'/><path d='M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3'/></svg>",
+          "tags": "sql,in,list,where,lines,quote,escape,ids,query,database,dedupe,convert,dev"
+        },
+        {
+          "name": "fetch → cURL",
+          "description": "Turn a JavaScript fetch() call (headers, JSON.stringify / URLSearchParams / FormData bodies) into a curl command, inserted below it",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='4 17 10 11 4 5'/><line x1='12' y1='19' x2='20' y2='19'/></svg>",
+          "tags": "fetch,curl,javascript,js,http,request,api,shell,bash,headers,convert,dev"
+        },
+        {
+          "name": "Colour Convert",
+          "description": "Annotate every #hex, rgb(), hsl(), oklch() or CSS colour name with its other forms: #0f9598 → rgb(15 149 152) · hsl(181 82% 33%) · oklch(60.9% 0.101 197.4)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='13.5' cy='6.5' r='1.2'/><circle cx='17.5' cy='10.5' r='1.2'/><circle cx='8.5' cy='7.5' r='1.2'/><circle cx='6.5' cy='12.5' r='1.2'/><path d='M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z'/></svg>",
+          "tags": "color,colour,convert,hex,rgb,rgba,hsl,hsla,oklch,css,named,palette,dev"
+        },
+        {
+          "name": "Colour Shades",
+          "description": "Insert a Tailwind-style 50–950 shade ramp for the colour at the cursor, built perceptually in OKLCH (the colour itself keeps its nearest step)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='4' rx='1'/><rect x='3' y='10' width='18' height='4' rx='1' fill='currentColor' fill-opacity='.35'/><rect x='3' y='17' width='18' height='4' rx='1' fill='currentColor'/></svg>",
+          "tags": "color,colour,shades,tints,ramp,scale,palette,tailwind,oklch,css,variables,design,dev"
+        },
+        {
+          "name": "px → rem",
+          "description": "Convert every non-zero px length to rem at a 16px root (24px → 1.5rem, up to 4 decimals)",
+          "icon": "<svg viewBox='0 0 24 24'><text x='12' y='16.5' text-anchor='middle' font-size='12' font-weight='700' font-family='ui-monospace,Menlo,Consolas,monospace' fill='currentColor'>rem</text></svg>",
+          "tags": "px,rem,css,units,convert,font size,pixels,responsive,dev"
+        },
+        {
+          "name": "rem → px",
+          "description": "Convert every non-zero rem length to px at a 16px root (1.5rem → 24px)",
+          "icon": "<svg viewBox='0 0 24 24'><text x='12' y='16.5' text-anchor='middle' font-size='12' font-weight='700' font-family='ui-monospace,Menlo,Consolas,monospace' fill='currentColor'>px</text></svg>",
+          "tags": "rem,px,css,units,convert,font size,pixels,dev"
+        },
+        {
+          "name": "Base32 Encode",
+          "description": "Encode the selection (or line / document) as RFC 4648 Base32 of its UTF-8 bytes",
+          "icon": "<svg viewBox='0 0 24 24'><text x='12' y='16.5' text-anchor='middle' font-size='12' font-weight='700' font-family='ui-monospace,Menlo,Consolas,monospace' fill='currentColor'>32</text></svg>",
+          "tags": "base32,encode,rfc4648,totp,otp,binary,dev"
+        },
+        {
+          "name": "Base32 Decode",
+          "description": "Decode RFC 4648 Base32 (any case, padding optional) back to UTF-8 text",
+          "icon": "<svg viewBox='0 0 24 24'><text x='12' y='16.5' text-anchor='middle' font-size='12' font-weight='700' font-family='ui-monospace,Menlo,Consolas,monospace' fill='currentColor'>32</text></svg>",
+          "tags": "base32,decode,rfc4648,totp,otp,binary,dev"
+        },
+        {
+          "name": "Base58 Encode",
+          "description": "Encode the selection (or line / document) as Base58 (Bitcoin alphabet) of its UTF-8 bytes",
+          "icon": "<svg viewBox='0 0 24 24'><text x='12' y='16.5' text-anchor='middle' font-size='12' font-weight='700' font-family='ui-monospace,Menlo,Consolas,monospace' fill='currentColor'>58</text></svg>",
+          "tags": "base58,encode,bitcoin,btc,ipfs,address,binary,dev"
+        },
+        {
+          "name": "Base58 Decode",
+          "description": "Decode Base58 (Bitcoin alphabet) back to UTF-8 text",
+          "icon": "<svg viewBox='0 0 24 24'><text x='12' y='16.5' text-anchor='middle' font-size='12' font-weight='700' font-family='ui-monospace,Menlo,Consolas,monospace' fill='currentColor'>58</text></svg>",
+          "tags": "base58,decode,bitcoin,btc,ipfs,address,binary,dev"
+        },
+        {
+          "name": "Line Endings → LF",
+          "description": "Turn stray U+2028 / U+2029 / NEL line separators in the selection (or note) into plain LF line breaks and report what was found",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='9 10 4 15 9 20'/><path d='M20 4v7a4 4 0 0 1-4 4H4'/></svg>",
+          "tags": "line endings,eol,lf,newline,unix,u+2028,line separator,paragraph separator,nel,cleanup,dev"
+        },
+        {
+          "name": "Line Endings → CRLF (Copy)",
+          "description": "Copy the selection (or note) to the clipboard with Windows CRLF line endings — the note itself always stores LF",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='9' y='9' width='13' height='13' rx='2'/><path d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/></svg>",
+          "tags": "line endings,eol,crlf,windows,newline,copy,clipboard,dos,dev"
+        },
+        {
+          "name": "Show Line Endings",
+          "description": "Report the line-ending style of the clipboard (CRLF / LF / CR / mixed, with counts) and the note's own line breaks",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M13 4v16'/><path d='M17 4v16'/><path d='M19 4H9.5a4.5 4.5 0 0 0 0 9H13'/></svg>",
+          "tags": "line endings,eol,crlf,lf,cr,mixed,detect,newline,clipboard,windows,unix,dev"
+        },
+        {
+          "name": "Humanize Bytes",
+          "description": "Annotate byte counts with binary and SI sizes: 1048576 → 1 MiB (1.05 MB) (numbers of 1000+ or with a B / bytes unit)",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='22' y1='12' x2='2' y2='12'/><path d='M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/><line x1='6' y1='16' x2='6.01' y2='16'/><line x1='10' y1='16' x2='10.01' y2='16'/></svg>",
+          "tags": "bytes,size,humanize,human,readable,kib,mib,gib,kb,mb,gb,file size,memory,dev"
+        },
+        {
+          "name": "Humanize Durations",
+          "description": "Annotate durations in seconds (or with an ms / s unit): 90061 → 1d 1h 1m 1s, 1500ms → 1.5s",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 22h14'/><path d='M5 2h14'/><path d='M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22'/><path d='M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2'/></svg>",
+          "tags": "duration,seconds,milliseconds,ms,humanize,human,readable,time,elapsed,uptime,ttl,dev"
+        },
+        {
+          "name": "Sum Durations",
+          "description": "Add up durations line by line (1h20m, 45m, 1:30:00, 90s, 2.5h, 1 hr 5 min, PT1H) and append the total",
+          "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='13' r='8'/><path d='M12 9v4l2 2'/><path d='M10 2h4'/></svg>",
+          "tags": "sum,total,durations,time,hours,minutes,timesheet,add,log,hh:mm,dev"
         }
       ]
     },
@@ -1230,6 +1566,60 @@
           "description": "Black out the selected text with █ blocks (keeps spaces and line breaks)",
           "icon": "⬛",
           "tags": "redact,censor,black out,blackout,hide,hide text,hide this text,hide selection,hide words,mask,obscure,privacy,secret,classified,block"
+        },
+        {
+          "name": "Numbers → Words",
+          "description": "Spell out numbers — 42 → forty-two, -7 → minus seven, 3.14 → three point one four, 50% → fifty percent (dates, times, versions, codes and 3rd / mp3 are left alone)",
+          "icon": "🗣",
+          "tags": "numbers,words,spell out,spell,number to words,english,cheque,check,writing,digits,text,convert,humanize"
+        },
+        {
+          "name": "Words → Numbers",
+          "description": "Turn spelled-out numbers into digits — forty-two → 42, one hundred and five → 105, minus seven → -7, three point one four → 3.14, a dozen → 12",
+          "icon": "🔢",
+          "tags": "words,numbers,digits,words to numbers,parse,english,spelled out,convert,numeric,dozen,hundred,thousand,million"
+        },
+        {
+          "name": "Ordinals",
+          "description": "Add ordinal suffixes to whole numbers — 1 → 1st, 22 → 22nd, 113 → 113th (numbers in dates, times, codes and words are left alone)",
+          "icon": "🥇",
+          "tags": "ordinal,ordinals,1st,2nd,3rd,nth,suffix,rank,numbers,position,th,st,nd,rd"
+        },
+        {
+          "name": "Pluralize Lines",
+          "description": "Make the last word of every line plural — apple → apples, city → cities, box → boxes, knife → knives, person → people, child → children (keeps case; sheep / information stay)",
+          "icon": "👥",
+          "tags": "plural,pluralize,plurals,inflect,english,noun,nouns,lines,list,many,irregular,grammar"
+        },
+        {
+          "name": "Singularize Lines",
+          "description": "Make the last word of every line singular — apples → apple, cities → city, boxes → box, knives → knife, people → person, mice → mouse (keeps case)",
+          "icon": "👤",
+          "tags": "singular,singularize,depluralize,inflect,english,noun,nouns,lines,list,one,irregular,grammar"
+        },
+        {
+          "name": "Lorem Ipsum…",
+          "description": "Insert placeholder Latin at the cursor (or over the selection) — asks how much: 3 paragraphs, 5s sentences or 50w words; starts with the classic \"Lorem ipsum dolor sit amet…\"",
+          "icon": "🏛",
+          "tags": "lorem,ipsum,lorem ipsum,placeholder,dummy,filler,text,latin,generate,insert,mockup,design,paragraphs,sentences,words"
+        },
+        {
+          "name": "Truncate Lines…",
+          "description": "Cut every line longer than N characters and end it with … (asks for N, default 80; emoji and accents count as one)",
+          "icon": "✂",
+          "tags": "truncate,cut,shorten,trim,lines,length,max,limit,ellipsis,columns,width,clip"
+        },
+        {
+          "name": "Surround Lines…",
+          "description": "Wrap every line — type \" or ( or ** or <li> (closers and closing tags added for you), or before|after with | marking the line; run again to unwrap",
+          "icon": "🥪",
+          "tags": "surround,wrap,enclose,quote,quotes,brackets,parentheses,tags,html,li,lines,before,after,toggle,restructure,code"
+        },
+        {
+          "name": "Suffix Lines…",
+          "description": "Add a suffix to every line — or remove it if every line already has it",
+          "icon": "◀",
+          "tags": "suffix,append,end,semicolon,comma,lines,toggle,restructure,code"
         }
       ]
     },
@@ -3366,6 +3756,36 @@
       "tags": "layout,layouts,workspace,arrange,snap,tile,cascade,float,always on top,pip,picture in picture,pop out,save,load,windows,panels,bloomberg,launchpad",
       "entry": "widgets/layouts/layouts.js",
       "css": "widgets/layouts/layouts.css"
+    },
+    {
+      "id": "scratchpad",
+      "type": "widget",
+      "name": "Scratchpad",
+      "description": "A full editor for any note in a panel — keep a scratch note beside your work or tiled in the float window",
+      "icon": "📝",
+      "tags": "scratchpad,scratch,note,notes,editor,room,pad,jot,side,panel,float,workspace,layout",
+      "entry": "widgets/scratchpad/scratchpad.js",
+      "css": "widgets/scratchpad/scratchpad.css"
+    },
+    {
+      "id": "writingcheck",
+      "type": "widget",
+      "name": "Writing Check",
+      "description": "Readability scores and grade level, long sentences, passive voice, adverbs and filler words — click to jump to each one",
+      "icon": "🔍",
+      "tags": "writing,readability,flesch,grade,passive,adverbs,filler,weasel,style,check,prose,edit",
+      "entry": "widgets/writingcheck/writingcheck.js",
+      "css": "widgets/writingcheck/writingcheck.css"
+    },
+    {
+      "id": "wordfreq",
+      "type": "widget",
+      "name": "Word Frequency",
+      "description": "Most-used words and phrases in the note or selection — counts, percentages, stop-word filter, copy as a table",
+      "icon": "📊",
+      "tags": "word,frequency,count,words,phrases,ngrams,keywords,stats,vocabulary,repetition",
+      "entry": "widgets/wordfreq/wordfreq.js",
+      "css": "widgets/wordfreq/wordfreq.css"
     },
     {
       "id": "snippets",
