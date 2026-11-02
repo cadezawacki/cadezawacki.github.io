@@ -3368,6 +3368,36 @@
       "css": "widgets/layouts/layouts.css"
     },
     {
+      "id": "scratchpad",
+      "type": "widget",
+      "name": "Scratchpad",
+      "description": "A full editor for any note in a panel — keep a scratch note beside your work or tiled in the float window",
+      "icon": "📝",
+      "tags": "scratchpad,scratch,note,notes,editor,room,pad,jot,side,panel,float,workspace,layout",
+      "entry": "widgets/scratchpad/scratchpad.js",
+      "css": "widgets/scratchpad/scratchpad.css"
+    },
+    {
+      "id": "writingcheck",
+      "type": "widget",
+      "name": "Writing Check",
+      "description": "Readability scores and grade level, long sentences, passive voice, adverbs and filler words — click to jump to each one",
+      "icon": "🔍",
+      "tags": "writing,readability,flesch,grade,passive,adverbs,filler,weasel,style,check,prose,edit",
+      "entry": "widgets/writingcheck/writingcheck.js",
+      "css": "widgets/writingcheck/writingcheck.css"
+    },
+    {
+      "id": "wordfreq",
+      "type": "widget",
+      "name": "Word Frequency",
+      "description": "Most-used words and phrases in the note or selection — counts, percentages, stop-word filter, copy as a table",
+      "icon": "📊",
+      "tags": "word,frequency,count,words,phrases,ngrams,keywords,stats,vocabulary,repetition",
+      "entry": "widgets/wordfreq/wordfreq.js",
+      "css": "widgets/wordfreq/wordfreq.css"
+    },
+    {
       "id": "snippets",
       "type": "widget",
       "name": "Snippets",
