@@ -32,13 +32,25 @@ test('arrangements are validated: bad panels dropped, numbers clamped', function
     { widget: 'Calc', id: 'calc-panel', state: 'float', slot: '2' },
     { widget: '', id: 'x', state: 'open' }, { widget: 'A', id: 'a', state: 'weird' }, null,
     { widget: 'B', id: 'b-panel', state: 'min', rect: { x: 9, y: 'no', w: 0.5, h: NaN } }
-  ], ws: { layout: 'grid4', colFr: [1, -2, 'x', 3], rowFr: 'no', w: '800', h: 600 } });
+  ], ws: { layout: 'grid4', shape: ['h', 0.5, 'L', ['v', 0.3, 'L', 'L']], w: '800', h: 600 } });
   assert.strictEqual(a.panels.length, 3);
   assert.deepStrictEqual(a.panels[1], { widget: 'Calc', id: 'calc-panel', state: 'float', slot: 2 });
   assert.deepStrictEqual(a.panels[2].rect, { x: 1.5, y: 0, w: 0.5, h: null });
-  assert.deepStrictEqual(a.ws, { layout: 'grid4', colFr: [1, 3], rowFr: null, w: 800, h: 600 });
+  assert.deepStrictEqual(a.ws, { layout: 'grid4', shape: ['h', 0.5, 'L', ['v', 0.3, 'L', 'L']], w: 800, h: 600 });
   assert.strictEqual(P.validArr({}), null);
   assert.strictEqual(P.validArr(null), null);
+});
+test('float window tile trees: valid shapes kept, bad ones dropped, at most 8 tiles', function () {
+  assert.ok(P.shapeOk('L') && P.shapeOk(['h', 0.4, ['v', 0.7, 'L', 'L'], ['v', 0.25, 'L', ['v', 0.5, 'L', 'L']]]));
+  assert.ok(!P.shapeOk(['x', 0.5, 'L', 'L']) && !P.shapeOk(['h', 1.5, 'L', 'L']) && !P.shapeOk(['h', 0.5, 'L']) && !P.shapeOk(null));
+  var deep = 'L'; for (var i = 0; i < 12; i++) deep = ['v', 0.5, deep, 'L'];
+  assert.ok(!P.shapeOk(deep));
+  assert.strictEqual(P.shapeTiles(['h', 0.5, ['v', 0.5, 'L', 'L'], ['v', 1 / 3, 'L', ['v', 0.5, 'L', 'L']]]), 5);
+  var nine = 'L'; for (i = 0; i < 8; i++) nine = ['h', 0.5, nine, 'L'];
+  var a = P.validArr({ panels: [], ws: { shape: nine } });
+  assert.strictEqual(a.ws.shape, null);                    // too many tiles: falls back to the preset
+  assert.strictEqual(P.validArr({ panels: [], ws: { layout: 'cols2', colFr: [1, 1] } }).ws.layout, 'cols2');   // older saves still load
+  assert.strictEqual(P.validArr({ panels: [], ws: { layout: 5 } }).ws, null);
 });
 test('save, overwrite by name (any case), newest first', function () {
   var st = P.normStore(null);

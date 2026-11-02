@@ -18,6 +18,14 @@
 
   // ================= pure helpers (unit-checked in node) =================
   var MAX_NAME = 40, MAX_ITEMS = 50;
+  // A float window tile tree: 'L' (a tile) or [d 'h'|'v', ratio, a, b] — as the core's Cade.layouts.shape().
+  function shapeOk(t, depth) {
+    depth = depth || 0;
+    if (t === 'L') return true;
+    return depth < 10 && Array.isArray(t) && t.length === 4 && (t[0] === 'h' || t[0] === 'v') && typeof t[1] === 'number' && t[1] > 0.02 && t[1] < 0.98 &&
+      shapeOk(t[2], depth + 1) && shapeOk(t[3], depth + 1);
+  }
+  function shapeTiles(t) { return t === 'L' ? 1 : shapeTiles(t[2]) + shapeTiles(t[3]); }
   function cleanName(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, MAX_NAME); }
   function validArr(a) {
     if (!a || typeof a !== 'object' || !Array.isArray(a.panels)) return null;
@@ -35,9 +43,8 @@
       return o;
     });
     var ws = null;
-    if (a.ws && typeof a.ws === 'object' && typeof a.ws.layout === 'string') {
-      var fr = function (v) { return Array.isArray(v) ? v.map(Number).filter(function (x) { return isFinite(x) && x > 0; }) : null; };
-      ws = { layout: a.ws.layout, colFr: fr(a.ws.colFr), rowFr: fr(a.ws.rowFr), w: +a.ws.w || 0, h: +a.ws.h || 0 };
+    if (a.ws && typeof a.ws === 'object' && (typeof a.ws.layout === 'string' || shapeOk(a.ws.shape))) {
+      ws = { layout: typeof a.ws.layout === 'string' ? a.ws.layout : 'custom', shape: shapeOk(a.ws.shape) && shapeTiles(a.ws.shape) <= 8 ? a.ws.shape : null, w: +a.ws.w || 0, h: +a.ws.h || 0 };
     }
     return { v: 1, at: +a.at || 0, area: a.area || null, panels: panels, ws: ws };
   }
@@ -100,7 +107,7 @@
     return out;
   }
 
-  var PURE = { cleanName: cleanName, validArr: validArr, normStore: normStore, findItem: findItem, upsert: upsert, rename: rename,
+  var PURE = { shapeOk: shapeOk, shapeTiles: shapeTiles, cleanName: cleanName, validArr: validArr, normStore: normStore, findItem: findItem, upsert: upsert, rename: rename,
     remove: remove, suggestName: suggestName, summary: summary, widgetNames: widgetNames, MAX_ITEMS: MAX_ITEMS };
   if (typeof module !== 'undefined' && module.exports) module.exports = PURE;
 
@@ -148,13 +155,15 @@
     if (!sup.float) h += '<p class="lay-note">Floating panels need a desktop browser.</p>';
     else {
       h += '<p class="lay-note">' + (sup.onTop ? 'One window that <b>stays on top of all your other windows</b> and tiles several panels.' :
-        'One extra window that tiles several panels. (Only Chrome and Edge can keep it on top of other windows.)') + '</p>';
+        'One extra window that tiles several panels. (Only Chrome and Edge can keep it on top of other windows.)') +
+        ' Start from a layout, then make it your own: drag a panel’s title bar to another tile’s edge to dock it there, drag dividers, or use <b>Edit tiles</b> to split and remove tiles.</p>';
       var cur = open ? api.layout() : S.opts.floatLayout;
       h += '<div class="lay-layouts" role="group" aria-label="Float window layout">' + api.layouts().map(function (l) {
-        return '<button type="button" class="lay-chip' + (l.id === cur ? ' on' : '') + '" data-layout="' + l.id + '" title="' + esc(l.name + ' — ' + l.slots + (l.slots === 1 ? ' panel' : ' panels')) + '">' + esc(l.name) + '</button>';
-      }).join('') + '</div>';
+        return '<button type="button" class="lay-chip' + (l.id === cur ? ' on' : '') + '" data-layout="' + l.id + '" title="' + esc(l.name + ' — ' + l.slots + (l.slots === 1 ? ' tile' : ' tiles')) + '">' + esc(l.name) + '</button>';
+      }).join('') + (open && cur === 'custom' ? '<span class="lay-chip on" title="Your own arrangement of tiles">Custom</span>' : '') + '</div>';
       h += '<div class="lay-row">' + (open ?
-        '<button type="button" class="lay-btn" data-act="close-float">Close float window</button><span class="lay-dim">' + (api.onTop() ? 'on top' : 'open') + '</span>' :
+        '<button type="button" class="lay-btn" data-act="back-float" title="Bring its widgets back into the app window, then close it">Back in app</button>' +
+        '<button type="button" class="lay-btn" data-act="close-float" title="Close the window and the widgets in it">Close</button><span class="lay-dim">' + (api.onTop() ? 'on top' : 'open') + '</span>' :
         '<button type="button" class="lay-btn primary" data-act="open-float">' + I_FLOAT + ' Open float window</button>') + '</div>';
       var fl = api.floating();
       if (open) {
@@ -297,6 +306,7 @@
       } else if (act === 'open-float') {
         api.open({ layout: S.opts.floatLayout }).then(function () { soon(); });
       } else if (act === 'close-float') { api.close(); render(); }
+      else if (act === 'back-float') { if (api.backInApp) api.backInApp(); else api.close(); render(); }
       else if ((a = b.getAttribute('data-float'))) {
         var p1 = document.getElementById(a);
         if (!p1) return;
