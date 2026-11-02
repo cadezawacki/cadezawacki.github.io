@@ -23946,7 +23946,7 @@ async function _layOpen(opts) {
   d.body.appendChild(root);
   _lay.bar = root.querySelector('.cade-lay-bar'); _lay.grid = root.querySelector('.cade-lay-grid');
   _lay.bar.querySelector('.cade-lay-tip').textContent = _lay.onTop ? 'stays on top' : '';
-  _lay.bar.querySelector('.cade-lay-allin').addEventListener('click', () => _layClose());
+  _lay.bar.querySelector('.cade-lay-allin').addEventListener('click', () => _layBackInApp());
   _lay.bar.querySelector('.cade-lay-editbtn').addEventListener('click', () => { _lay.edit = !_lay.edit; _layRender(); });
   _lay.bar.querySelector('.cade-lay-layouts').addEventListener('click', e => {
     const b = e.target.closest && e.target.closest('[data-l]');
@@ -23968,16 +23968,35 @@ async function _layOpen(opts) {
   return true;
 }
 // Everything back into the app window and the window closed.
-function _layClose() {
+// "Back in app": every floating panel returns to the app window, then the window closes.
+function _layBackInApp() {
   if (!_lay.win) return;
   const win = _lay.win;
   for (const p of _laySlots()) if (p) _popInPanel(p);
   _layClosed();
   try { win.close(); } catch {}
 }
+// Closing the float window (its own ×, or Cade.layouts.close()) closes the widgets
+// in it too — each as its × would, so its teardown runs — rather than bringing them home.
+function _layClose() {
+  if (!_lay.win) return;
+  const win = _lay.win;
+  _layClosed();
+  try { win.close(); } catch {}
+}
+function _layCloseWidgets() {
+  _lay.closing = true;
+  for (const p of _laySlots()) {
+    if (!p) continue;
+    const x = p.querySelector('.cade-panel-x');
+    if (x) x.click(); else { p.remove(); if (p._onClose) p._onClose(); }
+    _popDone(p, false);                    // now, not when the observer gets round to it
+  }
+  _lay.closing = false;
+}
 function _layClosed() {
   if (!_lay.win) return;
-  for (const p of _laySlots()) if (p) _popInPanel(p, true);
+  _layCloseWidgets();
   try { if (_lay.obs) _lay.obs.disconnect(); } catch {}
   _lay.win = null; _lay.obs = null; _lay.grid = null; _lay.bar = null; _lay.tree = null; _lay.edit = false;
   document.querySelectorAll('.cade-panel').forEach(_paintPopBtn);
@@ -23988,7 +24007,7 @@ function _layForget(p) {
   const l = _layLeafOf(p);
   if (!l) return;
   l.p = null;
-  if (_lay.win) _layRender();
+  if (_lay.win && !_lay.closing) _layRender();
 }
 // Split leaf `l`: a new empty tile goes on `side` ('left' 'right' 'top' 'bottom'). Returns it.
 function _laySplit(l, side) {
@@ -24294,7 +24313,7 @@ async function _layApply(arr, opts) {
   let floatOk = false;
   // (older saves have a preset name only; newer ones the whole tile tree)
   if (wantFloat) floatOk = _lay.win ? (_laySetShape(arr.ws.shape, arr.ws.layout), true) : await _layOpen({ shape: arr.ws.shape, layout: arr.ws.layout, w: arr.ws.w, h: arr.ws.h });
-  else if (_lay.win && opts.replace !== false) _layClose();
+  else if (_lay.win && opts.replace !== false) _layBackInApp();   // panels it keeps come home; the rest close below
   const keep = new Set(arr.panels.map(e => e.id));
   if (opts.replace !== false) {
     for (const p of [..._layPanels(), ...(_lay.win ? _laySlots() : []).filter(Boolean)]) {
@@ -24341,7 +24360,9 @@ window.__cadeLayouts = {
   tile() { return _layTile(); }, cascade() { return _layCascade(); },
   layouts() { return Object.keys(LAY_PRESETS).map(k => ({ id: k, name: LAY_PRESETS[k].name, slots: _layShapeLeaves(LAY_PRESETS[k].t) })); },
   isOpen() { return !!_lay.win; }, onTop() { return !!_lay.win && !!_lay.onTop; },
-  open(opts) { return _layOpen(opts); }, close() { _layClose(); },
+  open(opts) { return _layOpen(opts); },
+  close() { _layClose(); },               // closes the window AND the widgets in it
+  backInApp() { _layBackInApp(); },       // brings its widgets back into the app window, then closes it
   layout(l) { if (l) _laySetShape(null, l); return _lay.win ? _lay.preset : null; },   // a preset id, or 'custom'
   shape(t) { if (t !== undefined && _layShapeOk(t)) _laySetShape(t, 'custom'); return _lay.tree ? _layShape(_lay.tree) : null; },
   split(slot, side) { const l = _layLeaves(_lay.tree)[slot]; const f = l && _laySplit(l, side); if (f) { _layRender(); _layRemember(); } return !!f; },

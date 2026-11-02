@@ -385,7 +385,8 @@ workspaces (`?ws=`). Desktop widths only; `supported()` says what's available.
 | `Cade.layouts.snap(panel, zone)` | `left right max tl tr bl br top bottom l3 c3 r3`; falsy zone unsnaps |
 | `Cade.layouts.tile()` / `.cascade()` | arrange the app window's panels; returns how many |
 | `Cade.layouts.open({ layout, colFr, rowFr, w, h })` | open the float window (**needs a user gesture**); Promise → `true` |
-| `Cade.layouts.close()` | every floating panel back into the app; window closed |
+| `Cade.layouts.close()` | close the float window **and the widgets in it** (as each one's × would) — also what closing the window itself does |
+| `Cade.layouts.backInApp()` | every floating panel back into the app window, then the window closes (the bar's "Back in app") |
 | `Cade.layouts.isOpen()` / `.onTop()` | float window state |
 | `Cade.layouts.layouts()` / `.layout(id?)` | preset list `{ id, name, slots }` / get (`'custom'` once edited) or apply one |
 | `Cade.layouts.shape(tree?)` | get / set the tile tree: `'L'` (a tile) or `['h' \| 'v', ratio, a, b]` (`h`: a left of b) |

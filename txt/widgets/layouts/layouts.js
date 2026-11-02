@@ -162,7 +162,8 @@
         return '<button type="button" class="lay-chip' + (l.id === cur ? ' on' : '') + '" data-layout="' + l.id + '" title="' + esc(l.name + ' — ' + l.slots + (l.slots === 1 ? ' tile' : ' tiles')) + '">' + esc(l.name) + '</button>';
       }).join('') + (open && cur === 'custom' ? '<span class="lay-chip on" title="Your own arrangement of tiles">Custom</span>' : '') + '</div>';
       h += '<div class="lay-row">' + (open ?
-        '<button type="button" class="lay-btn" data-act="close-float">Close float window</button><span class="lay-dim">' + (api.onTop() ? 'on top' : 'open') + '</span>' :
+        '<button type="button" class="lay-btn" data-act="back-float" title="Bring its widgets back into the app window, then close it">Back in app</button>' +
+        '<button type="button" class="lay-btn" data-act="close-float" title="Close the window and the widgets in it">Close</button><span class="lay-dim">' + (api.onTop() ? 'on top' : 'open') + '</span>' :
         '<button type="button" class="lay-btn primary" data-act="open-float">' + I_FLOAT + ' Open float window</button>') + '</div>';
       var fl = api.floating();
       if (open) {
@@ -305,6 +306,7 @@
       } else if (act === 'open-float') {
         api.open({ layout: S.opts.floatLayout }).then(function () { soon(); });
       } else if (act === 'close-float') { api.close(); render(); }
+      else if (act === 'back-float') { if (api.backInApp) api.backInApp(); else api.close(); render(); }
       else if ((a = b.getAttribute('data-float'))) {
         var p1 = document.getElementById(a);
         if (!p1) return;
