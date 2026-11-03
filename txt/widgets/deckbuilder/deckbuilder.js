@@ -1,12 +1,15 @@
 /* Deck Delve — a card-battling roguelite, for Cade.txt.
  * Climb three acts of a branching map (fights, elites, events, shops, rest
  * sites, treasure and a boss at the top of each act). Battles are turn based:
- * three energy a turn, five cards a hand; attacks, block and the classic
- * statuses (Vulnerable, Weak, Frail, Poison, Strength, Dexterity, Plating,
- * Thorns...). Every enemy shows what it means to do next. Win a fight, pick a
+ * three energy a turn; cards you don't play stay in your hand for later turns
+ * (up to ten); attacks, block and the classic statuses (Vulnerable, Weak,
+ * Frail, Poison, Strength, Dexterity, Plating, Thorns...). Enemies show what
+ * they mean to do next, unless they hide it ("?"), and some change plans when
+ * hurt or hexed; scouting cards and relics reveal hidden intents, and the
+ * Blindfold modifier hides every intent for a whole run. Win a fight, pick a
  * card; beat an elite, take a relic. Rest sites heal or upgrade a card, shops
  * sell cards and relics and remove cards for gold, events tempt you.
- * 70 cards, 28 enemies + 3 bosses, 32 relics, 12 events — all original.
+ * 77 cards (plus statuses and curses), 28 enemies + 3 bosses, 34 relics, 12 events — all original.
  * Runs are seeded (share a seed, or play the daily delve — the same seed for
  * everyone on a date), saved after every action (resume mid-fight), and the
  * run history keeps records. Monospace DOM cards: tap a card, then a target.
@@ -15,10 +18,16 @@
   'use strict';
 
   // ================= engine (pure: no DOM — unit-checked in node) =================
-  var VERSION = 1;
+  var VERSION = 2;                          // 2: hand retention, hidden / changing intents, Blindfold (v1 saves still load)
   var ROWS = 12, COLS = 7, PATHS = 6;      // map grid per act; the boss sits above the last row
   var FLOORS = ROWS + 1;                    // floors per act (rows + boss)
-  var START_HP = 80, BASE_ENERGY = 3, HAND = 5, MAX_HAND = 10;
+  var START_HP = 80, BASE_ENERGY = 3, MAX_HAND = 10;
+  // Cards you don't play stay in your hand. Each turn after the first (`first` cards) you
+  // draw back up to `to` cards in hand, but always at least `min` new ones, so holding
+  // 3 cards is free and every card held past that costs a fresh draw. The hand never holds
+  // more than MAX_HAND (further draws stay in the draw pile). ehp: enemy HP multiplier per
+  // act. Tuned by simulating seeded runs with a greedy bot; exported so it can try variants.
+  var RULES = { first: 5, to: 5, min: 2, ehp: [1, 0.9, 1] };
   var ACT_NAMES = ['The Rootways', 'The Drowned Halls', 'The Hollow Crown'];
 
   // ---- seeded randomness: mulberry32 streams kept as plain numbers in the run (saveable) ----
@@ -98,6 +107,8 @@
     tripwire: { n: 'Tripwire', t: 'skl', r: 'common', c: 1, tg: 'e', a: [['blk', 5], ['st', 'weak', 1]], u: { a: [['blk', 7], ['st', 'weak', 2]] } },
     bandage: { n: 'Bandage', t: 'skl', r: 'common', c: 0, tg: 'none', a: [['heal', 4]], ex: true, u: { a: [['heal', 6]] } },
     expose: { n: 'Expose', t: 'skl', r: 'common', c: 0, tg: 'e', a: [['st', 'vuln', 1]], u: { a: [['st', 'vuln', 2]] } },
+    scout: { n: 'Scout', t: 'skl', r: 'common', c: 0, tg: 'none', a: [['scout'], ['draw', 1]], u: { a: [['scout'], ['draw', 2]] } },
+    bide: { n: 'Bide', t: 'skl', r: 'common', c: 1, tg: 'none', a: [['bide', 2]], u: { a: [['bide', 3]] } },
     // --- uncommon attacks ---
     whirl: { n: 'Whirl', t: 'atk', r: 'uncommon', c: -1, tg: 'all', a: [['dmgAll', 5, 'X']], u: { a: [['dmgAll', 8, 'X']] } },
     exploit: { n: 'Exploit', t: 'atk', r: 'uncommon', c: 1, tg: 'e', a: [['dmgVuln', 8]], u: { a: [['dmgVuln', 11]] } },
@@ -125,6 +136,7 @@
     rush: { n: 'Rush', t: 'skl', r: 'uncommon', c: 0, tg: 'none', a: [['draw', 2], ['add', 'dazed', 1, 'disc']], u: { a: [['draw', 3], ['add', 'dazed', 1, 'disc']] } },
     fervor: { n: 'Fervor', t: 'skl', r: 'uncommon', c: 0, tg: 'none', a: [['me', 'fervor', 3]], u: { a: [['me', 'fervor', 5]] } },
     mend: { n: 'Mend', t: 'skl', r: 'uncommon', c: 1, tg: 'none', a: [['heal', 7]], ex: true, u: { a: [['heal', 10]] } },
+    counterplay: { n: 'Counterplay', t: 'skl', r: 'uncommon', c: 1, tg: 'e', a: [['counter', 14]], u: { a: [['counter', 20]] } },
     parry: { n: 'Parry', t: 'skl', r: 'uncommon', c: 1, tg: 'e', a: [['blk', 8], ['st', 'str', -1, 'turn']], u: { a: [['blk', 11], ['st', 'str', -1, 'turn']] } },
     // --- powers ---
     innerFire: { n: 'Inner Fire', t: 'pow', r: 'uncommon', c: 1, tg: 'none', a: [['me', 'str', 2]], u: { a: [['me', 'str', 3]] } },
@@ -138,6 +150,7 @@
     stoneStance: { n: 'Stone Stance', t: 'pow', r: 'rare', c: 3, tg: 'none', a: [['me', 'keepBlock', 1]], u: { c: 2 } },
     emberRing: { n: 'Ember Ring', t: 'pow', r: 'uncommon', c: 1, tg: 'none', a: [['me', 'flameAura', 3]], u: { a: [['me', 'flameAura', 5]] } },
     envenom: { n: 'Envenom', t: 'pow', r: 'rare', c: 2, tg: 'none', a: [['me', 'envenom', 1]], u: { c: 1 } },
+    foresight: { n: 'Foresight', t: 'pow', r: 'uncommon', c: 1, tg: 'none', a: [['me', 'foresight', 1]], u: { c: 0 } },
     spikedShell: { n: 'Spiked Shell', t: 'pow', r: 'rare', c: 2, tg: 'none', a: [['me', 'spikes', 5]], u: { a: [['me', 'spikes', 7]] } },
     // --- rares ---
     cataclysm: { n: 'Cataclysm', t: 'atk', r: 'rare', c: 3, tg: 'e', a: [['dmg', 32]], u: { a: [['dmg', 42]] } },
@@ -199,55 +212,59 @@
     flameAura: { n: 'Ember Ring', g: 'EMB', good: true, d: 'At the end of your turn, deal this much damage to ALL enemies.' },
     envenom: { n: 'Envenom', g: 'ENV', good: true, d: 'Whenever an attack deals unblocked damage, apply this much Poison.' },
     spikes: { n: 'Spiked Shell', g: 'SPK', good: true, d: 'Whenever you gain Block from a card, deal this much damage to a random enemy.' },
-    enrage: { n: 'Enrage', g: 'RAG', good: true, d: 'Gains this much Strength whenever you play a Skill.' }
+    enrage: { n: 'Enrage', g: 'RAG', good: true, d: 'Gains this much Strength whenever you play a Skill.' },
+    foresight: { n: 'Foresight', g: 'FOR', good: true, d: 'Hidden enemy intents are revealed for the rest of the fight.' }
   };
 
   // ================= enemies =================
   // m: moves — a: actions: ['atk', dmg, hits] ['blk', n] ['st', key, n] (self) ['pst', key, n] (on you)
   //   ['add', card, n, pile] (into your deck for this fight) ['heal', n] ['blkAll', n] (every ally)
-  // ai: first (move for turn 1), cyc (cycle of moves) or w (weights; never the same move 3 times running),
-  //     half (a move used once when it first drops under half HP)
+  // ai: first (move for turn 1), cyc (cycle of moves) or w (weights; never the same move 3 times running)
+  // hide: 'all' (its intent shows only "?") or 'amount' (the kind of move shows, not the numbers)
+  // react: changes the planned move on the spot — low: move used once when it first drops under
+  //   `at` (default half) of its HP (bosses: a phase change; hideLow then hides its amounts);
+  //   dbf: move it switches to when you apply Weak or Vulnerable to it (once per turn)
   var ENEMIES = {
     // --- act I ---
     mossRat: { n: 'Moss Rat', hp: [12, 16], art: [' ()_()', ' (o.o)', ' (")(")'], m: [{ n: 'Bite', a: [['atk', 6]] }, { n: 'Scurry', a: [['blk', 4], ['atk', 3]] }], ai: { w: [3, 2] } },
     caveSlug: { n: 'Cave Slug', hp: [28, 32], art: ['   __', ' _(oo)_', '(______)'], m: [{ n: 'Spit', a: [['atk', 7], ['add', 'ooze', 1, 'disc']] }, { n: 'Gnaw', a: [['atk', 11]] }], ai: { w: [2, 3] } },
     rootCultist: { n: 'Root Cultist', hp: [40, 46], art: ['  /^\\', ' (-_-)', ' /|Y|\\'], m: [{ n: 'Chant', a: [['st', 'ritual', 3]] }, { n: 'Lash', a: [['atk', 6]] }], ai: { first: 0, cyc: [1] } },
-    bonePup: { n: 'Bone Pup', hp: [20, 24], art: ['  __', ' /..\\_', ' \\__/ \\'], m: [{ n: 'Snap', a: [['atk', 5]] }, { n: 'Howl', a: [['pst', 'weak', 1], ['st', 'str', 1]] }], ai: { w: [3, 2] } },
+    bonePup: { n: 'Bone Pup', hp: [20, 24], art: ['  __', ' /..\\_', ' \\__/ \\'], m: [{ n: 'Snap', a: [['atk', 5]] }, { n: 'Howl', a: [['pst', 'weak', 1], ['st', 'str', 1]] }], ai: { w: [3, 2] }, react: { dbf: 1 } },
     sporePuff: { n: 'Spore Puff', hp: [14, 18], art: ['  .oOo.', ' ( ^ ^ )', "  '-~-'"], m: [{ n: 'Puff', a: [['pst', 'poison', 3]] }, { n: 'Bump', a: [['atk', 4]] }], ai: { cyc: [0, 1] } },
-    thornBeetle: { n: 'Thorn Beetle', hp: [30, 34], art: [' \\_/\\_/', ' (####)', ' /\\  /\\'], m: [{ n: 'Harden', a: [['blk', 9], ['st', 'thorns', 2]] }, { n: 'Ram', a: [['atk', 10]] }], ai: { first: 0, w: [1, 2] } },
-    cutpurse: { n: 'Cutpurse', hp: [22, 26], art: ['  ___', ' (>_<)', ' /)$(\\'], m: [{ n: 'Stab', a: [['atk', 8]] }, { n: 'Feint', a: [['blk', 6], ['pst', 'frail', 1]] }], ai: { w: [3, 2] } },
+    thornBeetle: { n: 'Thorn Beetle', hp: [30, 34], art: [' \\_/\\_/', ' (####)', ' /\\  /\\'], m: [{ n: 'Harden', a: [['blk', 9], ['st', 'thorns', 2]] }, { n: 'Ram', a: [['atk', 10]] }], ai: { first: 0, w: [1, 2] }, react: { low: 0 } },
+    cutpurse: { n: 'Cutpurse', hp: [22, 26], art: ['  ___', ' (>_<)', ' /)$(\\'], m: [{ n: 'Stab', a: [['atk', 8]] }, { n: 'Feint', a: [['blk', 6], ['pst', 'frail', 1]] }], ai: { w: [3, 2] }, hide: 'amount' },
     // act I elites
     ironbark: { n: 'Ironbark Brute', elite: true, hp: [80, 86], art: ['  [###]', ' {(O O)}', ' /|===|\\', '  /   \\'], m: [{ n: 'Smash', a: [['atk', 14]] }, { n: 'Roar', a: [['st', 'str', 2], ['pst', 'weak', 1]] }, { n: 'Batter', a: [['atk', 6, 2]] }], ai: { first: 1, cyc: [0, 2, 1] } },
-    lanternWraith: { n: 'Lantern Wraith', elite: true, hp: [64, 70], art: ['   .-.', '  ( * )', ' ~/| |\\~', "  '~~~'"], m: [{ n: 'Hex', a: [['pst', 'vuln', 2], ['pst', 'weak', 2]] }, { n: 'Wail', a: [['atk', 7, 2]] }, { n: 'Drain', a: [['atk', 11], ['heal', 8]] }], ai: { first: 0, cyc: [1, 2, 1, 0] } },
-    chitinKnight: { n: 'Chitin Knight', elite: true, hp: [72, 78], art: ['  _/^\\_', ' |[o_o]|', ' /|#|#|\\', '  d   b'], m: [{ n: 'Shell Up', a: [['blk', 15], ['st', 'str', 1]] }, { n: 'Lance', a: [['atk', 16]] }], ai: { first: 1, cyc: [0, 1, 1] } },
+    lanternWraith: { n: 'Lantern Wraith', elite: true, hp: [64, 70], art: ['   .-.', '  ( * )', ' ~/| |\\~', "  '~~~'"], m: [{ n: 'Hex', a: [['pst', 'vuln', 2], ['pst', 'weak', 2]] }, { n: 'Wail', a: [['atk', 7, 2]] }, { n: 'Drain', a: [['atk', 11], ['heal', 8]] }], ai: { first: 0, cyc: [1, 2, 1, 0] }, hide: 'all' },
+    chitinKnight: { n: 'Chitin Knight', elite: true, hp: [72, 78], art: ['  _/^\\_', ' |[o_o]|', ' /|#|#|\\', '  d   b'], m: [{ n: 'Shell Up', a: [['blk', 15], ['st', 'str', 1]] }, { n: 'Lance', a: [['atk', 16]] }], ai: { first: 1, cyc: [0, 1, 1] }, react: { low: 0 } },
     // act I boss
-    rootmaw: { n: 'The Rootmaw', boss: true, hp: [160, 160], art: ['  \\\\ || //', ' {=(@ @)=}', ' {  VVVV  }', '  \\ ^^^^ /', '  /|/  \\|\\'], m: [{ n: 'Entangle', a: [['pst', 'weak', 2], ['add', 'wound', 2, 'disc']] }, { n: 'Crush', a: [['atk', 18]] }, { n: 'Grow', a: [['st', 'str', 2], ['blk', 12]] }, { n: 'Thrash', a: [['atk', 5, 3]] }, { n: 'Uproot', a: [['st', 'str', 1], ['heal', 15], ['blk', 10]] }], ai: { first: 0, cyc: [1, 2, 3, 0], half: 4 } },
+    rootmaw: { n: 'The Rootmaw', boss: true, hp: [160, 160], art: ['  \\\\ || //', ' {=(@ @)=}', ' {  VVVV  }', '  \\ ^^^^ /', '  /|/  \\|\\'], m: [{ n: 'Entangle', a: [['pst', 'weak', 2], ['add', 'wound', 2, 'disc']] }, { n: 'Crush', a: [['atk', 18]] }, { n: 'Grow', a: [['st', 'str', 2], ['blk', 12]] }, { n: 'Thrash', a: [['atk', 5, 3]] }, { n: 'Uproot', a: [['st', 'str', 1], ['heal', 15], ['blk', 10]] }], ai: { first: 0, cyc: [1, 2, 3, 0] }, react: { low: 4 } },
     // --- act II ---
-    drownedSailor: { n: 'Drowned Sailor', hp: [48, 54], art: ['  _===_', ' ( x_x )', ' /|~~~|J'], m: [{ n: 'Hook', a: [['atk', 12]] }, { n: 'Brine', a: [['pst', 'frail', 2], ['atk', 6]] }], ai: { w: [3, 2] } },
-    inkEel: { n: 'Ink Eel', hp: [40, 44], art: ['  __', ' (o )~~~~', '  ""~~~~~~'], m: [{ n: 'Lash', a: [['atk', 7, 2]] }, { n: 'Ink Cloud', a: [['pst', 'weak', 2], ['blk', 8]] }], ai: { w: [3, 2] } },
-    shellCrab: { n: 'Shell Crab', hp: [56, 60], art: [' (\\_/)  ', ' {o_o}=', ' /^ ^\\'], m: [{ n: 'Shell', a: [['blk', 14]] }, { n: 'Pinch', a: [['atk', 15]] }], ai: { first: 1, cyc: [0, 1, 1] } },
-    sirenWisp: { n: 'Siren Wisp', hp: [36, 40], art: ['   ~*~', '  (o o)', '  ~~v~~'], m: [{ n: 'Lull', a: [['add', 'dazed', 2, 'draw']] }, { n: 'Shriek', a: [['atk', 10], ['pst', 'vuln', 1]] }], ai: { first: 0, cyc: [1, 1, 0] } },
+    drownedSailor: { n: 'Drowned Sailor', hp: [48, 54], art: ['  _===_', ' ( x_x )', ' /|~~~|J'], m: [{ n: 'Hook', a: [['atk', 12]] }, { n: 'Brine', a: [['pst', 'frail', 2], ['atk', 6]] }], ai: { w: [3, 2] }, react: { dbf: 0 } },
+    inkEel: { n: 'Ink Eel', hp: [40, 44], art: ['  __', ' (o )~~~~', '  ""~~~~~~'], m: [{ n: 'Lash', a: [['atk', 7, 2]] }, { n: 'Ink Cloud', a: [['pst', 'weak', 2], ['blk', 8]] }], ai: { w: [3, 2] }, hide: 'all' },
+    shellCrab: { n: 'Shell Crab', hp: [56, 60], art: [' (\\_/)  ', ' {o_o}=', ' /^ ^\\'], m: [{ n: 'Shell', a: [['blk', 14]] }, { n: 'Pinch', a: [['atk', 15]] }], ai: { first: 1, cyc: [0, 1, 1] }, react: { low: 0 } },
+    sirenWisp: { n: 'Siren Wisp', hp: [36, 40], art: ['   ~*~', '  (o o)', '  ~~v~~'], m: [{ n: 'Lull', a: [['add', 'dazed', 2, 'draw']] }, { n: 'Shriek', a: [['atk', 10], ['pst', 'vuln', 1]] }], ai: { first: 0, cyc: [1, 1, 0] }, hide: 'amount' },
     leechSwarm: { n: 'Leech Swarm', hp: [44, 48], art: [' ~s ~s', '~s ~s ~s', ' ~s ~s'], m: [{ n: 'Drain', a: [['atk', 9], ['heal', 9]] }, { n: 'Swarm', a: [['atk', 3, 4]] }], ai: { w: [2, 3] } },
     barnacleGolem: { n: 'Barnacle Golem', hp: [64, 70], art: ['  [o.o]', ' /[###]\\', '  || ||'], m: [{ n: 'Encrust', a: [['st', 'metal', 4]] }, { n: 'Pound', a: [['atk', 14]] }, { n: 'Slam', a: [['atk', 8], ['blk', 8]] }], ai: { first: 0, cyc: [1, 2] } },
     // act II elites
-    abyssKnight: { n: 'Abyssal Knight', elite: true, hp: [128, 134], art: ['  /|^|\\', ' [ -o- ]', ' /|###|\\', '  |   |'], m: [{ n: 'Charge', a: [['atk', 22]] }, { n: 'Parry', a: [['blk', 20], ['st', 'thorns', 3]] }, { n: 'Rally', a: [['st', 'str', 3]] }], ai: { first: 2, cyc: [0, 1, 0, 2] } },
+    abyssKnight: { n: 'Abyssal Knight', elite: true, hp: [128, 134], art: ['  /|^|\\', ' [ -o- ]', ' /|###|\\', '  |   |'], m: [{ n: 'Charge', a: [['atk', 22]] }, { n: 'Parry', a: [['blk', 20], ['st', 'thorns', 3]] }, { n: 'Rally', a: [['st', 'str', 3]] }], ai: { first: 2, cyc: [0, 1, 0, 2] }, react: { dbf: 0 } },
     brineWitch: { n: 'Brine Witch', elite: true, hp: [108, 114], art: ['   /\\', '  /__\\', ' (o_o)', ' /|~~|\\'], m: [{ n: 'Hex', a: [['pst', 'vuln', 2], ['pst', 'weak', 2]] }, { n: 'Boil', a: [['atk', 7, 3], ['add', 'burn', 1, 'disc']] }, { n: 'Brew', a: [['heal', 15], ['st', 'str', 2]] }], ai: { first: 0, cyc: [1, 2, 1, 0] } },
     coralHydra: { n: 'Coral Hydra', elite: true, hp: [136, 144], art: [' o_  _o_  _o', '  \\\\ || //', '   {####}', '   /    \\'], m: [{ n: 'Bite', a: [['atk', 10, 2]] }, { n: 'Regrow', a: [['st', 'regen', 6], ['blk', 10]] }, { n: 'Spit', a: [['pst', 'poison', 5], ['atk', 8]] }], ai: { first: 2, cyc: [0, 1, 0, 2] } },
     // act II boss
-    tideWarden: { n: 'The Tide Warden', boss: true, hp: [260, 260], art: ['   ~~/^\\~~', '  ( [O O] )', ' ~~|=====|~~', '   |#####|', '  ~/~~~~~\\~'], m: [{ n: 'Undertow', a: [['pst', 'weak', 2], ['pst', 'frail', 2], ['blk', 15]] }, { n: 'Breaker', a: [['atk', 24]] }, { n: 'Surge', a: [['atk', 7, 4]] }, { n: 'High Tide', a: [['blk', 25], ['st', 'str', 3]] }, { n: 'Maelstrom', a: [['add', 'dazed', 3, 'draw'], ['st', 'metal', 6]] }], ai: { first: 0, cyc: [1, 2, 3, 0], half: 4 } },
+    tideWarden: { n: 'The Tide Warden', boss: true, hp: [240, 240], art: ['   ~~/^\\~~', '  ( [O O] )', ' ~~|=====|~~', '   |#####|', '  ~/~~~~~\\~'], m: [{ n: 'Undertow', a: [['pst', 'weak', 2], ['pst', 'frail', 2], ['blk', 15]] }, { n: 'Breaker', a: [['atk', 24]] }, { n: 'Surge', a: [['atk', 7, 4]] }, { n: 'High Tide', a: [['blk', 25], ['st', 'str', 3]] }, { n: 'Maelstrom', a: [['add', 'dazed', 3, 'draw'], ['st', 'metal', 6]] }], ai: { first: 0, cyc: [1, 2, 3, 0] }, react: { low: 4 } },
     // --- act III ---
-    hollowSentinel: { n: 'Hollow Sentinel', hp: [80, 88], art: ['  [===]', ' [ (o) ]', '  [===]'], m: [{ n: 'Beam', a: [['atk', 18]] }, { n: 'Fortify', a: [['blk', 18], ['add', 'dazed', 1, 'disc']] }], ai: { first: 1, cyc: [0, 1] } },
-    ashPriest: { n: 'Ash Priest', hp: [70, 76], art: ['   _+_', '  (o o)', ' /|ash|\\'], m: [{ n: 'Pyre', a: [['add', 'burn', 2, 'disc'], ['atk', 6]] }, { n: 'Smite', a: [['atk', 16]] }, { n: 'Bless', a: [['st', 'str', 3]] }], ai: { first: 0, cyc: [1, 2, 1, 0] } },
-    mirrorShade: { n: 'Mirror Shade', hp: [60, 66], art: ['  .--.', ' |o  o|', " |'--'|", '  \\__/'], m: [{ n: 'Mimic', a: [['atk', 12], ['pst', 'vuln', 1]] }, { n: 'Shatter', a: [['atk', 5, 4]] }], ai: { w: [1, 1] } },
-    graveColossus: { n: 'Grave Colossus', hp: [110, 120], art: ['  [O__O]', ' /|####|\\', ' ||####||', '  |_||_|'], m: [{ n: 'Quake', a: [['atk', 24]] }, { n: 'Rest', a: [['blk', 12], ['st', 'str', 3]] }], ai: { first: 1, cyc: [0, 1] } },
+    hollowSentinel: { n: 'Hollow Sentinel', hp: [80, 88], art: ['  [===]', ' [ (o) ]', '  [===]'], m: [{ n: 'Beam', a: [['atk', 18]] }, { n: 'Fortify', a: [['blk', 18], ['add', 'dazed', 1, 'disc']] }], ai: { first: 1, cyc: [0, 1] }, react: { dbf: 1 } },
+    ashPriest: { n: 'Ash Priest', hp: [70, 76], art: ['   _+_', '  (o o)', ' /|ash|\\'], m: [{ n: 'Pyre', a: [['add', 'burn', 2, 'disc'], ['atk', 6]] }, { n: 'Smite', a: [['atk', 16]] }, { n: 'Bless', a: [['st', 'str', 3]] }], ai: { first: 0, cyc: [1, 2, 1, 0] }, react: { dbf: 2 } },
+    mirrorShade: { n: 'Mirror Shade', hp: [60, 66], art: ['  .--.', ' |o  o|', " |'--'|", '  \\__/'], m: [{ n: 'Mimic', a: [['atk', 12], ['pst', 'vuln', 1]] }, { n: 'Shatter', a: [['atk', 5, 4]] }], ai: { w: [1, 1] }, hide: 'all' },
+    graveColossus: { n: 'Grave Colossus', hp: [110, 120], art: ['  [O__O]', ' /|####|\\', ' ||####||', '  |_||_|'], m: [{ n: 'Quake', a: [['atk', 24]] }, { n: 'Rest', a: [['blk', 12], ['st', 'str', 3]] }], ai: { first: 1, cyc: [0, 1] }, react: { low: 0 } },
     venomDrake: { n: 'Venom Drake', hp: [90, 96], art: ['  /\\_/\\_', ' <(o>)  >~', '  \\/ \\/'], m: [{ n: 'Bile', a: [['pst', 'poison', 6]] }, { n: 'Claw', a: [['atk', 10, 2]] }], ai: { first: 0, cyc: [1, 1, 0] } },
     spiritMoth: { n: 'Spirit Moth', hp: [50, 54], art: [' \\\\ o //', '  =(_)=', ' // ^ \\\\'], m: [{ n: 'Dust', a: [['pst', 'weak', 2], ['pst', 'frail', 2]] }, { n: 'Flutter', a: [['atk', 7, 3]] }], ai: { first: 0, cyc: [1, 1, 0] } },
     // act III elites
-    revenant: { n: 'Crowned Revenant', elite: true, hp: [190, 200], art: ['  _/V\\_', ' ( x x )', ' /|=+=|\\', '  /   \\'], m: [{ n: 'Decree', a: [['st', 'str', 4], ['blk', 15]] }, { n: 'Execute', a: [['atk', 28]] }, { n: 'Cleave', a: [['atk', 12, 2]] }], ai: { first: 0, cyc: [2, 1, 0] } },
-    voidSigil: { n: 'Void Sigil', elite: true, hp: [170, 180], art: ['  .-*-.', ' *  @  *', "  '-*-'"], m: [{ n: 'Pulse', a: [['atk', 6, 5]] }, { n: 'Null', a: [['add', 'dazed', 3, 'draw'], ['blk', 12]] }, { n: 'Charge', a: [['blk', 30], ['st', 'str', 5]] }], ai: { first: 1, cyc: [0, 2, 0, 1] } },
+    revenant: { n: 'Crowned Revenant', elite: true, hp: [190, 200], art: ['  _/V\\_', ' ( x x )', ' /|=+=|\\', '  /   \\'], m: [{ n: 'Decree', a: [['st', 'str', 4], ['blk', 15]] }, { n: 'Execute', a: [['atk', 28]] }, { n: 'Cleave', a: [['atk', 12, 2]] }], ai: { first: 0, cyc: [2, 1, 0] }, react: { low: 1 } },
+    voidSigil: { n: 'Void Sigil', elite: true, hp: [170, 180], art: ['  .-*-.', ' *  @  *', "  '-*-'"], m: [{ n: 'Pulse', a: [['atk', 6, 5]] }, { n: 'Null', a: [['add', 'dazed', 3, 'draw'], ['blk', 12]] }, { n: 'Charge', a: [['blk', 30], ['st', 'str', 5]] }], ai: { first: 1, cyc: [0, 2, 0, 1] }, hide: 'amount' },
     gargoyle: { n: 'Obsidian Gargoyle', elite: true, hp: [180, 190], art: [' /\\(oo)/\\', ' \\ |##| /', '   /  \\'], m: [{ n: 'Petrify', a: [['pst', 'frail', 3], ['pst', 'vuln', 2]] }, { n: 'Rend', a: [['atk', 20]] }, { n: 'Stoneskin', a: [['st', 'metal', 6], ['blk', 10]] }], ai: { first: 2, cyc: [0, 1, 1] } },
     // act III boss
-    hollowMonarch: { n: 'The Hollow Monarch', boss: true, hp: [360, 360], art: ['   _/\\/\\/\\_', '  ( ([o o]) )', '   \\  ==  /', '  /|######|\\', '   /|    |\\'], m: [{ n: 'Command', a: [['st', 'str', 3], ['blk', 20]] }, { n: 'Ruin', a: [['atk', 28]] }, { n: 'Scatter', a: [['atk', 7, 5]] }, { n: 'Despair', a: [['add', 'wound', 2, 'draw'], ['pst', 'weak', 3], ['pst', 'vuln', 3]] }, { n: 'Unmake', a: [['st', 'str', 5], ['heal', 30], ['add', 'burn', 3, 'disc']] }], ai: { first: 3, cyc: [1, 0, 2, 3], half: 4 } }
+    hollowMonarch: { n: 'The Hollow Monarch', boss: true, hp: [360, 360], art: ['   _/\\/\\/\\_', '  ( ([o o]) )', '   \\  ==  /', '  /|######|\\', '   /|    |\\'], m: [{ n: 'Command', a: [['st', 'str', 3], ['blk', 20]] }, { n: 'Ruin', a: [['atk', 28]] }, { n: 'Scatter', a: [['atk', 7, 5]] }, { n: 'Despair', a: [['add', 'wound', 2, 'draw'], ['pst', 'weak', 3], ['pst', 'vuln', 3]] }, { n: 'Unmake', a: [['st', 'str', 5], ['heal', 30], ['add', 'burn', 3, 'disc']] }], ai: { first: 3, cyc: [1, 0, 2, 3] }, react: { low: 4, hideLow: 'amount' } }
   };
   var ENEMY_IDS = Object.keys(ENEMIES);
   var ENC = {
@@ -303,7 +320,8 @@
     moonShard: { n: 'Moon Shard', g: 'C', r: 'boss', d: '+1 Energy every turn. Each fight starts with 2 Dazed in your draw pile.' },
     starShard: { n: 'Star Shard', g: 'x', r: 'boss', d: '+1 Energy every turn. Card rewards offer one fewer card.' },
     bloodCrown: { n: 'Blood Crown', g: 'W', r: 'boss', d: '+1 Energy every turn. Lose 4 HP at the start of each fight.' },
-    deepPockets: { n: 'Deep Pockets', g: 'D', r: 'boss', d: 'Draw 1 more card every turn.' }
+    deepPockets: { n: 'Deep Pockets', g: 'D', r: 'boss', d: 'Draw 1 more card every turn.' },
+    spyglass: { n: 'Spyglass', g: 'Q', r: 'uncommon', d: 'Reveals hidden enemy intents on the first turn of each fight, and every 3rd turn.' }
   };
   var RELIC_IDS = Object.keys(RELICS);
   function has(R, id) { return R.relics.indexOf(id) >= 0; }
@@ -318,7 +336,7 @@
     opts = opts || {};
     seed = seed >>> 0;
     var R = {
-      v: VERSION, seed: seed, daily: opts.daily || '', started: opts.now || 0,
+      v: VERSION, seed: seed, daily: opts.daily || '', blind: !!opts.blind && !opts.daily, started: opts.now || 0,
       rng: {}, act: 1, floor: 0, hp: START_HP, mhp: START_HP, gold: 99,
       deck: [], nk: 1, relics: ['emberHeart'], counters: { atk: 0, play: 0 }, phoenixUsed: false,
       maps: [], pos: -1, trail: [], phase: 'map', c: null, rew: null, shop: null, evt: null, pick: null, rest: null, treasure: null,
@@ -441,8 +459,15 @@
     return enc.slice();
   }
   function mkEnemy(R, id) {
-    var d = ENEMIES[id], hp = rrange(R, 'cmb', d.hp[0], d.hp[1]);
-    return { id: id, hp: hp, mhp: hp, blk: 0, st: {}, mv: -1, hist: [], t: 0, cy: 0, dead: false, halfUsed: false };
+    var d = ENEMIES[id], hp = rrange(R, 'cmb', d.hp[0], d.hp[1]), act = d.boss || d.elite ? R.act : actOf(id);
+    hp = Math.max(1, Math.round(hp * (RULES.ehp[act - 1] || 1)));
+    // hide: what of its intent is hidden now (a boss phase can change it); halfUsed: its low-HP reaction is spent
+    return { id: id, hp: hp, mhp: hp, blk: 0, st: {}, mv: -1, hist: [], t: 0, cy: 0, dead: false, halfUsed: false, hide: d.hide || '', rt: 0, acted: 0, held: false, chg: 0 };
+  }
+  var ACT_OF = {};
+  function actOf(id) {
+    if (!ACT_OF.done) { [1, 2, 3].forEach(function (a) { ['weak', 'strong', 'elite'].forEach(function (k) { ENC[a][k].forEach(function (enc) { enc.forEach(function (x) { if (!ACT_OF[x]) ACT_OF[x] = a; }); }); }); ACT_OF[ENC[a].boss[0]] = a; }); ACT_OF.done = 1; }
+    return ACT_OF[id] || 1;
   }
   function startFight(R, kind, enc) {
     if (R.actFights == null) R.actFights = 0;
@@ -451,7 +476,8 @@
     R.stats.fights++;
     var C = {
       kind: kind, e: enc.map(function (id) { return mkEnemy(R, id); }), p: { hp: R.hp, mhp: R.mhp, blk: 0, st: {} },
-      hand: [], draw: [], disc: [], exh: [], en: 0, turn: 0, phase: 'player', ei: 0, played: 0, atks: 0, log: [], drawn: 0
+      hand: [], draw: [], disc: [], exh: [], en: 0, turn: 0, phase: 'player', ei: 0, played: 0, atks: 0, log: [], drawn: 0,
+      scout: 0, full: 0   // scout: the turn all hidden intents were revealed; full: the turn a draw hit the hand cap
     };
     R.c = C;
     R.phase = 'combat';
@@ -496,23 +522,33 @@
     C.en = energyMax(R) + (P.st.energyP || 0);
     if (C.turn === 1 && has(R, 'lantern')) C.en++;
     if (has(R, 'sundial') && C.turn % 3 === 0) C.en++;
-    var n = HAND + (P.st.drawP || 0) + (has(R, 'deepPockets') ? 1 : 0) + (C.turn === 1 && has(R, 'satchel') ? 2 : 0);
-    draw(R, n);
+    if (has(R, 'spyglass') && (C.turn === 1 || C.turn % 3 === 0)) C.scout = C.turn;
+    draw(R, drawCount(R));
     if (P.st.poisonAura) alive(C).forEach(function (e) { applySt(R, e, 'poison', P.st.poisonAura); });
   }
+  // how many cards the start of this turn draws (held cards are already in hand)
+  function drawCount(R) {
+    var C = R.c, P = C.p, bonus = (P.st.drawP || 0) + (has(R, 'deepPockets') ? 1 : 0);
+    if (C.turn <= 1) return RULES.first + bonus + (has(R, 'satchel') ? 2 : 0);
+    return Math.max(RULES.min, RULES.to - C.hand.length) + bonus;
+  }
+  // draw n cards; a full hand stops the draw (the rest stay in the draw pile). Returns how many were drawn.
   function draw(R, n) {
-    var C = R.c;
+    var C = R.c, got = 0;
     for (var i = 0; i < n; i++) {
+      if (C.hand.length >= MAX_HAND) { C.full = C.turn; log(R, { k: 'full', n: n - i }); break; }
       if (!C.draw.length) {
-        if (!C.disc.length) return;
+        if (!C.disc.length) break;
         C.draw = shuffle(R, 'shuf', C.disc);
         C.disc = [];
         log(R, { k: 'shuffle' });
       }
       var c = C.draw.pop();
-      if (C.hand.length >= MAX_HAND) C.disc.push(c);
-      else C.hand.push(c);
+      delete c.kept;
+      C.hand.push(c);
+      got++;
     }
+    return got;
   }
   // attack damage from src onto tgt (before block)
   function atkDmg(base, src, tgt) {
@@ -571,12 +607,14 @@
         log(R, { k: 'dmg', t: isP(R, src) ? 'p' : C.e.indexOf(src), n: th, b: sb, u: th - sb, thorns: true });
         if (isP(R, src)) { if (src.hp <= 0) checkDeath(R, ENEMIES[tgt.id].n + '\u2019s thorns'); }
         else if (src.hp <= 0) killE(R, src);
+        else if (th > sb) react(R, src, 'low');
       }
       if (!P && unb > 0 && C.p.st.envenom) applySt(R, tgt, 'poison', C.p.st.envenom);
       if (P && unb > 0 && has(R, 'mossyStone')) C.p.blk += 3;
     }
     if (P) { if (tgt.hp <= 0) checkDeath(R, why || (src && !isP(R, src) ? ENEMIES[src.id].n : 'a fight')); }
     else if (tgt.hp <= 0) killE(R, tgt);
+    else if (unb > 0) react(R, tgt, 'low');
     return unb;
   }
   function killE(R, e) {
@@ -590,6 +628,42 @@
     if (k === 'poison' && n > 0 && !isP(R, u) && has(R, 'venomGland')) n += 1;
     addSt(u, k, n);
     log(R, { k: 'st', t: isP(R, u) ? 'p' : R.c.e.indexOf(u), s: k, n: n });
+    if (n > 0 && (k === 'weak' || k === 'vuln') && !isP(R, u)) react(R, u, 'dbf');
+  }
+
+  // ---- intents: hidden ones, and enemies that change their plan mid-turn ----
+  // what of an enemy's intent you can't see right now: '' | 'amount' | 'all'
+  function hideLevel(R, e) {
+    var C = R.c;
+    if (!C || !e) return '';
+    var h = R.blind ? 'all' : e.hide != null ? e.hide : ENEMIES[e.id].hide || '';
+    if (!h) return '';
+    if (C.scout === C.turn || C.p.st.foresight || e.seen === C.turn) return '';
+    return h;
+  }
+  function react(R, e, why) {
+    var C = R.c, rc = ENEMIES[e.id].react;
+    if (!rc || !C || e.dead || R.phase !== 'combat') return;
+    if (why === 'low') {
+      if (rc.low == null || e.halfUsed || e.hp >= e.mhp * (rc.at || 0.5)) return;
+      e.halfUsed = true;
+      if (rc.hideLow) e.hide = rc.hideLow;
+      switchMove(R, e, rc.low, why);
+    } else if (why === 'dbf') {
+      if (rc.dbf == null || e.rt === C.turn || e.mv === rc.dbf) return;
+      e.rt = C.turn;
+      switchMove(R, e, rc.dbf, why);
+    }
+  }
+  function switchMove(R, e, m, why) {
+    var C = R.c;
+    if (e.mv === m && !(C.phase === 'enemy' && e.acted === C.turn)) return;
+    e.mv = m;
+    if (e.hist.length) e.hist[e.hist.length - 1] = m; else e.hist.push(m);
+    // it already acted this round: keep the new plan for its next turn
+    if (C.phase === 'enemy' && e.acted === C.turn) e.held = true;
+    e.chg = C.turn;
+    log(R, { k: 'intent', t: C.e.indexOf(e), why: why });
   }
   function gainBlk(R, n, fromCard) {
     var C = R.c, b = fromCard ? blockGain(R, n) : n;
@@ -742,6 +816,16 @@
         break;
       case 'dblStr': if (P.st.str > 0) applySt(R, P, 'str', P.st.str); break;
       case 'upHand': C.hand.forEach(function (c) { if (canUpgrade(c)) c.u = 1; }); break;
+      case 'scout': C.scout = C.turn; log(R, { k: 'scout' }); break;
+      case 'bide': gainBlk(R, a[1] * C.hand.length, true); break;
+      case 'counter':
+        if (tgt && !tgt.dead) {
+          tgt.seen = C.turn;
+          var ti = realIntent(R, tgt);
+          if (ti && ti.atk) gainBlk(R, Math.min(a[1], ti.dmg * ti.hits), false);
+          else draw(R, 2);
+        }
+        break;
     }
   }
   function finishIfWon(R) {
@@ -775,11 +859,15 @@
     delete P.st.fervor;
     if (P.st.regen) { healP(R, P.st.regen); addSt(P, 'regen', -1); }
     decay(P);
-    for (i = C.hand.length - 1; i >= 0; i--) {
+    // you keep the cards you didn't play; Ethereal cards exhaust, statuses and curses are discarded
+    var keep = [];
+    for (i = 0; i < C.hand.length; i++) {
       var c = C.hand[i], d = cdef(c);
-      if (d.eth) C.exh.push(c); else C.disc.push(c);
+      if (d.eth) C.exh.push(c);
+      else if (!playable(d) || d.t === 'sts' || d.t === 'crs') C.disc.push(c);
+      else { c.kept = C.turn + 1; keep.push(c); }
     }
-    C.hand = [];
+    C.hand = keep;
     if (finishIfWon(R)) return true;
     C.phase = 'enemy';
     C.ei = 0;
@@ -819,6 +907,7 @@
   function enemyAct(R, e) {
     var C = R.c, d = ENEMIES[e.id], mv = d.m[e.mv], P = C.p;
     e.t++;
+    e.acted = C.turn; e.held = false;
     log(R, { k: 'move', t: C.e.indexOf(e), n: mv.n });
     for (var i = 0; i < mv.a.length; i++) {
       var a = mv.a[i];
@@ -848,8 +937,9 @@
     startTurn(R);
   }
   function chooseIntent(R, e) {
-    var d = ENEMIES[e.id], ai = d.ai, m;
-    if (ai.half != null && !e.halfUsed && e.hp <= e.mhp / 2 && e.hist.length) { e.halfUsed = true; m = ai.half; }
+    var d = ENEMIES[e.id], ai = d.ai, rc = d.react, m;
+    if (e.held) { e.held = false; return; }   // it changed its plan after acting: that is its next move
+    if (rc && rc.low != null && !e.halfUsed && e.hp < e.mhp * (rc.at || 0.5) && e.hist.length) { e.halfUsed = true; if (rc.hideLow) e.hide = rc.hideLow; m = rc.low; }
     else if (!e.hist.length && ai.first != null) m = ai.first;
     else if (ai.cyc) { m = ai.cyc[(e.cy || 0) % ai.cyc.length]; e.cy = (e.cy || 0) + 1;
     } else {
@@ -865,10 +955,22 @@
     e.hist.push(m);
     if (e.hist.length > 12) e.hist.splice(0, e.hist.length - 12);
   }
-  // what an enemy is about to do, for display
+  // what an enemy is about to do, for display: hidden parts never leave the engine
+  // (hide 'all': only "?"; 'amount': the kinds of action, dmg/hits null). chg: it just changed its plan.
   function intentOf(R, e) {
+    var o = realIntent(R, e), h;
+    if (!o) return null;
+    h = hideLevel(R, e);
+    o.hide = h;
+    o.chg = e.chg === R.c.turn;
+    if (h === 'all') return { n: '?', atk: false, dmg: null, hits: null, def: false, buf: false, dbf: false, heal: false, add: false, hide: h, chg: o.chg };
+    if (h === 'amount') { o.n = '?'; o.dmg = o.atk ? null : 0; o.hits = o.atk ? null : 0; }
+    return o;
+  }
+  // the real plan (the engine and its tests only)
+  function realIntent(R, e) {
     if (!R.c || e.dead || e.mv < 0) return null;
-    var mv = ENEMIES[e.id].m[e.mv], o = { n: mv.n, atk: false, dmg: 0, hits: 0, def: false, buf: false, dbf: false, heal: false, add: false };
+    var mv = ENEMIES[e.id].m[e.mv], o = { n: mv.n, atk: false, dmg: 0, hits: 0, def: false, buf: false, dbf: false, heal: false, add: false, hide: '' };
     mv.a.forEach(function (a) {
       if (a[0] === 'atk') { o.atk = true; o.dmg = atkDmg(a[1], e, R.c.p); o.hits = a[2] || 1; }
       else if (a[0] === 'blk' || a[0] === 'blkAll') o.def = true;
@@ -879,11 +981,18 @@
     });
     return o;
   }
-  function incoming(R) {
-    if (!R.c) return 0;
-    var t = 0;
-    alive(R.c).forEach(function (e) { var o = intentOf(R, e); if (o && o.atk) t += o.dmg * o.hits; });
-    return t;
+  // the attack damage you can see coming (hidden attacks are not counted: see incomingInfo)
+  function incoming(R) { return incomingInfo(R).dmg; }
+  // { dmg: visible incoming damage, unknown: how many enemies might attack for an unknown amount }
+  function incomingInfo(R) {
+    var t = 0, u = 0;
+    if (R.c) alive(R.c).forEach(function (e) {
+      var o = intentOf(R, e);
+      if (!o) return;
+      if (o.hide === 'all' || (o.atk && o.dmg == null)) u++;
+      else if (o.atk) t += o.dmg * o.hits;
+    });
+    return { dmg: t, unknown: u };
   }
 
   // ---- after the fight ----
@@ -1301,19 +1410,23 @@
   }
 
   // ================= scoring, history, saves =================
+  var BLIND_BONUS = 1.5;   // Blindfold runs score half again as much
   function score(R) {
     var s = R.floor * 5 + R.stats.kills * 2 + R.stats.elites * 20 + R.stats.bosses * 60;
     if (R.won) s += 300 + Math.round(R.hp / Math.max(1, R.mhp) * 100);
+    if (R.blind) s = Math.round(s * BLIND_BONUS);
     return s;
   }
   function summary(R, now) {
     return {
-      seed: R.seed, daily: R.daily || '', won: !!R.won, act: R.act, floor: R.floor, score: score(R),
+      seed: R.seed, daily: R.daily || '', blind: !!R.blind, won: !!R.won, act: R.act, floor: R.floor, score: score(R),
       by: R.won ? '' : String(R.killedBy || ''), deck: R.deck.length, relics: R.relics.length,
       kills: R.stats.kills, elites: R.stats.elites, bosses: R.stats.bosses, maxHit: R.stats.maxHit, t: now || 0
     };
   }
-  function newStats() { return { runs: 0, wins: 0, bestFloor: 0, bestScore: 0, maxHit: 0, kills: 0, streak: 0, bestStreak: 0, hist: [], daily: {} }; }
+  // runs / wins / bests / streaks count normal runs; Blindfold runs keep their own record in .blind
+  function newBlindStats() { return { runs: 0, wins: 0, bestFloor: 0, bestScore: 0, streak: 0, bestStreak: 0 }; }
+  function newStats() { return { runs: 0, wins: 0, bestFloor: 0, bestScore: 0, maxHit: 0, kills: 0, streak: 0, bestStreak: 0, hist: [], daily: {}, blind: newBlindStats() }; }
   function num(v, d, lo, hi) { v = Number(v); if (!isFinite(v)) return d; if (lo != null && v < lo) v = lo; if (hi != null && v > hi) v = hi; return v; }
   function normStats(o) {
     var s = newStats();
@@ -1322,7 +1435,7 @@
     if (Array.isArray(o.hist)) {
       s.hist = o.hist.filter(function (h) { return h && typeof h === 'object'; }).slice(0, 30).map(function (h) {
         return {
-          seed: num(h.seed, 0, 0, 4294967295) >>> 0, daily: typeof h.daily === 'string' ? h.daily.slice(0, 10) : '', won: !!h.won,
+          seed: num(h.seed, 0, 0, 4294967295) >>> 0, daily: typeof h.daily === 'string' ? h.daily.slice(0, 10) : '', blind: !!h.blind, won: !!h.won,
           act: Math.floor(num(h.act, 1, 1, 3)), floor: Math.floor(num(h.floor, 0, 0, 99)), score: Math.floor(num(h.score, 0, 0, 1e6)),
           by: typeof h.by === 'string' ? h.by.slice(0, 40) : '', deck: Math.floor(num(h.deck, 0, 0, 999)), relics: Math.floor(num(h.relics, 0, 0, 99)),
           kills: Math.floor(num(h.kills, 0, 0, 9999)), elites: Math.floor(num(h.elites, 0, 0, 99)), bosses: Math.floor(num(h.bosses, 0, 0, 3)),
@@ -1330,6 +1443,7 @@
         };
       });
     }
+    if (o.blind && typeof o.blind === 'object') ['runs', 'wins', 'bestFloor', 'bestScore', 'streak', 'bestStreak'].forEach(function (k) { s.blind[k] = Math.floor(num(o.blind[k], 0, 0, 1e9)); });
     if (o.daily && typeof o.daily === 'object') {
       Object.keys(o.daily).slice(-60).forEach(function (k) {
         var d = o.daily[k];
@@ -1340,12 +1454,14 @@
   }
   function recordRun(stats, R, now) {
     var sm = summary(R, now);
-    stats.runs++;
-    if (sm.won) { stats.wins++; stats.streak++; } else stats.streak = 0;
-    stats.bestStreak = Math.max(stats.bestStreak, stats.streak);
-    var newBest = sm.score > stats.bestScore;
-    stats.bestFloor = Math.max(stats.bestFloor, sm.floor);
-    stats.bestScore = Math.max(stats.bestScore, sm.score);
+    if (!stats.blind) stats.blind = newBlindStats();
+    var rec = sm.blind ? stats.blind : stats;
+    rec.runs++;
+    if (sm.won) { rec.wins++; rec.streak++; } else rec.streak = 0;
+    rec.bestStreak = Math.max(rec.bestStreak, rec.streak);
+    var newBest = sm.score > rec.bestScore;
+    rec.bestFloor = Math.max(rec.bestFloor, sm.floor);
+    rec.bestScore = Math.max(rec.bestScore, sm.score);
     stats.maxHit = Math.max(stats.maxHit, sm.maxHit);
     stats.kills += sm.kills;
     stats.hist.unshift(sm);
@@ -1363,7 +1479,8 @@
   function validCards(a) { return Array.isArray(a) && a.every(validCard); }
   function normRun(o) {
     try {
-      if (!o || typeof o !== 'object' || o.v !== VERSION) return null;
+      // v1 saves (before hand retention / hidden intents) load too: the new fields get defaults below
+      if (!o || typeof o !== 'object' || (o.v !== VERSION && o.v !== 1)) return null;
       if (!validCards(o.deck) || !o.deck.length || !Array.isArray(o.relics) || !o.relics.every(function (r) { return RELICS.hasOwnProperty(r); })) return null;
       if (!Array.isArray(o.maps) || o.maps.length !== 3) return null;
       for (var m = 0; m < 3; m++) {
@@ -1398,6 +1515,8 @@
         R.relicPool[r] = Array.isArray(R.relicPool[r]) ? R.relicPool[r].filter(function (id) { return RELICS.hasOwnProperty(id); }) : [];
       });
       R.daily = typeof R.daily === 'string' ? R.daily.slice(0, 10) : '';
+      R.blind = !!R.blind && !R.daily;
+      R.v = VERSION;
       R.phoenixUsed = !!R.phoenixUsed;
       R.over = !!R.over; R.won = !!R.won;
       var ph = R.phase;
@@ -1408,6 +1527,15 @@
         if (!C.e.every(function (e) { return e && ENEMIES[e.id] && e.st && isFinite(e.hp) && Array.isArray(e.hist) && e.mv >= -1 && e.mv < ENEMIES[e.id].m.length; })) return null;
         if (['player', 'enemy'].indexOf(C.phase) < 0) return null;
         C.log = [];
+        C.e.forEach(function (e) {
+          var d = ENEMIES[e.id];
+          e.hide = e.hide === 'all' || e.hide === 'amount' || e.hide === '' ? e.hide : d.hide || '';
+          e.halfUsed = !!e.halfUsed; e.held = !!e.held;
+          e.rt = Math.floor(num(e.rt, 0, 0, 1e6)); e.acted = Math.floor(num(e.acted, 0, 0, 1e6)); e.chg = Math.floor(num(e.chg, 0, 0, 1e6));
+          if (e.seen != null) e.seen = Math.floor(num(e.seen, 0, 0, 1e6));
+        });
+        C.scout = Math.floor(num(C.scout, 0, 0, 1e6)); C.full = Math.floor(num(C.full, 0, 0, 1e6));
+        if (C.hand.length > MAX_HAND) C.disc = C.disc.concat(C.hand.splice(MAX_HAND));
         C.en = Math.floor(num(C.en, 0, 0, 99));
         C.p.hp = Math.floor(num(C.p.hp, 1, 0, 9999)); C.p.mhp = Math.floor(num(C.p.mhp, R.mhp, 1, 9999)); C.p.blk = Math.floor(num(C.p.blk, 0, 0, 99999));
       } else R.c = null;
@@ -1464,13 +1592,16 @@
         case 'secondWind': out.push('Exhaust all non-Attacks in your hand; gain ' + a[1] + ' Block for each.'); break;
         case 'dblStr': out.push('Double your Strength.'); break;
         case 'upHand': out.push('Upgrade every card in your hand for this fight.'); break;
+        case 'scout': out.push('Reveal all hidden enemy intents this turn.'); break;
+        case 'bide': out.push(P ? 'Gain ' + blockGainP(P, a[1] * Math.max(0, C.hand.length - (C.hand.indexOf(card) >= 0 ? 1 : 0))) + ' Block (' + a[1] + ' per other card in your hand).' : 'Gain ' + a[1] + ' Block per other card in your hand.'); break;
+        case 'counter': out.push('Reveal the enemy\u2019s intent. If it means to attack, gain Block equal to its attack damage (up to ' + a[1] + '). Otherwise, draw 2 cards.'); break;
       }
     });
     if (d.t === 'sts' || d.t === 'crs') {
       if (d.end && d.end[0] === 'burn') out.push('Unplayable. At the end of your turn, take 2 damage.');
-      else if (d.end && d.end[0] === 'regret') out.push('Unplayable. At the end of your turn, lose 1 HP per card in hand.');
+      else if (d.end && d.end[0] === 'regret') out.push('Unplayable. At the end of your turn, lose 1 HP per card in your hand (held cards count).');
       else if (d.end && d.end[0] === 'doubt') out.push('Unplayable. At the end of your turn, gain 1 Weak.');
-      else if (card.id === 'ooze') out.push('Does nothing. Costs 1 to get rid of.');
+      else if (card.id === 'ooze') out.push('Does nothing. Costs 1 to exhaust; never held past your turn.');
       else out.push('Unplayable.');
     }
     if (d.eth) out.push('Ethereal.');
@@ -1496,6 +1627,7 @@
       case 'spikes': return 'Whenever you gain Block from a card, deal ' + n + ' damage to a random enemy.';
       case 'fervor': return 'This turn, whenever you play an Attack, gain ' + n + ' Block.';
       case 'nextBlk': return 'Next turn, gain ' + n + ' Block.';
+      case 'foresight': return 'Hidden enemy intents are revealed for the rest of this fight.';
     }
     return '';
   }
@@ -1529,6 +1661,9 @@
       else if (k === 'secondWind') out.push(a[1] + ' blk ea');
       else if (k === 'exRand') out.push('exh 1');
       else if (k === 'ifVuln') out.push('VUL:+1en');
+      else if (k === 'scout') out.push('reveal');
+      else if (k === 'bide') out.push(a[1] + ' blk/card');
+      else if (k === 'counter') out.push('blk=atk');
     });
     if (d.t === 'sts' || d.t === 'crs') out.push(d.end ? d.end[0] : 'unplayable');
     return out.slice(0, 3).join(' \u00b7 ');
@@ -1587,12 +1722,13 @@
   }
 
   var ENGINE = {
-    VERSION: VERSION, ROWS: ROWS, COLS: COLS, FLOORS: FLOORS, START_HP: START_HP, MAX_HAND: MAX_HAND, ACT_NAMES: ACT_NAMES,
+    VERSION: VERSION, ROWS: ROWS, COLS: COLS, FLOORS: FLOORS, START_HP: START_HP, MAX_HAND: MAX_HAND, ACT_NAMES: ACT_NAMES, RULES: RULES, BLIND_BONUS: BLIND_BONUS,
     CARDS: CARDS, ENEMIES: ENEMIES, RELICS: RELICS, EVENTS: EVENTS, ENC: ENC, ST: ST, NODE: NODE, POOL: POOL,
     hashStr: hashStr, mix: mix, rnd: rnd, seedCode: seedCode, parseSeed: parseSeed, dailySeed: dailySeed, dateKey: dateKey,
     cdef: cdef, canUpgrade: canUpgrade, cardName: cardName, playable: playable,
     newRun: newRun, addCard: addCard, genMap: genMap, nextNodes: nextNodes, chooseNode: chooseNode, nodeType: nodeType, curMap: curMap, floorNo: floorNo,
     startFight: startFight, playCard: playCard, whyNot: whyNot, endTurn: endTurn, enemyStep: enemyStep, intentOf: intentOf, incoming: incoming,
+    incomingInfo: incomingInfo, realIntent: realIntent, hideLevel: hideLevel, drawCount: drawCount,
     atkDmg: atkDmg, alive: alive, energyMax: energyMax, has: has, gainRelic: gainRelic,
     takeCard: takeCard, skipCards: skipCards, takeRewardRelic: takeRewardRelic, takeBossRelic: takeBossRelic, proceed: proceed, takeTreasure: takeTreasure,
     restHeal: restHeal, restHealAmt: restHealAmt, restUpgrade: restUpgrade, restRemove: restRemove,
@@ -1611,7 +1747,7 @@
   Cade.loadCSS('deckbuilder.css');
 
   var PANEL_ID = 'deckbuilder-panel', NAME = 'Deck Delve';
-  var KEY = 'cade-deckbuilder-', RUN_KEY = KEY + 'run', STATS_KEY = KEY + 'stats', SOUND_KEY = KEY + 'sound', SEEN_KEY = KEY + 'seen';
+  var KEY = 'cade-deckbuilder-', RUN_KEY = KEY + 'run', STATS_KEY = KEY + 'stats', SOUND_KEY = KEY + 'sound', SEEN_KEY = KEY + 'seen', BLIND_KEY = KEY + 'blind';
   var S = null;
   if (window.__CADE_UNIT__) window.__CADE_UNIT__.deckbuilder = { live: function () { return S; }, render: function () { render(); }, E: ENGINE };
   var ROMAN = ['', 'I', 'II', 'III'];
@@ -1666,7 +1802,8 @@
     coin: function (s) { s.tone(988, 0.06, 'square', 0.025); s.tone(1319, 0.1, 'square', 0.022, 0, 0.06); },
     win: function (s) { [523, 659, 784, 1047].forEach(function (f, i) { s.tone(f, 0.14, 'triangle', 0.04, 0, i * 0.09); }); },
     lose: function (s) { [392, 330, 262, 196].forEach(function (f, i) { s.tone(f, 0.22, 'triangle', 0.04, 0, i * 0.14); }); },
-    step: function (s) { s.tone(440, 0.05, 'sine', 0.025, 520); }
+    step: function (s) { s.tone(440, 0.05, 'sine', 0.025, 520); },
+    chg: function (s) { s.tone(740, 0.06, 'square', 0.025); s.tone(554, 0.09, 'square', 0.022, 0, 0.07); }
   };
   function sfx(n) { if (S && S.snd.on && SFX[n]) SFX[n](S.snd); }
 
@@ -1737,7 +1874,7 @@
     var rel = R.relics.map(function (id) { return relicChip(id); }).join('');
     return '<div class="dk-stat"><span class="dk-hpv' + (hp <= mhp * 0.3 ? ' low' : '') + '">\u2665 ' + hp + '/' + mhp + '</span>' +
       '<span class="dk-gold">$' + R.gold + '</span><span class="dk-fl">Act ' + ROMAN[R.act] + ' \u00b7 F' + R.floor + '</span>' +
-      (R.daily ? '<span class="dk-daily">daily</span>' : '') +
+      (R.daily ? '<span class="dk-daily">daily</span>' : '') + (R.blind ? '<span class="dk-blind" title="Blindfold: every intent is hidden; score \u00d7' + E.BLIND_BONUS + '">blindfold</span>' : '') +
       '<button type="button" class="dk-rels" data-act="relics" aria-label="Relics">' + rel + '</button></div>';
   }
 
@@ -1777,14 +1914,15 @@
     var h = '<div class="dk-home"><pre class="dk-banner">' + esc(BANNER) + '</pre>' +
       '<p class="dk-sub">Build a deck. Climb three acts. Topple the Hollow Monarch.</p><div class="dk-menu">';
     if (saved) {
-      h += '<button type="button" class="dk-go" data-act="continue">Continue run<small>Act ' + ROMAN[saved.act] + ' \u00b7 floor ' + saved.floor + ' \u00b7 \u2665 ' + (saved.c ? saved.c.p.hp : saved.hp) + ' \u00b7 seed ' + E.seedCode(saved.seed) + (saved.daily ? ' \u00b7 daily' : '') + '</small></button>';
+      h += '<button type="button" class="dk-go" data-act="continue">Continue run<small>Act ' + ROMAN[saved.act] + ' \u00b7 floor ' + saved.floor + ' \u00b7 \u2665 ' + (saved.c ? saved.c.p.hp : saved.hp) + ' \u00b7 seed ' + E.seedCode(saved.seed) + (saved.daily ? ' \u00b7 daily' : '') + (saved.blind ? ' \u00b7 blindfold' : '') + '</small></button>';
     }
-    h += '<button type="button" class="dk-go' + (saved ? ' alt' : '') + '" data-act="new">New run<small>a random seed</small></button>';
+    h += '<button type="button" class="dk-go' + (saved ? ' alt' : '') + '" data-act="new">New run<small>a random seed' + (S.blind ? ' \u00b7 blindfolded' : '') + '</small></button>';
     h += '<button type="button" class="dk-go alt" data-act="daily">Daily delve<small>' + today + (dd ? ' \u00b7 best ' + dd.score + (dd.won ? ' \u00b7 won' : '') : ' \u00b7 the same seed for everyone') + '</small></button>';
     h += '<div class="dk-seedrow"><input class="dk-in" type="text" maxlength="24" placeholder="seed (e.g. 0BADGER)" aria-label="Seed" autocomplete="off" autocapitalize="characters" spellcheck="false"><button type="button" class="dk-go alt sm" data-act="seed">Play seed</button></div>';
+    h += '<button type="button" class="dk-mod' + (S.blind ? ' on' : '') + '" data-act="blind" role="switch" aria-checked="' + (S.blind ? 'true' : 'false') + '"><span class="dk-tog" aria-hidden="true"></span><span><b>Blindfold</b> <span class="dk-dim">' + (S.blind ? 'on' : 'off') + '</span><br><span class="dk-dim">Every enemy intent is hidden for the whole run (scouting still works). Score \u00d7' + E.BLIND_BONUS + ', separate records. New runs and seeds only \u2014 not the daily.</span></span></button>';
     h += '</div>';
     if (S.confirmNew) h += '<div class="dk-confirm">Abandon the current run? It counts as a loss. <button type="button" class="dk-lnk danger" data-act="new-yes">Abandon &amp; start</button> <button type="button" class="dk-lnk" data-act="new-no">Keep it</button></div>';
-    h += '<div class="dk-foot"><span>' + st.runs + ' runs \u00b7 ' + st.wins + ' wins \u00b7 best ' + st.bestScore + '</span><span><button type="button" class="dk-lnk" data-act="records">Records</button> <button type="button" class="dk-lnk" data-act="help">How to play</button></span></div></div>';
+    h += '<div class="dk-foot"><span>' + st.runs + ' runs \u00b7 ' + st.wins + ' wins \u00b7 best ' + st.bestScore + (st.blind && st.blind.runs ? ' \u00b7 blindfold ' + st.blind.wins + '/' + st.blind.runs : '') + '</span><span><button type="button" class="dk-lnk" data-act="records">Records</button> <button type="button" class="dk-lnk" data-act="help">How to play</button></span></div></div>';
     return h;
   }
 
@@ -1839,16 +1977,24 @@
   }
 
   // ---- combat ----
+  // could this enemy's intent be hidden (Blindfold, or its own nature)?
+  function hideable(R, e) { return R.blind ? 'all' : e.hide != null ? e.hide : E.ENEMIES[e.id].hide || ''; }
   function intentHTML(R, e) {
     var o = E.intentOf(R, e);
     if (!o) return '<div class="dk-int">&nbsp;</div>';
-    var parts = [];
-    if (o.atk) parts.push('<b class="i-atk">ATK ' + o.dmg + (o.hits > 1 ? '\u00d7' + o.hits : '') + '</b>');
-    if (o.def) parts.push('<b class="i-def">DEF</b>');
-    if (o.buf) parts.push('<b class="i-buf">BUFF</b>');
-    if (o.dbf) parts.push('<b class="i-dbf">' + (o.add ? 'CURSE' : 'DEBUFF') + '</b>');
-    if (o.heal) parts.push('<b class="i-heal">HEAL</b>');
-    return '<div class="dk-int" title="' + esc(o.n) + '">' + parts.join(' ') + '</div>';
+    var parts = [], title, rev = !o.hide && hideable(R, e);
+    if (o.hide === 'all') { parts.push('<b class="i-unk">?</b>'); title = 'Hidden intent \u2014 scout to reveal it'; }
+    else {
+      if (o.atk) parts.push('<b class="i-atk">ATK ' + (o.dmg == null ? '?' : o.dmg + (o.hits > 1 ? '\u00d7' + o.hits : '')) + '</b>');
+      if (o.def) parts.push('<b class="i-def">DEF</b>');
+      if (o.buf) parts.push('<b class="i-buf">BUFF</b>');
+      if (o.dbf) parts.push('<b class="i-dbf">' + (o.add ? 'CURSE' : 'DEBUFF') + '</b>');
+      if (o.heal) parts.push('<b class="i-heal">HEAL</b>');
+      title = o.hide ? 'Amounts hidden \u2014 scout to reveal them' : o.n + (rev ? ' (revealed)' : '');
+    }
+    if (rev) parts.unshift('<i class="i-rev" aria-hidden="true">\u25c9</i>');
+    if (o.chg) parts.unshift('<i class="i-chg" aria-hidden="true">!</i>');
+    return '<div class="dk-int' + (o.hide ? ' hid' : '') + (o.chg ? ' chg' : '') + '" title="' + esc(title) + (o.chg ? ' \u2014 it changed its plan' : '') + '">' + parts.join(' ') + '</div>';
   }
   function needsTarget(R, c) { var d = E.cdef(c); return d.tg === 'e' && E.alive(R.c).length > 1; }
   function combatHTML(C, frozen) {
@@ -1867,11 +2013,12 @@
     h += '</div>';
     var P = C.p, en = C.en, emax = E.energyMax(R) + (P.st.energyP || 0), pips = '';
     for (var k = 0; k < Math.max(en, emax); k++) pips += k < en ? '\u25c6' : '\u25c7';
-    var inc = frozen ? 0 : E.incoming(R);
+    var ii = frozen ? { dmg: 0, unknown: 0 } : E.incomingInfo(R), inc = ii.dmg, unk = ii.unknown ? '+?' : '';
     h += '<div class="dk-me" data-me="1"><div class="dk-en" title="Energy"><b>' + en + '/' + emax + '</b><span>' + pips + '</span></div>' +
       '<div class="dk-pl"><div class="dk-plh"><span class="dk-who">YOU</span> ' + bar(P.hp, P.mhp, 10) + ' <b>' + P.hp + '/' + P.mhp + '</b>' +
       (P.blk ? ' <span class="dk-st blk">BLK ' + P.blk + '</span>' : '') + '</div><div class="dk-sts">' + stChips(P) +
-      (inc ? '<span class="dk-inc' + (inc > P.blk ? ' bad' : '') + '">incoming ' + inc + (P.blk ? (inc > P.blk ? ' (' + (inc - P.blk) + ' through)' : ' (blocked)') : '') + '</span>' : '') + '</div></div></div>';
+      (inc || unk ? '<span class="dk-inc' + (inc > P.blk ? ' bad' : '') + '" title="' + (unk ? 'Some intents are hidden: ? may be more' : 'Damage the enemies will deal') + '">incoming ' + (inc || !unk ? inc : '') + (unk && inc ? unk : unk ? '?' : '') +
+        (inc && P.blk ? (inc > P.blk ? ' (' + (inc - P.blk) + unk + ' through)' : unk ? ' (' + P.blk + ' blk)' : ' (blocked)') : '') + '</span>' : '') + '</div></div></div>';
     var hint = S.hint;
     if (!hint) {
       if (frozen) hint = C.phase === 'won' || R.phase === 'reward' ? '<b>Victory!</b>' : '';
@@ -1880,18 +2027,24 @@
         var why = E.whyNot(R, selCard);
         hint = '<b>' + esc(E.cardName(selCard)) + '</b> ' + esc(E.cardText(selCard, { R: R, tgt: C.e[S.tgt] })) +
           '<span class="dk-dim"> \u2014 ' + (why ? esc(why) : tgtMode ? (needsTarget(R, selCard) ? 'tap an enemy (or the card again)' : 'tap again to play') : 'tap again to play') + '</span>';
-      } else hint = '<span class="dk-dim">' + (S.coarse ? 'Tap a card, then a target. Tap an enemy to see what it will do.' : 'Click a card (or 1\u20139), then a target (\u2190 \u2192, Enter). E ends the turn.') + '</span>';
+      } else if (C.full === C.turn && C.hand.length >= E.MAX_HAND) hint = '<b>Hand full</b> <span class="dk-dim">\u2014 ' + E.MAX_HAND + ' cards is the most you can hold; extra draws stay in your draw pile.</span>';
+      else hint = '<span class="dk-dim">' + (S.coarse ? 'Tap a card, then a target. Cards you don\u2019t play stay in your hand. Tap an enemy to see what it will do.' : 'Click a card (or 1\u20139, 0), then a target (\u2190 \u2192, Enter). Cards you don\u2019t play stay in your hand. E ends the turn.') + '</span>';
     }
     h += '<div class="dk-hint" aria-live="polite">' + hint + '</div>';
-    h += '<div class="dk-hand n' + C.hand.length + '">';
+    // cards held from last turn carry a small marker; it glows the first time the turn is shown
+    var fresh = S.keptC !== C || S.keptTurn !== C.turn;
+    S.keptC = C; S.keptTurn = C.turn;
+    h += '<div class="dk-hand n' + C.hand.length + (C.hand.length > 5 ? ' many' : '') + '" style="--n:' + Math.max(1, C.hand.length) + '">';
     C.hand.forEach(function (c, i) {
-      var why = frozen ? 'x' : E.whyNot(R, c);
-      h += cardHTML(c, { attr: 'data-h="' + i + '"', sel: i === sel, no: !!why, ctx: { R: R, tgt: tgtMode || E.cdef(c).tg === 'e' ? C.e[S.tgt] : null }, cls: 'k' + ((i + 1) % 10) });
+      var why = frozen ? 'x' : E.whyNot(R, c), kept = c.kept === C.turn;
+      h += cardHTML(c, { attr: 'data-h="' + i + '"' + (kept ? ' title="Held from last turn"' : ''), sel: i === sel, no: !!why, ctx: { R: R, tgt: tgtMode || E.cdef(c).tg === 'e' ? C.e[S.tgt] : null }, cls: 'k' + ((i + 1) % 10) + (kept ? ' kept' + (fresh && !frozen ? ' fresh' : '') : '') });
     });
     if (!C.hand.length) h += '<div class="dk-empty">' + (C.phase === 'enemy' ? '' : 'No cards in hand') + '</div>';
     h += '</div>';
     var busy = frozen || C.phase !== 'player' || S.busy;
-    h += '<div class="dk-bar2"><button type="button" class="dk-pile" data-pile="draw">Draw <b>' + C.draw.length + '</b></button>' +
+    var full = C.hand.length >= E.MAX_HAND;
+    h += '<div class="dk-bar2"><span class="dk-hc' + (full ? ' full' : '') + '" title="Cards in hand / the most you can hold">Hand <b>' + C.hand.length + '/' + E.MAX_HAND + '</b>' + (full ? '<i> full</i>' : '') + '</span>' +
+      '<button type="button" class="dk-pile" data-pile="draw">Draw <b>' + C.draw.length + '</b></button>' +
       '<button type="button" class="dk-pile" data-pile="disc">Discard <b>' + C.disc.length + '</b></button>' +
       '<button type="button" class="dk-pile" data-pile="exh">Exhaust <b>' + C.exh.length + '</b></button>' +
       '<button type="button" class="dk-end' + (!busy && !C.hand.some(function (c) { return !E.whyNot(R, c); }) ? ' hot' : '') + '" data-act="end"' + (busy ? ' disabled' : '') + '>End turn</button></div>';
@@ -2032,13 +2185,13 @@
     var h = '<div class="dk-scr"><pre class="dk-art2' + (R.won ? ' gold' : '') + '">' + esc(R.won ? ART.crown : ART.grave) + '</pre>';
     h += '<div class="dk-title">' + (R.won ? 'Victory' : 'Fallen') + '</div>';
     h += '<p class="dk-sub">' + (R.won ? 'The Hollow Monarch crumbles. The crown is yours.' : 'Slain by ' + esc(R.killedBy || 'the dark') + ' on floor ' + R.floor + ' (Act ' + ROMAN[R.act] + ').') + '</p>';
-    h += '<div class="dk-big">' + sm.score + '</div>' + (res.newBest ? '<div class="dk-new">NEW BEST SCORE</div>' : '<div class="dk-note">score</div>');
+    h += '<div class="dk-big">' + sm.score + '</div>' + (res.newBest ? '<div class="dk-new">NEW BEST' + (R.blind ? ' BLINDFOLD' : '') + ' SCORE</div>' : '<div class="dk-note">' + (R.blind ? 'blindfold score' : 'score') + '</div>');
     h += '<pre class="dk-tab">' +
       'floor     <b>' + R.floor + '</b>\n' +
       'enemies   <b>' + R.stats.kills + '</b>  elites <b>' + R.stats.elites + '</b>  bosses <b>' + R.stats.bosses + '</b>\n' +
       'best hit  <b>' + R.stats.maxHit + '</b>  cards played <b>' + R.stats.played + '</b>\n' +
       'deck      <b>' + R.deck.length + '</b>  relics <b>' + R.relics.length + '</b>  gold <b>' + R.gold + '</b>\n' +
-      'seed      <b>' + E.seedCode(R.seed) + '</b>' + (R.daily ? '  daily ' + R.daily : '') + '</pre>';
+      'seed      <b>' + E.seedCode(R.seed) + '</b>' + (R.daily ? '  daily ' + R.daily : '') + (R.blind ? '\nblindfold <b>score \u00d7' + E.BLIND_BONUS + '</b>' : '') + '</pre>';
     h += '<div class="dk-btns"><button type="button" class="dk-go" data-act="new">New run</button><button type="button" class="dk-go alt" data-act="home">Home</button></div>';
     return h + '<div class="dk-btns"><button type="button" class="dk-lnk" data-act="deck">Final deck</button><button type="button" class="dk-lnk" data-act="records">Records</button></div></div>';
   }
@@ -2052,7 +2205,10 @@
     if (k === 'help') {
       h = '<div class="dk-title">How to play</div>' +
         '<p>Climb three acts. Each act is a map: pick a path from the bottom to the <b>boss</b> at the top. Beat the third boss to win.</p>' +
-        '<p><b>Battles.</b> You get <b>3 energy</b> and <b>5 cards</b> a turn. A card\u2019s cost is in its corner. Attacks deal damage, <b>Block</b> soaks damage until your next turn, Powers last the whole fight. Every enemy shows its <b>intent</b> \u2014 what it will do next \u2014 so block when an attack is coming and hit hard when it is not.</p>' +
+        '<p><b>Battles.</b> You get <b>3 energy</b> a turn. A card\u2019s cost is in its corner. Attacks deal damage, <b>Block</b> soaks damage until your next turn, Powers last the whole fight. Every enemy shows its <b>intent</b> \u2014 what it will do next \u2014 so block when an attack is coming and hit hard when it is not.</p>' +
+        '<p><b>Your hand carries over.</b> Cards you don\u2019t play stay in your hand for the next turn (a small <b>\u25b4</b> marks cards you held). Each turn you draw back up to <b>5</b> cards \u2014 but always at least <b>2</b> new ones \u2014 so holding up to 3 cards is free and holding more costs fresh draws. You can hold at most <b>10</b>; past that, draws stay in your pile (\u201cHand full\u201d). <b>Ethereal</b> cards still vanish at the end of your turn, and statuses and curses are always discarded.</p>' +
+        '<p><b>Hidden intents.</b> Sneaky enemies hide their plans: <b class="i-unk">?</b> means you can\u2019t tell what is coming; <b>ATK ?</b> means an attack of unknown size. <b>Changing intents:</b> some enemies change their plan on the spot when badly hurt or when you make them Weak or Vulnerable \u2014 watch for the <b>intent changed!</b> flash. <b>Scouting</b> (the Scout and Counterplay cards, the Foresight power, the Spyglass relic) reveals hidden intents (<b>\u25c9</b>).</p>' +
+        '<p><b>Blindfold</b> (on the start screen) hides every enemy\u2019s intent for a whole run. Scouting still works. Blindfold runs score \u00d7' + E.BLIND_BONUS + ' and keep their own records.</p>' +
         '<p><b>Statuses.</b> <b>VUL</b>nerable: +50% damage taken. <b>WK</b> (weak): \u221225% damage dealt. <b>FRL</b> (frail): \u221225% Block. <b>PSN</b> (poison): loses HP each turn. <b>STR</b>ength / <b>DEX</b>terity add to damage / Block. Tap any status for details.</p>' +
         '<p><b>Between fights</b> you add cards, find relics (passive powers), heal or upgrade at rest sites, and buy or remove cards in shops. A lean deck draws its best cards more often.</p>' +
         '<div class="dk-keys"><span><b>Tap a card</b>, then an enemy (or tap the card again)</span><span><b>1\u20139, 0</b> pick a card \u00b7 <b>\u2190 \u2192</b> target \u00b7 <b>Enter</b> play</span><span><b>E</b> end turn \u00b7 <b>D</b> deck \u00b7 <b>Esc</b> cancel</span></div>' +
@@ -2081,11 +2237,15 @@
         'best score <b>' + st.bestScore + '</b>  best floor <b>' + st.bestFloor + '</b>\n' +
         'streak <b>' + st.streak + '</b>  best streak <b>' + st.bestStreak + '</b>\n' +
         'biggest hit <b>' + st.maxHit + '</b>  enemies slain <b>' + st.kills + '</b></pre>';
+      var bl = st.blind;
+      if (bl && bl.runs) h += '<div class="dk-h">Blindfold runs</div><pre class="dk-tab">' +
+        'runs <b>' + bl.runs + '</b>  wins <b>' + bl.wins + '</b>  win rate <b>' + Math.round(bl.wins / bl.runs * 100) + '%</b>\n' +
+        'best score <b>' + bl.bestScore + '</b>  best floor <b>' + bl.bestFloor + '</b>  best streak <b>' + bl.bestStreak + '</b></pre>';
       if (st.hist.length) {
         h += '<div class="dk-h">Recent runs</div><pre class="dk-tab hist">' + st.hist.slice(0, 12).map(function (x) {
           var res = x.won ? '<span class="g">WON  </span>' : 'act ' + x.act;
-          return res + ' F' + pad(x.floor, 2) + ' <b>' + pad(x.score, 4) + '</b> ' + E.seedCode(x.seed) + (x.daily ? ' D' : '  ') + ' <i>' + esc((x.won ? '' : x.by).slice(0, 18)) + '</i>';
-        }).join('\n') + '</pre>';
+          return res + ' F' + pad(x.floor, 2) + ' <b>' + pad(x.score, 4) + '</b> ' + E.seedCode(x.seed) + (x.daily ? ' D' : x.blind ? ' B' : '  ') + ' <i>' + esc((x.won ? '' : x.by).slice(0, 18)) + '</i>';
+        }).join('\n') + '</pre><p class="dk-note">D daily \u00b7 B blindfold. Run counts, wins and bests above are for normal runs; Blindfold keeps its own.</p>';
       } else h += '<p class="dk-note">No runs yet.</p>';
       var days = Object.keys(st.daily).sort().reverse().slice(0, 5);
       if (days.length) h += '<div class="dk-h">Daily delves</div><pre class="dk-tab">' + days.map(function (d) { var x = st.daily[d]; return d + '  <b>' + pad(x.score, 4) + '</b>  F' + x.floor + (x.won ? ' <span class="g">won</span>' : ''); }).join('\n') + '</pre>';
@@ -2133,9 +2293,14 @@
     if (!el || S.rm) return;
     el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
   }
+  function flash(el) {
+    var it = el && el.querySelector('.dk-int');
+    if (!it || S.rm) return;
+    it.classList.remove('flash'); void it.offsetWidth; it.classList.add('flash');
+  }
   function playFx(L) {
     if (!L || !L.length) return;
-    var per = {}, snd = {};
+    var per = {}, snd = {}, R0 = S.R;
     L.forEach(function (x) {
       var t = x.t, el = t != null && t !== -1 ? fxTarget(t) : null, i = per[t] = (per[t] || 0) + 1;
       if (x.k === 'dmg') {
@@ -2147,10 +2312,13 @@
       else if (x.k === 'st') pop(el, (x.n > 0 ? '+' : '') + x.n + ' ' + (E.ST[x.s] ? E.ST[x.s].g : x.s), 'st', i - 1);
       else if (x.k === 'kill') { snd.kill = 1; Cade.haptic && Cade.haptic(10); }
       else if (x.k === 'move') pop(el, x.n, 'mv', 0);
+      else if (x.k === 'intent') { pop(el, 'intent changed!', 'chg', 0); flash(el); snd.chg = 1; }
+      else if (x.k === 'scout') { E.alive(R0.c || { e: [] }).forEach(function (en) { var fe = fxTarget(R0.c.e.indexOf(en)); if (fe && hideable(R0, en)) { pop(fe, 'revealed', 'rev', 0); flash(fe); } }); }
+      else if (x.k === 'full') { pop(S.main.querySelector('.dk-hand'), 'Hand full', 'full', 0); snd.no = 1; }
       else if (x.k === 'phoenix') { pop(fxTarget('p'), 'REBORN', 'heal', 2); if (Cade.showToast) Cade.showToast('The Phoenix Feather burns away \u2014 you rise again!', 'success', 2400); }
       else if (x.k === 'play') { var d = E.CARDS[x.id]; snd[d.t === 'atk' ? 'atk' : d.t === 'pow' ? 'pow' : 'skl'] = 1; }
     });
-    ['atk', 'skl', 'pow', 'hit', 'blk', 'hurt', 'kill'].forEach(function (k) { if (snd[k]) sfx(k); });
+    ['atk', 'skl', 'pow', 'hit', 'blk', 'hurt', 'kill', 'chg', 'no'].forEach(function (k) { if (snd[k]) sfx(k); });
     if (snd.hurt) Cade.haptic && Cade.haptic(15);
   }
 
@@ -2212,8 +2380,15 @@
     if (selC && E.cdef(selC).tg === 'e' && C.phase === 'player' && !S.busy) { S.tgt = i; playSel(i); return; }
     S.tgt = i;
     // tell what it is and what it will do
-    var d = E.ENEMIES[e.id], o = E.intentOf(R, e), mv = d.m[e.mv];
+    var d = E.ENEMIES[e.id], o = E.intentOf(R, e), mv = o && !o.hide ? d.m[e.mv] : null;
     var parts = [];
+    if (o && o.hide === 'amount') {
+      if (o.atk) parts.push('attack for ? damage');
+      if (o.def) parts.push('block');
+      if (o.buf) parts.push('buff itself');
+      if (o.dbf) parts.push(o.add ? 'curse your deck' : 'weaken you');
+      if (o.heal) parts.push('heal');
+    }
     if (mv) mv.a.forEach(function (a) {
       if (a[0] === 'atk') parts.push('attack ' + o.dmg + (o.hits > 1 ? ' \u00d7' + o.hits : ''));
       else if (a[0] === 'blk') parts.push('block ' + a[1]);
@@ -2224,7 +2399,10 @@
       else if (a[0] === 'add') parts.push('shuffle ' + a[2] + ' ' + E.CARDS[a[1]].n + ' into your deck');
     });
     var sts = Object.keys(e.st).filter(function (k) { return E.ST[k] && e.st[k] && k !== 'turnStr'; }).map(function (k) { return E.ST[k].g + ' ' + e.st[k] + ': ' + E.ST[k].d; });
-    S.hint = '<b>' + esc(d.n) + '</b> ' + (mv ? 'will <b>' + esc(mv.n) + '</b>: ' + esc(parts.join(', ')) + '.' : '') + (sts.length ? ' <span class="dk-dim">' + esc(sts.join(' ')) + '</span>' : '');
+    var what = !o ? '' : o.hide === 'all' ? 'hides its intent (<b>?</b>). <span class="dk-dim">Scout to reveal it.</span>' : o.hide === 'amount' ? 'will ' + esc(parts.join(', ')) + '. <span class="dk-dim">The numbers are hidden: scout to reveal them.</span>'
+      : 'will <b>' + esc(mv.n) + '</b>: ' + esc(parts.join(', ')) + '.' + (o.chg ? ' <span class="dk-dim">(it changed its plan)</span>' : '');
+    var re = d.react, tell = re ? (re.low != null ? ' It changes plans when badly hurt.' : '') + (re.dbf != null ? ' It reacts to Weak / Vulnerable.' : '') : '';
+    S.hint = '<b>' + esc(d.n) + '</b> ' + what + (tell ? ' <span class="dk-dim">' + tell + '</span>' : '') + (sts.length ? ' <span class="dk-dim">' + esc(sts.join(' ')) + '</span>' : '');
     sfx('tap');
     render();
   }
@@ -2259,10 +2437,11 @@
     sdel(RUN_KEY);
   }
   function startRun(seed, daily) {
+    var blind = !daily && !!S.blind;
     if (S.R && !S.R.over && S.recorded !== S.R && S.R.floor > 0) { S.R.killedBy = 'abandoned'; S.R.over = true; finishRun(); }
     else if (S.R && S.R.over && S.recorded !== S.R) finishRun();
     clearTimeout(S.timer); clearTimeout(S.holdT);
-    S.R = E.newRun(seed, { daily: daily || '', now: Date.now() });
+    S.R = E.newRun(seed, { daily: daily || '', blind: blind, now: Date.now() });
     S.result = null; S.recorded = null; S.holdC = null; S.busy = false; S.sel = -1; S.hint = ''; S.confirmNew = false; S.view = 'run';
     saveRun();
     sfx('step');
@@ -2345,6 +2524,7 @@
         if (S.R && !S.R.over && S.R.floor > 0) { S.confirmNew = sd; render(); break; }
         startRun(sd); break;
       }
+      case 'blind': S.blind = !S.blind; sset(BLIND_KEY, S.blind ? '1' : '0'); sfx('tap'); render(); break;
       case 'records': S.resetArm = false; showCard('records'); break;
       case 'help': showCard('help'); break;
       case 'home': toHome(); break;
@@ -2466,7 +2646,7 @@
     S = {
       panel: p, head: hb, root: p.querySelector('.dk'), wrap: p.querySelector('.dk-wrap'), top: p.querySelector('.dk-top'), main: p.querySelector('.dk-main'),
       ovl: p.querySelector('.dk-ovl'), body: p.querySelector('.cade-panel-body'),
-      R: saved, stats: E.normStats(jget(STATS_KEY)), snd: new Snd(sget(SOUND_KEY) === '1'),
+      R: saved, stats: E.normStats(jget(STATS_KEY)), snd: new Snd(sget(SOUND_KEY) === '1'), blind: sget(BLIND_KEY) === '1',
       coarse: !!(mm && mm('(pointer: coarse)').matches), rm: !!(mm && mm('(prefers-reduced-motion: reduce)').matches),
       view: 'home', sel: -1, tgt: 0, hint: '', busy: false, timer: 0, holdC: null, holdT: 0, card: null, cardArg: null, pickSel: -1,
       result: null, recorded: null, confirmNew: false, resetArm: false, lastKind: ''
@@ -2529,9 +2709,9 @@
 
   Cade.registerWidget({
     name: NAME,
-    description: 'A card-battling roguelite \u2014 build a deck, climb a branching map through three acts; seeded runs, daily delve, saves mid-run',
+    description: 'A card-battling roguelite \u2014 build a deck, hold cards between turns, read (or scout) hidden enemy intents, climb three acts; seeded runs, daily delve, Blindfold mode, saves mid-run',
     icon: '\ud83d\udde1\ufe0f',
-    tags: 'game,cards,roguelite,deckbuilder,strategy,dungeon,relics,daily,seed,turn based,solo,ascii',
+    tags: 'game,cards,roguelite,deckbuilder,strategy,dungeon,relics,daily,seed,turn based,solo,ascii,blindfold,intents',
     open: open,
     _engine: ENGINE
   });
