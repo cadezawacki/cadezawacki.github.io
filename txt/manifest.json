@@ -3701,9 +3701,9 @@
       "id": "deckbuilder",
       "type": "widget",
       "name": "Deck Delve",
-      "description": "A card-battling roguelite — build a deck, climb a branching map through three acts; seeded runs, daily delve, saves mid-run",
+      "description": "A card-battling roguelite — build a deck, hold cards between turns, read (or scout) hidden enemy intents, climb three acts; seeded runs, daily delve, Blindfold mode, saves mid-run",
       "icon": "🗡️",
-      "tags": "game,cards,roguelite,deckbuilder,strategy,dungeon,relics,daily,seed,turn based,solo,ascii",
+      "tags": "game,cards,roguelite,deckbuilder,strategy,dungeon,relics,daily,seed,turn based,solo,ascii,blindfold,intents",
       "entry": "widgets/deckbuilder/deckbuilder.js",
       "css": "widgets/deckbuilder/deckbuilder.css"
     },
