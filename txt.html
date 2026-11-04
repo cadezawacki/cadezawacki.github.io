@@ -4087,7 +4087,7 @@ body.inbox-list .find-panel { display: none !important; }
 <div class="modal-overlay" id="split-overlay">
   <div class="modal-dialog" style="max-width: 380px;">
     <div class="modal-title">Split File</div>
-    <div class="modal-desc" id="split-desc">Cut the note into smaller files, numbered 1, 2, 3… in their original order.</div>
+    <div class="modal-desc" id="split-desc">Cut the note into smaller files, numbered 1, 2, 3… (zero-padded: 01, 02…) in their original order.</div>
     <div class="dl-quick-picks" role="radiogroup" aria-label="Split by">
       <button class="dl-pick" id="split-mode-count" role="radio" onclick="splitSetMode('count')">Number of files</button>
       <button class="dl-pick" id="split-mode-lines" role="radio" onclick="splitSetMode('lines')">Lines per file</button>
@@ -27179,7 +27179,8 @@ const _SPLIT_PREF = 'cade-split-file';
 let _split = { text: '', what: 'note', mode: 'count' };
 function _splitPrefs() { try { return JSON.parse(localStorage.getItem(_SPLIT_PREF)) || {}; } catch { return {}; } }
 function _splitExt() { return (document.getElementById('split-ext').value.trim().replace(/^\.+/, '') || 'txt'); }
-function _splitName(i) { return document.getElementById('split-prefix').value.trim() + (i + 1) + '.' + _splitExt(); }
+// Zero-padded to the widest number (01…12) so every file list sorts them in order.
+function _splitName(i, count) { return document.getElementById('split-prefix').value.trim() + String(i + 1).padStart(String(count).length, '0') + '.' + _splitExt(); }
 function _splitN() { return parseInt(document.getElementById('split-n').value, 10); }
 function _splitRender() {
   const countMode = _split.mode === 'count';
@@ -27196,9 +27197,9 @@ function _splitRender() {
   const fmt = x => x.toLocaleString();
   const ln = x => fmt(x) + ' line' + (x === 1 ? '' : 's');
   const list = parts.length <= 4
-    ? parts.map((p, i) => _splitName(i) + ' (' + ln(p.lines) + ')').join(', ')
-    : parts.slice(0, 2).map((p, i) => _splitName(i) + ' (' + ln(p.lines) + ')').join(', ') + ' … '
-      + _splitName(parts.length - 1) + ' (' + ln(parts[parts.length - 1].lines) + ')';
+    ? parts.map((p, i) => _splitName(i, parts.length) + ' (' + ln(p.lines) + ')').join(', ')
+    : parts.slice(0, 2).map((p, i) => _splitName(i, parts.length) + ' (' + ln(p.lines) + ')').join(', ') + ' … '
+      + _splitName(parts.length - 1, parts.length) + ' (' + ln(parts[parts.length - 1].lines) + ')';
   prev.textContent = ln(total) + ' → ' + fmt(parts.length) + ' file' + (parts.length === 1 ? '' : 's') + ': ' + list
     + (countMode && n > parts.length ? ' — only ' + ln(total) + ', so at most ' + fmt(total) + ' files' : '');
 }
@@ -27218,7 +27219,7 @@ window.openSplitFile = function(text, what) {
   document.getElementById('split-n').value = pf.n >= 1 ? pf.n : (_split.mode === 'lines' ? 100 : 2);
   document.getElementById('split-prefix').value = pf.prefix || '';
   document.getElementById('split-ext').value = pf.ext || 'txt';
-  document.getElementById('split-desc').textContent = 'Cut the ' + _split.what + ' into smaller files, numbered 1, 2, 3… in their original order.';
+  document.getElementById('split-desc').textContent = 'Cut the ' + _split.what + ' into smaller files, numbered 1, 2, 3… (zero-padded: 01, 02…) in their original order.';
   _splitRender();
   document.getElementById('split-overlay').classList.add('open');
   setTimeout(() => { const el = document.getElementById('split-n'); el.focus(); el.select(); }, 50);
@@ -27235,7 +27236,7 @@ window.confirmSplitFile = async function() {
   const prefix = document.getElementById('split-prefix').value.trim(), ext = _splitExt();
   try { localStorage.setItem(_SPLIT_PREF, JSON.stringify({ mode: _split.mode, n, prefix, ext })); } catch {}
   const zip = new JSZip();
-  parts.forEach((p, i) => zip.file(_splitName(i), p.text));
+  parts.forEach((p, i) => zip.file(_splitName(i, parts.length), p.text));
   try {
     const blob = await zip.generateAsync({ type: 'blob' });
     const base = (prefix.replace(/[-_.\s]+$/, '') || 'split') + '-' + _dlStamp();
