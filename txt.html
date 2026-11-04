@@ -1672,6 +1672,10 @@ body.split-open .mobile-toolbar { right: 50%; }
   transition: all var(--transition);
 }
 .dl-pick:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.dl-pick.active { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.split-row { display: flex; gap: 8px; }
+.split-row .form-group { flex: 1; min-width: 0; }
+.split-preview { color: var(--text-faint); font-size: var(--text-xs); margin: 2px 0 4px; line-height: 1.5; overflow-wrap: anywhere; }
 
 /* ============================================
    TOAST NOTIFICATIONS
@@ -4075,6 +4079,37 @@ body.inbox-list .find-panel { display: none !important; }
     <div class="modal-actions">
       <button class="btn" onclick="closeDownloadModal()">Cancel</button>
       <button class="btn btn-primary" onclick="confirmDownload()">Download</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== SPLIT FILE MODAL ========== -->
+<div class="modal-overlay" id="split-overlay">
+  <div class="modal-dialog" style="max-width: 380px;">
+    <div class="modal-title">Split File</div>
+    <div class="modal-desc" id="split-desc">Cut the note into smaller files, numbered 1, 2, 3… in their original order.</div>
+    <div class="dl-quick-picks" role="radiogroup" aria-label="Split by">
+      <button class="dl-pick" id="split-mode-count" role="radio" onclick="splitSetMode('count')">Number of files</button>
+      <button class="dl-pick" id="split-mode-lines" role="radio" onclick="splitSetMode('lines')">Lines per file</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="split-n" id="split-n-label">Number of files</label>
+      <input class="form-input" id="split-n" type="number" inputmode="numeric" min="1" step="1" autocomplete="off">
+    </div>
+    <div class="split-row">
+      <div class="form-group">
+        <label class="form-label" for="split-prefix">Name prefix (optional)</label>
+        <input class="form-input" id="split-prefix" placeholder="e.g. part-" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="form-group" style="flex:0 0 96px;">
+        <label class="form-label" for="split-ext">Extension</label>
+        <input class="form-input" id="split-ext" placeholder="txt" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+    <div class="split-preview" id="split-preview"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeSplitFile()">Cancel</button>
+      <button class="btn btn-primary" id="split-go" onclick="confirmSplitFile()">Download .zip</button>
     </div>
   </div>
 </div>
@@ -10284,6 +10319,25 @@ async function main(ctx) {
 }`);
 
 
+
+// ---- Split File: one note out as numbered files in a .zip ----
+registerScript(`/**
+  {
+    "name": "Split File",
+    "description": "Split the note (or the selection) into smaller files by file count or a line threshold \\u2014 named 1, 2, 3\\u2026 in order, saved as a .zip",
+    "author": "Cade",
+    "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v6'/><polyline points='14 2 14 8 20 8'/><path d='M20 8v2'/><line x1='2' y1='13' x2='22' y2='13' stroke-dasharray='2 2'/><path d='M4 16v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4'/></svg>",
+    "tags": "split,file,files,chunk,chunks,divide,break,parts,lines,export,download,zip,separate"
+  }
+**/
+function main(ctx) {
+  // The whole note unless a range is explicitly selected (the current-row
+  // convention would otherwise hand us a single line).
+  var sel = null;
+  try { sel = window.Cade && window.Cade.editor.state.selection.main; } catch (e) {}
+  var explicit = sel && sel.from !== sel.to;
+  window.openSplitFile(explicit ? ctx.selection : ctx.fullText, explicit ? 'selection' : 'note');
+}`);
 
 // ============================================
 // UNICODE FANCY TEXT SCRIPTS
@@ -27091,6 +27145,115 @@ document.getElementById('download-overlay').addEventListener('click', function(e
 document.getElementById('dl-filename').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') { e.preventDefault(); confirmDownload(); }
   if (e.key === 'Escape') { e.preventDefault(); closeDownloadModal(); }
+});
+// ---- Split File: the reverse of an import — one note out as numbered files ----
+// Lines are dealt out in order, so 1, 2, 3… concatenated give back the
+// original text byte for byte. "count" spreads the lines as evenly as
+// possible (sizes differ by at most one line); "lines" fills each file to the
+// threshold and leaves the remainder in the last one.
+function _splitParts(text, mode, n) {
+  const lines = String(text).split('\n');
+  const endsNl = lines.length > 1 && lines[lines.length - 1] === '';
+  if (endsNl) lines.pop();
+  const total = lines.length;
+  n = Math.max(1, Math.floor(n) || 1);
+  const sizes = [];
+  if (mode === 'lines') {
+    for (let left = total; left > 0; left -= n) sizes.push(Math.min(n, left));
+  } else {
+    const k = Math.min(n, total), base = Math.floor(total / k), extra = total % k;
+    for (let i = 0; i < k; i++) sizes.push(base + (i < extra ? 1 : 0));
+  }
+  const parts = [];
+  let at = 0;
+  sizes.forEach((size, i) => {
+    const last = i === sizes.length - 1;
+    parts.push({ lines: size, text: lines.slice(at, at + size).join('\n') + (!last || endsNl ? '\n' : '') });
+    at += size;
+  });
+  return { total, parts };
+}
+window.__splitParts = _splitParts; // exposed for tests
+
+const _SPLIT_PREF = 'cade-split-file';
+let _split = { text: '', what: 'note', mode: 'count' };
+function _splitPrefs() { try { return JSON.parse(localStorage.getItem(_SPLIT_PREF)) || {}; } catch { return {}; } }
+function _splitExt() { return (document.getElementById('split-ext').value.trim().replace(/^\.+/, '') || 'txt'); }
+function _splitName(i) { return document.getElementById('split-prefix').value.trim() + (i + 1) + '.' + _splitExt(); }
+function _splitN() { return parseInt(document.getElementById('split-n').value, 10); }
+function _splitRender() {
+  const countMode = _split.mode === 'count';
+  document.getElementById('split-mode-count').classList.toggle('active', countMode);
+  document.getElementById('split-mode-lines').classList.toggle('active', !countMode);
+  document.getElementById('split-mode-count').setAttribute('aria-checked', String(countMode));
+  document.getElementById('split-mode-lines').setAttribute('aria-checked', String(!countMode));
+  document.getElementById('split-n-label').textContent = countMode ? 'Number of files' : 'Max lines per file';
+  const prev = document.getElementById('split-preview'), go = document.getElementById('split-go');
+  const n = _splitN();
+  if (!(n >= 1)) { prev.textContent = 'Enter a whole number of 1 or more.'; go.disabled = true; return; }
+  const { total, parts } = _splitParts(_split.text, _split.mode, n);
+  go.disabled = false;
+  const fmt = x => x.toLocaleString();
+  const ln = x => fmt(x) + ' line' + (x === 1 ? '' : 's');
+  const list = parts.length <= 4
+    ? parts.map((p, i) => _splitName(i) + ' (' + ln(p.lines) + ')').join(', ')
+    : parts.slice(0, 2).map((p, i) => _splitName(i) + ' (' + ln(p.lines) + ')').join(', ') + ' … '
+      + _splitName(parts.length - 1) + ' (' + ln(parts[parts.length - 1].lines) + ')';
+  prev.textContent = ln(total) + ' → ' + fmt(parts.length) + ' file' + (parts.length === 1 ? '' : 's') + ': ' + list
+    + (countMode && n > parts.length ? ' — only ' + ln(total) + ', so at most ' + fmt(total) + ' files' : '');
+}
+window.splitSetMode = function(mode) {
+  if (mode === _split.mode) return;
+  // Carry the size over so switching modes keeps the same split as a start.
+  const n = _splitN(), total = _splitParts(_split.text, 'count', 1).total;
+  _split.mode = mode;
+  if (n >= 1 && total) document.getElementById('split-n').value = Math.max(1, Math.ceil(total / n));
+  _splitRender();
+};
+window.openSplitFile = function(text, what) {
+  text = String(text || '');
+  if (!text.trim()) { showToast('Nothing to split — the ' + (what || 'note') + ' is empty', 'error', 2500); return; }
+  const pf = _splitPrefs();
+  _split = { text, what: what || 'note', mode: pf.mode === 'lines' ? 'lines' : 'count' };
+  document.getElementById('split-n').value = pf.n >= 1 ? pf.n : (_split.mode === 'lines' ? 100 : 2);
+  document.getElementById('split-prefix').value = pf.prefix || '';
+  document.getElementById('split-ext').value = pf.ext || 'txt';
+  document.getElementById('split-desc').textContent = 'Cut the ' + _split.what + ' into smaller files, numbered 1, 2, 3… in their original order.';
+  _splitRender();
+  document.getElementById('split-overlay').classList.add('open');
+  setTimeout(() => { const el = document.getElementById('split-n'); el.focus(); el.select(); }, 50);
+};
+window.closeSplitFile = function() {
+  document.getElementById('split-overlay').classList.remove('open');
+  _split.text = '';
+};
+window.confirmSplitFile = async function() {
+  const n = _splitN();
+  if (!(n >= 1)) return;
+  if (typeof JSZip === 'undefined') { showToast('Zip library not loaded (offline?)', 'error', 3000); return; }
+  const { parts } = _splitParts(_split.text, _split.mode, n);
+  const prefix = document.getElementById('split-prefix').value.trim(), ext = _splitExt();
+  try { localStorage.setItem(_SPLIT_PREF, JSON.stringify({ mode: _split.mode, n, prefix, ext })); } catch {}
+  const zip = new JSZip();
+  parts.forEach((p, i) => zip.file(_splitName(i), p.text));
+  try {
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const base = (prefix.replace(/[-_.\s]+$/, '') || 'split') + '-' + _dlStamp();
+    _dlSaveBlob(blob, base + '.zip');
+    closeSplitFile();
+    showToast('Split into ' + parts.length + ' file' + (parts.length === 1 ? '' : 's') + ' (' + base + '.zip)', 'success', 2500);
+  } catch (err) { showToast('Zip error: ' + err.message, 'error'); }
+};
+document.getElementById('split-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeSplitFile();
+});
+['split-n', 'split-prefix', 'split-ext'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', _splitRender);
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmSplitFile(); }
+    if (e.key === 'Escape') { e.preventDefault(); closeSplitFile(); }
+  });
 });
 window.mobilePaste = function() {
   navigator.clipboard.readText().then(text => {
