@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.10.22-11",
+  "version": "2026.11.04-1",
   "modules": [
     {
       "id": "crawler",
@@ -1449,6 +1449,96 @@
       "settingKey": "plugins.smart-lists",
       "section": "Editor",
       "default": true
+    },
+    {
+      "id": "digest",
+      "type": "plugin",
+      "name": "Digest & Todo",
+      "description": "Jot anything in a “digest” room: when you leave it, it is filed into a “todo” room — grouped, ¥tagged, stamped with where and when it came from — and the digest room is cleared (Ctrl/⌘+D files it at once). @digest over a list does the same in any room. The todo room is a checklist with stats, collapsible groups and filters (List | Text). Type yy for ¥",
+      "entry": "plugins/digest/digest.js",
+      "css": "plugins/digest/digest.css",
+      "precache": [
+        "plugins/digest/digest-core.js"
+      ],
+      "settingKey": "plugins.digest",
+      "section": "Behavior",
+      "default": true,
+      "prefs": {
+        "title": "Digest & Todo",
+        "fields": [
+          {
+            "type": "heading",
+            "label": "Rooms"
+          },
+          {
+            "key": "digestRoom",
+            "type": "text",
+            "label": "Digest room",
+            "default": "digest",
+            "placeholder": "digest",
+            "maxLength": 100,
+            "hint": "Anything typed here moves to the todo room when you leave it (or press Ctrl/⌘+D), then the room is cleared"
+          },
+          {
+            "key": "todoRoom",
+            "type": "text",
+            "label": "Todo room",
+            "default": "todo",
+            "placeholder": "todo",
+            "maxLength": 100,
+            "hint": "Where digested items are filed under [ GROUP ] headings — created on the first digest"
+          },
+          {
+            "key": "atDigest",
+            "type": "toggle",
+            "label": "@digest in any room",
+            "default": true,
+            "hint": "An @digest line sends the list under it to the todo room when you leave that room"
+          },
+          {
+            "key": "dedupe",
+            "type": "toggle",
+            "label": "Skip duplicates",
+            "default": true,
+            "hint": "An item already open in the same group isn’t added a second time"
+          },
+          {
+            "type": "heading",
+            "label": "Todo list"
+          },
+          {
+            "key": "listView",
+            "type": "toggle",
+            "label": "Show the todo room as a checklist",
+            "default": true,
+            "hint": "The List | Text pill switches to the raw text"
+          },
+          {
+            "key": "showMeta",
+            "type": "toggle",
+            "label": "Show where and when items came from",
+            "default": true
+          },
+          {
+            "key": "doneStamp",
+            "type": "toggle",
+            "label": "Record when an item is checked off",
+            "default": true,
+            "hint": "Adds “✓ date time” to its line — the “done today” count uses it"
+          },
+          {
+            "type": "heading",
+            "label": "Typing"
+          },
+          {
+            "key": "yyYen",
+            "type": "toggle",
+            "label": "Type yy for ¥",
+            "default": true,
+            "hint": "“yy” at the start of a word becomes ¥ (a tag). A space or symbol right after turns it back, Backspace too; never in code"
+          }
+        ]
+      }
     },
     {
       "id": "callouts",

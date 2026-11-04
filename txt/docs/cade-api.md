@@ -148,6 +148,7 @@ plugins that need the core's own view of the document.
 | `Cade.inCodeFence(pos)` | `true` when `pos` is inside a ``` fenced block (fence lines included), from the core's tracked fence state — O(log n), no doc scan. Current as of the last view update (plugins in the plugin compartment see this transaction's state). |
 | `Cade.slashCodes()` | copy of the core's `"/code"` → symbol map (`{ '->': '➞', check: '✓', … }`). Codes are case-sensitive. |
 | `Cade.claimSlash(fn)` | register `fn() → boolean`; while it returns `true` the core's `/code` autocomplete dropdown stays closed (so a module's own "/" menu doesn't get a second popup stacked on it). One claimant; pass `null` to release. |
+| `Cade.addAtItem({ name, insert?, desc, kind?, when? })` | offer an `@name` directive in the core's `@` autocomplete (beside `@todo`, `@date`…). Accepting it only inserts the text (`kind` `'block'` — the default — or `'text'`; never an inline macro); the module acts on the directive itself. `when()` returning `false` hides it (e.g. while the module's toggle is off). Deduped by `name`; returns `false` for a bad name. Used by `plugins/digest` for `@digest`. |
 
 ## Widget preferences — `Cade.prefs(id)`
 
