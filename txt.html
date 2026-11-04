@@ -4089,7 +4089,7 @@ body.inbox-list .find-panel { display: none !important; }
 <div class="modal-overlay" id="split-overlay">
   <div class="modal-dialog" style="max-width: 400px;">
     <div class="modal-title">Split File</div>
-    <div class="modal-desc">Cut a file too big for one note into smaller files, numbered 01, 02, 03… in their original order. It's read in pieces, never all at once, and never leaves this device.</div>
+    <div class="modal-desc">Cut a file too big for one note into smaller files, numbered 01, 02, 03… in their original order — as a .zip, or as up to 50 temp rooms. It's read in pieces, never all at once.</div>
     <div class="imp-drop" id="split-drop">
       <div class="imp-drop-text" id="split-file-label">Drop a file here</div>
       <div class="imp-drop-actions">
@@ -4118,7 +4118,8 @@ body.inbox-list .find-panel { display: none !important; }
     <div class="split-preview" id="split-preview" aria-live="polite"></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeSplitFile()">Cancel</button>
-      <button class="btn btn-primary" id="split-go" onclick="confirmSplitFile()" disabled>Split &amp; download .zip</button>
+      <button class="btn" id="split-rooms" onclick="confirmSplitRooms()" disabled title="One self-deleting temp room per piece (up to 50)">Temp rooms</button>
+      <button class="btn btn-primary" id="split-go" onclick="confirmSplitFile()" disabled>Download .zip</button>
     </div>
   </div>
 </div>
@@ -27164,6 +27165,7 @@ document.getElementById('dl-filename').addEventListener('keydown', function(e) {
 const SPLIT_CHUNK = 4 * 1024 * 1024;
 const SPLIT_ZIP_MAX = 0xFFFFFFFF;  // classic zip offsets/sizes are 32-bit
 const SPLIT_MAX_FILES = 0xFFFF;    // classic zip entry count is 16-bit
+const SPLIT_ROOMS_MAX = 50;        // "Temp rooms": one room per piece, at most this many
 
 // Line count per part: "count" spreads lines as evenly as possible (sizes
 // differ by at most one); "lines" fills each part to the threshold.
@@ -27284,8 +27286,8 @@ function _splitRender() {
     b.setAttribute('aria-checked', String(m === _split.mode));
   });
   document.getElementById('split-n-label').textContent = countMode ? 'Number of files' : 'Max lines per file';
-  const go = document.getElementById('split-go');
-  go.disabled = true;
+  const go = document.getElementById('split-go'), roomsBtn = document.getElementById('split-rooms');
+  go.disabled = roomsBtn.disabled = true;
   if (_split.busy) return;
   if (!_split.file) { _splitStatus('Choose a file to split.'); return; }
   if (_split.total === null) return;  // still counting
@@ -27297,8 +27299,22 @@ function _splitRender() {
   const k = sizes.length, nm = i => _splitName(i, k) + ' (' + _splitLn(sizes[i]) + ')';
   const list = k <= 4 ? sizes.map((_, i) => nm(i)).join(', ') : nm(0) + ', ' + nm(1) + ' … ' + nm(k - 1);
   _splitStatus(_splitLn(_split.total) + ' → ' + k.toLocaleString() + ' file' + (k === 1 ? '' : 's') + ': ' + list
-    + (countMode && n > k ? ' — only ' + _splitLn(_split.total) + ', so at most ' + _split.total.toLocaleString() + ' files' : ''));
+    + (countMode && n > k ? ' — only ' + _splitLn(_split.total) + ', so at most ' + _split.total.toLocaleString() + ' files' : '')
+    + (k > SPLIT_ROOMS_MAX ? '. Temp rooms: at most ' + SPLIT_ROOMS_MAX + ' — use fewer, larger pieces.'
+      : '. Rooms: ' + (k === 1 ? _splitRoomNames(1)[0] : _splitRoomNames(k)[0] + ' … ' + _splitRoomNames(k)[k - 1]) + '.'));
   go.disabled = false;
+  roomsBtn.disabled = k > SPLIT_ROOMS_MAX;
+}
+
+// temp_<file name>_01, _02… — new names only, so no existing room is touched.
+function _splitRoomNames(count) {
+  const stem = (_split.file ? _split.file.name.replace(/\.[^.]*$/, '') : '').toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'split';
+  const width = String(count).length;
+  const make = base => Array.from({ length: count }, (_, i) => base + '_' + String(i + 1).padStart(width, '0'));
+  let names = make('temp_' + stem);
+  if (names.some(n => rooms.includes(n))) names = make('temp_' + stem + '_' + _tempStamp());
+  return names;
 }
 
 async function _splitSetFile(file) {
@@ -27390,6 +27406,46 @@ window.confirmSplitFile = async function() {
     if (e.message === 'cancelled') return;
     _splitRender();
     showToast('Split failed: ' + e.message, 'error', 3500);
+  }
+};
+// One temp room per piece. Each piece is read on its own (file.slice → text),
+// written through the room API and flagged temp, so it self-deletes with the
+// other temp rooms (Settings → Temp room lifetime).
+window.confirmSplitRooms = async function() {
+  const n = _splitN(), file = _split.file;
+  if (!(n >= 1) || !file || !_split.total || _split.busy) return;
+  const sizes = _splitSizes(_split.total, _split.mode, n);
+  if (sizes.length > SPLIT_ROOMS_MAX) return;
+  try { localStorage.setItem(_SPLIT_PREF, JSON.stringify({ mode: _split.mode, n, prefix: document.getElementById('split-prefix').value.trim() })); } catch {}
+  const job = _split.job = { cancelled: false };
+  _split.busy = true;
+  _splitRender();
+  const made = [];
+  try {
+    const parts = await _splitPlan(file, sizes, f => _splitStatus('Splitting… ' + Math.floor(f * 100) + '%'), job);
+    const names = _splitRoomNames(parts.length);
+    for (let i = 0; i < parts.length; i++) {
+      if (job.cancelled) throw new Error('cancelled');
+      _splitStatus('Creating rooms… ' + (i + 1) + ' / ' + parts.length);
+      const p = parts[i];
+      // The piece's own last line break would show as an empty last line.
+      const text = (await file.slice(p.start, p.end).text()).replace(/\r?\n$/, '');
+      await window.__roomsApi.write(names[i], text, { create: true, reason: 'split-file' });
+      made.push(names[i]);
+      if (roomMeta[names[i]]) { roomMeta[names[i]].temp = true; saveRoomMeta(); }
+    }
+    closeSplitFile();
+    try { renderRoomManagerList(); } catch {}
+    switchRoom(names[0]);
+    const ttl = (window.Settings && Settings.get('behavior.tempRoomTtl')) || '24';
+    showToast('Split ' + file.name + ' into ' + made.length + ' temp room' + (made.length === 1 ? '' : 's')
+      + (ttl === 'never' ? '' : ' — they self-delete after ' + ttl + 'h'), 'success', 3500);
+  } catch (e) {
+    _split.busy = false;
+    if (e.message === 'cancelled' && !made.length) return;
+    _splitRender();
+    if (made.length) showToast('Stopped after ' + made.length + ' room' + (made.length === 1 ? '' : 's') + ' (' + made[0] + ' …)' + (e.message === 'cancelled' ? '' : ': ' + e.message), 'error', 4500);
+    else showToast('Split failed: ' + e.message, 'error', 3500);
   }
 };
 const _splitDrop = document.getElementById('split-drop');
