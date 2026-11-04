@@ -4307,6 +4307,20 @@ window.Cade = (function () {
     //      doesn't stack on top of it ----
     slashCodes() { return window.__cadeSlashCodes ? window.__cadeSlashCodes() : {}; },
     claimSlash(fn) { window.__cadeSlashClaim = typeof fn === 'function' ? fn : null; },
+    // ---- an "@word" directive a module offers in the @-autocomplete (it is
+    //      only inserted — the module acts on it): { name, insert, desc,
+    //      kind: 'block' | 'text', when() → false hides it }. Deduped by name. ----
+    addAtItem(def) {
+      if (!def || typeof def.name !== 'string' || !/^[a-z][a-z0-9-]*$/i.test(def.name)) return false;
+      const list = window.__cadeAtItems || (window.__cadeAtItems = []);
+      const item = {
+        name: def.name.toLowerCase(), insert: String(def.insert || '@' + def.name), desc: String(def.desc || ''),
+        kind: def.kind === 'text' ? 'text' : 'block', when: typeof def.when === 'function' ? def.when : null,
+      };
+      const i = list.findIndex(x => x.name === item.name);
+      if (i >= 0) list[i] = item; else list.push(item);
+      return true;
+    },
     // ---- attached files (the Upload File store: content-addressed, compressed,
     //      encrypted and synced, GC'd once no note refers to them) ----
     files: {
@@ -9619,6 +9633,12 @@ function buildAutocompleteItems(prefix) {
     if (!prefix || p.name.startsWith(prefix)) {
       items.push({ label: p.insert, insert: p.insert, desc: p.desc, kind: p.kind });
     }
+  }
+  // Directives feature modules add (Cade.addAtItem) — e.g. @digest.
+  for (const p of (window.__cadeAtItems || [])) {
+    let on = true;
+    try { on = !p.when || p.when() !== false; } catch { on = false; }
+    if (on && (!prefix || p.name.startsWith(prefix))) items.push({ label: p.insert, insert: p.insert, desc: p.desc, kind: p.kind });
   }
   // @color highlight + palette (the palette only once you're typing "color").
   if (prefix && 'color'.startsWith(prefix)) {
