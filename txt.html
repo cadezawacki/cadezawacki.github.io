@@ -1672,7 +1672,9 @@ body.split-open .mobile-toolbar { right: 50%; }
   transition: all var(--transition);
 }
 .dl-pick:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
-.dl-pick.active { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.dl-pick.active { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 600; }
+/* A tap leaves :hover stuck on touch screens — don't let it pass for the selected mode. */
+@media (hover: none) { .dl-pick:hover:not(.active) { border-color: var(--border); color: var(--text); background: var(--surface-2); } }
 .split-row { display: flex; gap: 8px; }
 .split-row .form-group { flex: 1; min-width: 0; }
 .split-preview { color: var(--text-faint); font-size: var(--text-xs); margin: 2px 0 4px; line-height: 1.5; overflow-wrap: anywhere; }
@@ -4085,10 +4087,17 @@ body.inbox-list .find-panel { display: none !important; }
 
 <!-- ========== SPLIT FILE MODAL ========== -->
 <div class="modal-overlay" id="split-overlay">
-  <div class="modal-dialog" style="max-width: 380px;">
+  <div class="modal-dialog" style="max-width: 400px;">
     <div class="modal-title">Split File</div>
-    <div class="modal-desc" id="split-desc">Cut the note into smaller files, numbered 1, 2, 3… (zero-padded: 01, 02…) in their original order.</div>
-    <div class="dl-quick-picks" role="radiogroup" aria-label="Split by">
+    <div class="modal-desc">Cut a file too big for one note into smaller files, numbered 01, 02, 03… in their original order. It's read in pieces, never all at once, and never leaves this device.</div>
+    <div class="imp-drop" id="split-drop">
+      <div class="imp-drop-text" id="split-file-label">Drop a file here</div>
+      <div class="imp-drop-actions">
+        <button class="btn" onclick="splitPickFile()">Choose file…</button>
+        <button class="btn" onclick="splitUseNote()" title="Split the text of the open note instead">Use this note</button>
+      </div>
+    </div>
+    <div class="dl-quick-picks" role="radiogroup" aria-label="Split by" style="margin-top:12px;">
       <button class="dl-pick" id="split-mode-count" role="radio" onclick="splitSetMode('count')">Number of files</button>
       <button class="dl-pick" id="split-mode-lines" role="radio" onclick="splitSetMode('lines')">Lines per file</button>
     </div>
@@ -4106,13 +4115,16 @@ body.inbox-list .find-panel { display: none !important; }
         <input class="form-input" id="split-ext" placeholder="txt" autocomplete="off" spellcheck="false">
       </div>
     </div>
-    <div class="split-preview" id="split-preview"></div>
+    <div class="split-preview" id="split-preview" aria-live="polite"></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeSplitFile()">Cancel</button>
-      <button class="btn btn-primary" id="split-go" onclick="confirmSplitFile()">Download .zip</button>
+      <button class="btn btn-primary" id="split-go" onclick="confirmSplitFile()" disabled>Split &amp; download .zip</button>
     </div>
   </div>
 </div>
+<!-- Outside the overlay, like the import inputs: .click() on a hidden input
+     inside a display:none ancestor is unreliable on mobile browsers. -->
+<input type="file" id="split-file-input" style="display:none;">
 
 <!-- ========== SNAPSHOTS MODAL ========== -->
 <div class="modal-overlay" id="snapshots-overlay">
@@ -10320,23 +10332,18 @@ async function main(ctx) {
 
 
 
-// ---- Split File: one note out as numbered files in a .zip ----
+// ---- Split File: a file too big for one note, out as numbered files in a .zip ----
 registerScript(`/**
   {
     "name": "Split File",
-    "description": "Split the note (or the selection) into smaller files by file count or a line threshold \\u2014 named 1, 2, 3\\u2026 in order, saved as a .zip",
+    "description": "Split a large file into smaller ones by file count or a line threshold \\u2014 read in pieces, named 01, 02, 03\\u2026 in order, saved as a .zip",
     "author": "Cade",
     "icon": "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v6'/><polyline points='14 2 14 8 20 8'/><path d='M20 8v2'/><line x1='2' y1='13' x2='22' y2='13' stroke-dasharray='2 2'/><path d='M4 16v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4'/></svg>",
-    "tags": "split,file,files,chunk,chunks,divide,break,parts,lines,export,download,zip,separate"
+    "tags": "split,file,files,large,big,huge,upload,chunk,chunks,divide,break,parts,lines,export,download,zip,separate"
   }
 **/
 function main(ctx) {
-  // The whole note unless a range is explicitly selected (the current-row
-  // convention would otherwise hand us a single line).
-  var sel = null;
-  try { sel = window.Cade && window.Cade.editor.state.selection.main; } catch (e) {}
-  var explicit = sel && sel.from !== sel.to;
-  window.openSplitFile(explicit ? ctx.selection : ctx.fullText, explicit ? 'selection' : 'note');
+  window.openSplitFile();
 }`);
 
 // ============================================
@@ -27146,16 +27153,21 @@ document.getElementById('dl-filename').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') { e.preventDefault(); confirmDownload(); }
   if (e.key === 'Escape') { e.preventDefault(); closeDownloadModal(); }
 });
-// ---- Split File: the reverse of an import — one note out as numbered files ----
-// Lines are dealt out in order, so 1, 2, 3… concatenated give back the
-// original text byte for byte. "count" spreads the lines as evenly as
-// possible (sizes differ by at most one line); "lines" fills each file to the
-// threshold and leaves the remainder in the last one.
-function _splitParts(text, mode, n) {
-  const lines = String(text).split('\n');
-  const endsNl = lines.length > 1 && lines[lines.length - 1] === '';
-  if (endsNl) lines.pop();
-  const total = lines.length;
+// ---- Split File: a file too big for one note, out as numbered files ----
+// The file is never read whole. Pass 1 counts its lines a chunk at a time;
+// pass 2 walks it again to find where each part ends and checksum it. The
+// parts are byte ranges of the original (file.slice), so the .zip is a Blob
+// stitched from small headers and those slices: the browser streams them
+// from disk when the download runs and nothing is copied into memory.
+// Lines are cut at "\n" bytes, so any encoding and CRLF survive unchanged,
+// and 01, 02, 03… concatenated give back the original byte for byte.
+const SPLIT_CHUNK = 4 * 1024 * 1024;
+const SPLIT_ZIP_MAX = 0xFFFFFFFF;  // classic zip offsets/sizes are 32-bit
+const SPLIT_MAX_FILES = 0xFFFF;    // classic zip entry count is 16-bit
+
+// Line count per part: "count" spreads lines as evenly as possible (sizes
+// differ by at most one); "lines" fills each part to the threshold.
+function _splitSizes(total, mode, n) {
   n = Math.max(1, Math.floor(n) || 1);
   const sizes = [];
   if (mode === 'lines') {
@@ -27164,89 +27176,233 @@ function _splitParts(text, mode, n) {
     const k = Math.min(n, total), base = Math.floor(total / k), extra = total % k;
     for (let i = 0; i < k; i++) sizes.push(base + (i < extra ? 1 : 0));
   }
-  const parts = [];
-  let at = 0;
-  sizes.forEach((size, i) => {
-    const last = i === sizes.length - 1;
-    parts.push({ lines: size, text: lines.slice(at, at + size).join('\n') + (!last || endsNl ? '\n' : '') });
-    at += size;
-  });
-  return { total, parts };
+  return sizes;
 }
-window.__splitParts = _splitParts; // exposed for tests
+
+async function _splitEachChunk(file, onChunk, onProgress, job) {
+  for (let at = 0; at < file.size; at += SPLIT_CHUNK) {
+    if (job.cancelled) throw new Error('cancelled');
+    const buf = new Uint8Array(await file.slice(at, Math.min(at + SPLIT_CHUNK, file.size)).arrayBuffer());
+    onChunk(buf, at);
+    if (onProgress) onProgress(Math.min(1, (at + buf.length) / file.size));
+  }
+}
+
+// Lines in the file: one per "\n", plus an unterminated last line.
+async function _splitCountLines(file, onProgress, job) {
+  let lines = 0, last = 10;
+  await _splitEachChunk(file, buf => {
+    for (let i = buf.indexOf(10); i >= 0; i = buf.indexOf(10, i + 1)) lines++;
+    if (buf.length) last = buf[buf.length - 1];
+  }, onProgress, job);
+  return lines + (file.size && last !== 10 ? 1 : 0);
+}
+
+let _splitCrcTable = null;
+function _splitCrc(crc, buf, from, to) {
+  if (!_splitCrcTable) {
+    _splitCrcTable = new Int32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      _splitCrcTable[n] = c;
+    }
+  }
+  const t = _splitCrcTable;
+  crc = ~crc;
+  for (let i = from; i < to; i++) crc = t[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
+  return ~crc >>> 0;
+}
+
+// Byte range and CRC-32 of every part.
+async function _splitPlan(file, sizes, onProgress, job) {
+  const parts = [];
+  let part = 0, inPart = 0, start = 0, crc = 0;
+  const close = end => { parts.push({ start, end, lines: sizes[part], crc }); part++; inPart = 0; start = end; crc = 0; };
+  await _splitEachChunk(file, (buf, at) => {
+    let from = 0;
+    for (let i = buf.indexOf(10); i >= 0 && part < sizes.length - 1; i = buf.indexOf(10, i + 1)) {
+      if (++inPart === sizes[part]) { crc = _splitCrc(crc, buf, from, i + 1); from = i + 1; close(at + i + 1); }
+    }
+    crc = _splitCrc(crc, buf, from, buf.length);
+  }, onProgress, job);
+  if (sizes.length) close(file.size);  // the last part runs to the end
+  return parts;
+}
+
+// A stored (uncompressed) .zip as a Blob of headers + slices of `file`.
+function _splitZip(file, parts, names) {
+  const enc = new TextEncoder(), now = new Date();
+  const time = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const date = ((Math.max(1980, now.getFullYear()) - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  const head = (len, fill) => { const b = new Uint8Array(len); fill(new DataView(b.buffer)); return b; };
+  const pieces = [], central = [];
+  let offset = 0;
+  parts.forEach((p, i) => {
+    const name = enc.encode(names[i]), size = p.end - p.start;
+    const local = head(30 + name.length, v => {
+      v.setUint32(0, 0x04034b50, true); v.setUint16(4, 20, true); v.setUint16(6, 0x0800, true);  // UTF-8 names
+      v.setUint16(8, 0, true); v.setUint16(10, time, true); v.setUint16(12, date, true);
+      v.setUint32(14, p.crc, true); v.setUint32(18, size, true); v.setUint32(22, size, true);
+      v.setUint16(26, name.length, true); v.setUint16(28, 0, true);
+    });
+    local.set(name, 30);
+    central.push(head(46 + name.length, v => {
+      v.setUint32(0, 0x02014b50, true); v.setUint16(4, 20, true); v.setUint16(6, 20, true); v.setUint16(8, 0x0800, true);
+      v.setUint16(10, 0, true); v.setUint16(12, time, true); v.setUint16(14, date, true);
+      v.setUint32(16, p.crc, true); v.setUint32(20, size, true); v.setUint32(24, size, true);
+      v.setUint16(28, name.length, true); v.setUint32(42, offset, true);
+    }));
+    central[central.length - 1].set(name, 46);
+    pieces.push(local, file.slice(p.start, p.end));
+    offset += local.length + size;
+  });
+  const cdSize = central.reduce((n, c) => n + c.length, 0);
+  const end = head(22, v => {
+    v.setUint32(0, 0x06054b50, true); v.setUint16(8, parts.length, true); v.setUint16(10, parts.length, true);
+    v.setUint32(12, cdSize, true); v.setUint32(16, offset, true);
+  });
+  return { blob: new Blob(pieces.concat(central, [end]), { type: 'application/zip' }), size: offset + cdSize + 22 };
+}
+window.__split = { sizes: _splitSizes, countLines: _splitCountLines, plan: _splitPlan, zip: _splitZip }; // for tests
 
 const _SPLIT_PREF = 'cade-split-file';
-let _split = { text: '', what: 'note', mode: 'count' };
+let _split = { file: null, total: null, mode: 'count', job: null, busy: false };
 function _splitPrefs() { try { return JSON.parse(localStorage.getItem(_SPLIT_PREF)) || {}; } catch { return {}; } }
 function _splitExt() { return (document.getElementById('split-ext').value.trim().replace(/^\.+/, '') || 'txt'); }
 // Zero-padded to the widest number (01…12) so every file list sorts them in order.
 function _splitName(i, count) { return document.getElementById('split-prefix').value.trim() + String(i + 1).padStart(String(count).length, '0') + '.' + _splitExt(); }
 function _splitN() { return parseInt(document.getElementById('split-n').value, 10); }
+const _splitLn = x => x.toLocaleString() + ' line' + (x === 1 ? '' : 's');
+function _splitStatus(msg) { document.getElementById('split-preview').textContent = msg; }
+
 function _splitRender() {
   const countMode = _split.mode === 'count';
-  document.getElementById('split-mode-count').classList.toggle('active', countMode);
-  document.getElementById('split-mode-lines').classList.toggle('active', !countMode);
-  document.getElementById('split-mode-count').setAttribute('aria-checked', String(countMode));
-  document.getElementById('split-mode-lines').setAttribute('aria-checked', String(!countMode));
+  ['count', 'lines'].forEach(m => {
+    const b = document.getElementById('split-mode-' + m);
+    b.classList.toggle('active', m === _split.mode);
+    b.setAttribute('aria-checked', String(m === _split.mode));
+  });
   document.getElementById('split-n-label').textContent = countMode ? 'Number of files' : 'Max lines per file';
-  const prev = document.getElementById('split-preview'), go = document.getElementById('split-go');
+  const go = document.getElementById('split-go');
+  go.disabled = true;
+  if (_split.busy) return;
+  if (!_split.file) { _splitStatus('Choose a file to split.'); return; }
+  if (_split.total === null) return;  // still counting
+  if (!_split.total) { _splitStatus('That file is empty — nothing to split.'); return; }
   const n = _splitN();
-  if (!(n >= 1)) { prev.textContent = 'Enter a whole number of 1 or more.'; go.disabled = true; return; }
-  const { total, parts } = _splitParts(_split.text, _split.mode, n);
+  if (!(n >= 1)) { _splitStatus('Enter a whole number of 1 or more.'); return; }
+  const sizes = _splitSizes(_split.total, _split.mode, n);
+  if (sizes.length > SPLIT_MAX_FILES) { _splitStatus('That makes ' + sizes.length.toLocaleString() + ' files — the most a .zip holds is ' + SPLIT_MAX_FILES.toLocaleString() + '. Raise the lines per file.'); return; }
+  const k = sizes.length, nm = i => _splitName(i, k) + ' (' + _splitLn(sizes[i]) + ')';
+  const list = k <= 4 ? sizes.map((_, i) => nm(i)).join(', ') : nm(0) + ', ' + nm(1) + ' … ' + nm(k - 1);
+  _splitStatus(_splitLn(_split.total) + ' → ' + k.toLocaleString() + ' file' + (k === 1 ? '' : 's') + ': ' + list
+    + (countMode && n > k ? ' — only ' + _splitLn(_split.total) + ', so at most ' + _split.total.toLocaleString() + ' files' : ''));
   go.disabled = false;
-  const fmt = x => x.toLocaleString();
-  const ln = x => fmt(x) + ' line' + (x === 1 ? '' : 's');
-  const list = parts.length <= 4
-    ? parts.map((p, i) => _splitName(i, parts.length) + ' (' + ln(p.lines) + ')').join(', ')
-    : parts.slice(0, 2).map((p, i) => _splitName(i, parts.length) + ' (' + ln(p.lines) + ')').join(', ') + ' … '
-      + _splitName(parts.length - 1, parts.length) + ' (' + ln(parts[parts.length - 1].lines) + ')';
-  prev.textContent = ln(total) + ' → ' + fmt(parts.length) + ' file' + (parts.length === 1 ? '' : 's') + ': ' + list
-    + (countMode && n > parts.length ? ' — only ' + ln(total) + ', so at most ' + fmt(total) + ' files' : '');
 }
-window.splitSetMode = function(mode) {
-  if (mode === _split.mode) return;
-  // Carry the size over so switching modes keeps the same split as a start.
-  const n = _splitN(), total = _splitParts(_split.text, 'count', 1).total;
-  _split.mode = mode;
-  if (n >= 1 && total) document.getElementById('split-n').value = Math.max(1, Math.ceil(total / n));
+
+async function _splitSetFile(file) {
+  if (!file || _split.busy) return;
+  if (_split.job) _split.job.cancelled = true;
+  const job = _split.job = { cancelled: false };
+  _split.file = file;
+  _split.total = null;
+  const dot = file.name.lastIndexOf('.');
+  if (dot > 0) document.getElementById('split-ext').value = file.name.slice(dot + 1);
+  document.getElementById('split-file-label').textContent = file.name + ' · ' + _fmtBytes(file.size);
   _splitRender();
-};
-window.openSplitFile = function(text, what) {
-  text = String(text || '');
-  if (!text.trim()) { showToast('Nothing to split — the ' + (what || 'note') + ' is empty', 'error', 2500); return; }
+  if (file.size > SPLIT_ZIP_MAX - 64 * 1024 * 1024) { _splitStatus('Files over 4 GB are too big for a .zip — split it into a few pieces another way first.'); _split.file = null; return; }
+  _splitStatus('Counting lines…');
+  try {
+    const total = await _splitCountLines(file, f => { if (job === _split.job) _splitStatus('Counting lines… ' + Math.floor(f * 100) + '%'); }, job);
+    if (job !== _split.job) return;
+    _split.total = total;
+  } catch (e) {
+    if (job !== _split.job) return;
+    _split.file = null;
+    _splitStatus(e.message === 'cancelled' ? '' : 'Could not read the file: ' + e.message);
+    return;
+  }
+  _splitRender();
+}
+
+window.openSplitFile = function() {
   const pf = _splitPrefs();
-  _split = { text, what: what || 'note', mode: pf.mode === 'lines' ? 'lines' : 'count' };
-  document.getElementById('split-n').value = pf.n >= 1 ? pf.n : (_split.mode === 'lines' ? 100 : 2);
+  _split = { file: null, total: null, mode: pf.mode === 'lines' ? 'lines' : 'count', job: null, busy: false };
+  document.getElementById('split-n').value = pf.n >= 1 ? pf.n : (_split.mode === 'lines' ? 10000 : 2);
   document.getElementById('split-prefix').value = pf.prefix || '';
-  document.getElementById('split-ext').value = pf.ext || 'txt';
-  document.getElementById('split-desc').textContent = 'Cut the ' + _split.what + ' into smaller files, numbered 1, 2, 3… (zero-padded: 01, 02…) in their original order.';
+  document.getElementById('split-ext').value = 'txt';
+  document.getElementById('split-file-label').textContent = 'Drop a file here';
   _splitRender();
   document.getElementById('split-overlay').classList.add('open');
-  setTimeout(() => { const el = document.getElementById('split-n'); el.focus(); el.select(); }, 50);
 };
 window.closeSplitFile = function() {
+  if (_split.job) _split.job.cancelled = true;
   document.getElementById('split-overlay').classList.remove('open');
-  _split.text = '';
+  document.getElementById('split-file-input').value = '';
+  _split = { file: null, total: null, mode: _split.mode, job: null, busy: false };
+};
+window.splitPickFile = function() {
+  if (_split.busy) return;
+  const input = document.getElementById('split-file-input');
+  input.value = '';
+  input.click();
+};
+document.getElementById('split-file-input').addEventListener('change', function() {
+  const f = this.files && this.files[0];
+  this.value = '';
+  _splitSetFile(f);
+});
+window.splitUseNote = function() {
+  const text = editor.state.doc.toString();
+  if (!text) { showToast('This note is empty', 'error', 2000); return; }
+  _splitSetFile(new File([text], ((activeRoom || syncState.roomName || 'note') + '').replace(/[\\/:*?"<>|]+/g, ' ').trim() + '.txt', { type: 'text/plain' }));
+};
+window.splitSetMode = function(mode) {
+  if (mode === _split.mode || _split.busy) return;
+  // Carry the size over so switching modes keeps the same split as a start.
+  const n = _splitN();
+  _split.mode = mode;
+  if (n >= 1 && _split.total) document.getElementById('split-n').value = Math.max(1, Math.ceil(_split.total / n));
+  _splitRender();
 };
 window.confirmSplitFile = async function() {
-  const n = _splitN();
-  if (!(n >= 1)) return;
-  if (typeof JSZip === 'undefined') { showToast('Zip library not loaded (offline?)', 'error', 3000); return; }
-  const { parts } = _splitParts(_split.text, _split.mode, n);
+  const n = _splitN(), file = _split.file;
+  if (!(n >= 1) || !file || !_split.total || _split.busy) return;
+  const sizes = _splitSizes(_split.total, _split.mode, n);
+  if (sizes.length > SPLIT_MAX_FILES) return;
   const prefix = document.getElementById('split-prefix').value.trim(), ext = _splitExt();
-  try { localStorage.setItem(_SPLIT_PREF, JSON.stringify({ mode: _split.mode, n, prefix, ext })); } catch {}
-  const zip = new JSZip();
-  parts.forEach((p, i) => zip.file(_splitName(i, parts.length), p.text));
+  try { localStorage.setItem(_SPLIT_PREF, JSON.stringify({ mode: _split.mode, n, prefix })); } catch {}
+  const job = _split.job = { cancelled: false };
+  _split.busy = true;
+  _splitRender();
   try {
-    const blob = await zip.generateAsync({ type: 'blob' });
-    const base = (prefix.replace(/[-_.\s]+$/, '') || 'split') + '-' + _dlStamp();
-    _dlSaveBlob(blob, base + '.zip');
+    const parts = await _splitPlan(file, sizes, f => _splitStatus('Splitting… ' + Math.floor(f * 100) + '%'), job);
+    const names = parts.map((_, i) => _splitName(i, parts.length));
+    const zip = _splitZip(file, parts, names);
+    if (zip.size > SPLIT_ZIP_MAX) throw new Error('the .zip would pass 4 GB');
+    const base = file.name.replace(/\.[^.]*$/, '') || 'split';
+    _dlSaveBlob(zip.blob, base + '-split.zip');
     closeSplitFile();
-    showToast('Split into ' + parts.length + ' file' + (parts.length === 1 ? '' : 's') + ' (' + base + '.zip)', 'success', 2500);
-  } catch (err) { showToast('Zip error: ' + err.message, 'error'); }
+    showToast('Split ' + file.name + ' into ' + parts.length + ' file' + (parts.length === 1 ? '' : 's') + ' (' + base + '-split.zip)', 'success', 3000);
+  } catch (e) {
+    _split.busy = false;
+    if (e.message === 'cancelled') return;
+    _splitRender();
+    showToast('Split failed: ' + e.message, 'error', 3500);
+  }
 };
+const _splitDrop = document.getElementById('split-drop');
+['dragenter', 'dragover'].forEach(t => _splitDrop.addEventListener(t, e => { e.preventDefault(); _splitDrop.classList.add('over'); }));
+_splitDrop.addEventListener('dragleave', () => _splitDrop.classList.remove('over'));
+_splitDrop.addEventListener('drop', e => {
+  e.preventDefault();
+  _splitDrop.classList.remove('over');
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) _splitSetFile(f);
+});
 document.getElementById('split-overlay').addEventListener('click', function(e) {
-  if (e.target === this) closeSplitFile();
+  if (e.target === this && !_split.busy) closeSplitFile();
 });
 ['split-n', 'split-prefix', 'split-ext'].forEach(id => {
   const el = document.getElementById(id);
