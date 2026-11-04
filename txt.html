@@ -1677,6 +1677,8 @@ body.split-open .mobile-toolbar { right: 50%; }
 @media (hover: none) { .dl-pick:hover:not(.active) { border-color: var(--border); color: var(--text); background: var(--surface-2); } }
 .split-row { display: flex; gap: 8px; }
 .split-row .form-group { flex: 1; min-width: 0; }
+.split-enc { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; font-size: var(--text-sm); color: var(--text); cursor: pointer; }
+.split-enc input { margin-top: 3px; flex: none; }
 .split-preview { color: var(--text-faint); font-size: var(--text-xs); margin: 2px 0 4px; line-height: 1.5; overflow-wrap: anywhere; }
 
 /* ============================================
@@ -4097,6 +4099,10 @@ body.inbox-list .find-panel { display: none !important; }
         <button class="btn" onclick="splitUseNote()" title="Split the text of the open note instead">Use this note</button>
       </div>
     </div>
+    <label class="split-enc" id="split-enc-row" hidden>
+      <input type="checkbox" id="split-encode" onchange="splitSetEncode(this.checked)">
+      <span>Encode as base64 text first <span class="imp-dim" id="split-enc-why"></span></span>
+    </label>
     <div class="dl-quick-picks" role="radiogroup" aria-label="Split by" style="margin-top:12px;">
       <button class="dl-pick" id="split-mode-count" role="radio" onclick="splitSetMode('count')">Number of files</button>
       <button class="dl-pick" id="split-mode-lines" role="radio" onclick="splitSetMode('lines')">Lines per file</button>
@@ -27162,6 +27168,8 @@ document.getElementById('dl-filename').addEventListener('keydown', function(e) {
 // from disk when the download runs and nothing is copied into memory.
 // Lines are cut at "\n" bytes, so any encoding and CRLF survive unchanged,
 // and 01, 02, 03… concatenated give back the original byte for byte.
+// A file that isn't text is split as its ![file-txt] encoded text instead
+// (see _splitEncSource below), which joins back into a decodable block.
 const SPLIT_CHUNK = 4 * 1024 * 1024;
 const SPLIT_ZIP_MAX = 0xFFFFFFFF;  // classic zip offsets/sizes are 32-bit
 const SPLIT_MAX_FILES = 0xFFFF;    // classic zip entry count is 16-bit
@@ -27232,7 +27240,8 @@ async function _splitPlan(file, sizes, onProgress, job) {
   return parts;
 }
 
-// A stored (uncompressed) .zip as a Blob of headers + slices of `file`.
+// A stored (uncompressed) .zip as a Blob of headers + each part's data: a
+// slice of `file`, or the Blob an encoded part was generated into.
 function _splitZip(file, parts, names) {
   const enc = new TextEncoder(), now = new Date();
   const time = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
@@ -27241,7 +27250,8 @@ function _splitZip(file, parts, names) {
   const pieces = [], central = [];
   let offset = 0;
   parts.forEach((p, i) => {
-    const name = enc.encode(names[i]), size = p.end - p.start;
+    const name = enc.encode(names[i]);
+    const data = p.blob || file.slice(p.start, p.end), size = p.blob ? p.blob.size : p.end - p.start;
     const local = head(30 + name.length, v => {
       v.setUint32(0, 0x04034b50, true); v.setUint16(4, 20, true); v.setUint16(6, 0x0800, true);  // UTF-8 names
       v.setUint16(8, 0, true); v.setUint16(10, time, true); v.setUint16(12, date, true);
@@ -27256,7 +27266,7 @@ function _splitZip(file, parts, names) {
       v.setUint16(28, name.length, true); v.setUint32(42, offset, true);
     }));
     central[central.length - 1].set(name, 46);
-    pieces.push(local, file.slice(p.start, p.end));
+    pieces.push(local, data);
     offset += local.length + size;
   });
   const cdSize = central.reduce((n, c) => n + c.length, 0);
@@ -27266,10 +27276,103 @@ function _splitZip(file, parts, names) {
   });
   return { blob: new Blob(pieces.concat(central, [end]), { type: 'application/zip' }), size: offset + cdSize + 22 };
 }
-window.__split = { sizes: _splitSizes, countLines: _splitCountLines, plan: _splitPlan, zip: _splitZip }; // for tests
+// ---- Non-text files: split their ![file-txt:v1] encoded text instead ----
+// The block "Copy as encoded text" makes and "Decode Encoded Text" restores:
+// marker, name, SHA-256, meta, base64 in 100-char lines (75 bytes each), end
+// marker. Its line count follows from the size alone, so the block is never
+// built whole — each piece is generated from just the bytes it covers.
+const SPLIT_B64_BYTES = 75;
+function _splitEncSource(file, sha) {
+  const meta = 'enc=raw size=' + file.size + (file.type ? ' mime=' + file.type : '');
+  const head = ['![file-txt:v1]', file.name.replace(/[\r\n]+/g, ' ') || 'file', sha || '-', meta];
+  const body = Math.ceil(file.size / SPLIT_B64_BYTES);
+  return { file, head, body, total: head.length + body + 1 };
+}
+// Lines [a, b) of the block, handed to onText a few MB at a time. Every line
+// but the end marker (the block's last) carries its "\n".
+async function _splitEncText(src, a, b, onText, job) {
+  const H = src.head.length, size = src.file.size;
+  for (let i = a; i < Math.min(b, H); i++) onText(src.head[i] + '\n');
+  const from = Math.max(a, H) - H, to = Math.min(b, H + src.body) - H;
+  const step = Math.floor(SPLIT_CHUNK / SPLIT_B64_BYTES);
+  for (let l = from; l < to; l += step) {
+    if (job && job.cancelled) throw new Error('cancelled');
+    const e = Math.min(to, l + step);
+    const b64 = _bytesToB64(new Uint8Array(await src.file.slice(l * SPLIT_B64_BYTES, Math.min(e * SPLIT_B64_BYTES, size)).arrayBuffer()));
+    const out = [];
+    for (let k = 0; k < b64.length; k += 100) out.push(b64.slice(k, k + 100));
+    onText(out.join('\n') + '\n');
+  }
+  if (a < src.total && b >= src.total) onText('![/file-txt]');
+}
+// Incremental SHA-256 — SubtleCrypto only digests a whole buffer, and the
+// point here is never holding the whole file.
+function _splitSha256() {
+  const K = new Uint32Array([
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]);
+  const h = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
+  const w = new Uint32Array(64), pend = new Uint8Array(64);
+  let pendLen = 0, total = 0;
+  const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+  function block(buf, o) {
+    for (let i = 0; i < 16; i++, o += 4) w[i] = (buf[o] << 24) | (buf[o + 1] << 16) | (buf[o + 2] << 8) | buf[o + 3];
+    for (let i = 16; i < 64; i++) {
+      const x = w[i - 15], y = w[i - 2];
+      w[i] = (rotr(x, 7) ^ rotr(x, 18) ^ (x >>> 3)) + w[i - 16] + (rotr(y, 17) ^ rotr(y, 19) ^ (y >>> 10)) + w[i - 7];
+    }
+    let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], k = h[7];
+    for (let i = 0; i < 64; i++) {
+      const t1 = (k + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+      const t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      k = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += k;
+  }
+  return {
+    update(buf) {
+      let i = 0;
+      total += buf.length;
+      if (pendLen) {
+        while (pendLen < 64 && i < buf.length) pend[pendLen++] = buf[i++];
+        if (pendLen < 64) return;
+        block(pend, 0); pendLen = 0;
+      }
+      for (; i + 64 <= buf.length; i += 64) block(buf, i);
+      while (i < buf.length) pend[pendLen++] = buf[i++];
+    },
+    hex() {
+      const bits = total * 8, tail = new Uint8Array(pendLen < 56 ? 64 : 128);
+      tail.set(pend.subarray(0, pendLen));
+      tail[pendLen] = 0x80;
+      const v = new DataView(tail.buffer);
+      v.setUint32(tail.length - 8, Math.floor(bits / 0x100000000));
+      v.setUint32(tail.length - 4, bits >>> 0);
+      for (let o = 0; o < tail.length; o += 64) block(tail, o);
+      return Array.from(h, x => x.toString(16).padStart(8, '0')).join('');
+    },
+  };
+}
+// Byte-level line splitting only suits text whose line break is a lone "\n"
+// byte: images, archives, PDFs… and UTF-16/32 text go through the encoder.
+async function _splitLooksText(f) {
+  if (/^(image|audio|video)\//.test(f.type || '') || _isZipFile(f) || _isKnownBinaryFile(f)) return false;
+  const bom = _bomKind(new Uint8Array(await f.slice(0, 4).arrayBuffer()));
+  if (bom && bom !== 'utf-8') return false;
+  return _isTextLikeFile(f) || _sniffIsTextFile(f);
+}
+window.__split = { sizes: _splitSizes, countLines: _splitCountLines, plan: _splitPlan, zip: _splitZip, encSource: _splitEncSource, encText: _splitEncText, sha256: _splitSha256 }; // for tests
 
 const _SPLIT_PREF = 'cade-split-file';
-let _split = { file: null, total: null, mode: 'count', job: null, busy: false };
+// encode: split the file's ![file-txt] encoded text (non-text files);
+// rawTotal: the file's own line count, once counted.
+let _split = { file: null, total: null, rawTotal: null, encode: false, mode: 'count', job: null, busy: false };
 function _splitPrefs() { try { return JSON.parse(localStorage.getItem(_SPLIT_PREF)) || {}; } catch { return {}; } }
 function _splitExt() { return (document.getElementById('split-ext').value.trim().replace(/^\.+/, '') || 'txt'); }
 // Zero-padded to the widest number (01…12) so every file list sorts them in order.
@@ -27296,13 +27399,17 @@ function _splitRender() {
   if (!(n >= 1)) { _splitStatus('Enter a whole number of 1 or more.'); return; }
   const sizes = _splitSizes(_split.total, _split.mode, n);
   if (sizes.length > SPLIT_MAX_FILES) { _splitStatus('That makes ' + sizes.length.toLocaleString() + ' files — the most a .zip holds is ' + SPLIT_MAX_FILES.toLocaleString() + '. Raise the lines per file.'); return; }
+  // The encoded text is about a third bigger than the file.
+  const zipTooBig = _split.encode && (_split.total - 5) * 101 > SPLIT_ZIP_MAX - 64 * 1024 * 1024;
   const k = sizes.length, nm = i => _splitName(i, k) + ' (' + _splitLn(sizes[i]) + ')';
   const list = k <= 4 ? sizes.map((_, i) => nm(i)).join(', ') : nm(0) + ', ' + nm(1) + ' … ' + nm(k - 1);
   _splitStatus(_splitLn(_split.total) + ' → ' + k.toLocaleString() + ' file' + (k === 1 ? '' : 's') + ': ' + list
     + (countMode && n > k ? ' — only ' + _splitLn(_split.total) + ', so at most ' + _split.total.toLocaleString() + ' files' : '')
     + (k > SPLIT_ROOMS_MAX ? '. Temp rooms: at most ' + SPLIT_ROOMS_MAX + ' — use fewer, larger pieces.'
-      : '. Rooms: ' + (k === 1 ? _splitRoomNames(1)[0] : _splitRoomNames(k)[0] + ' … ' + _splitRoomNames(k)[k - 1]) + '.'));
-  go.disabled = false;
+      : '. Rooms: ' + (k === 1 ? _splitRoomNames(1)[0] : _splitRoomNames(k)[0] + ' … ' + _splitRoomNames(k)[k - 1]) + '.')
+    + (zipTooBig ? ' Encoded, it passes 4 GB — too big for a .zip.' : '')
+    + (_split.encode ? ' To restore: join the pieces in order into one note and run Decode Encoded Text.' : ''));
+  go.disabled = zipTooBig;
   roomsBtn.disabled = k > SPLIT_ROOMS_MAX;
 }
 
@@ -27322,17 +27429,38 @@ async function _splitSetFile(file) {
   if (_split.job) _split.job.cancelled = true;
   const job = _split.job = { cancelled: false };
   _split.file = file;
-  _split.total = null;
-  const dot = file.name.lastIndexOf('.');
-  if (dot > 0) document.getElementById('split-ext').value = file.name.slice(dot + 1);
+  _split.total = _split.rawTotal = null;
   document.getElementById('split-file-label').textContent = file.name + ' · ' + _fmtBytes(file.size);
+  document.getElementById('split-enc-row').hidden = true;
   _splitRender();
   if (file.size > SPLIT_ZIP_MAX - 64 * 1024 * 1024) { _splitStatus('Files over 4 GB are too big for a .zip — split it into a few pieces another way first.'); _split.file = null; return; }
+  _splitStatus('Reading…');
+  let isText = true;
+  try { isText = await _splitLooksText(file); } catch {}
+  if (job !== _split.job) return;
+  document.getElementById('split-enc-why').textContent = isText ? '(for files that aren’t plain text)' : '— not a text file, so it’s split as ![file-txt] base64';
+  document.getElementById('split-enc-row').hidden = false;
+  _splitApplyEncode(!isText, job);
+}
+
+// Encoded or not decides the line count and the default extension; the
+// file's own lines are counted once, the first time they're needed.
+async function _splitApplyEncode(on, job) {
+  const file = _split.file;
+  _split.encode = on;
+  document.getElementById('split-encode').checked = on;
+  const dot = file.name.lastIndexOf('.');
+  document.getElementById('split-ext').value = on || dot <= 0 ? 'txt' : file.name.slice(dot + 1);
+  if (on) { _split.total = _splitEncSource(file).total; _splitRender(); return; }
+  if (_split.rawTotal != null) { _split.total = _split.rawTotal; _splitRender(); return; }
+  _split.total = null;
+  _splitRender();
   _splitStatus('Counting lines…');
   try {
     const total = await _splitCountLines(file, f => { if (job === _split.job) _splitStatus('Counting lines… ' + Math.floor(f * 100) + '%'); }, job);
-    if (job !== _split.job) return;
-    _split.total = total;
+    if (job !== _split.job || file !== _split.file) return;
+    _split.rawTotal = total;
+    if (!_split.encode) _split.total = total;
   } catch (e) {
     if (job !== _split.job) return;
     _split.file = null;
@@ -27341,10 +27469,33 @@ async function _splitSetFile(file) {
   }
   _splitRender();
 }
+window.splitSetEncode = function(on) {
+  if (!_split.file || _split.busy) { document.getElementById('split-encode').checked = _split.encode; return; }
+  if (_split.job) _split.job.cancelled = true;
+  _splitApplyEncode(!!on, _split.job = { cancelled: false });
+};
+
+// Checksum pass for an encoded split: the header needs the file's SHA-256.
+async function _splitEncPrepare(file, job) {
+  const sha = _splitSha256();
+  await _splitEachChunk(file, buf => sha.update(buf), f => _splitStatus('Checksumming… ' + Math.floor(f * 100) + '%'), job);
+  return _splitEncSource(file, sha.hex());
+}
+// Text of each encoded part in turn: fn(i, text). One part in memory at a time.
+async function _splitEncEach(src, sizes, job, fn) {
+  let a = 0;
+  for (let i = 0; i < sizes.length; i++) {
+    const out = [];
+    await _splitEncText(src, a, a + sizes[i], t => out.push(t), job);
+    await fn(i, out);
+    a += sizes[i];
+  }
+}
 
 window.openSplitFile = function() {
   const pf = _splitPrefs();
-  _split = { file: null, total: null, mode: pf.mode === 'lines' ? 'lines' : 'count', job: null, busy: false };
+  _split = { file: null, total: null, rawTotal: null, encode: false, mode: pf.mode === 'lines' ? 'lines' : 'count', job: null, busy: false };
+  document.getElementById('split-enc-row').hidden = true;
   document.getElementById('split-n').value = pf.n >= 1 ? pf.n : (_split.mode === 'lines' ? 10000 : 2);
   document.getElementById('split-prefix').value = pf.prefix || '';
   document.getElementById('split-ext').value = 'txt';
@@ -27356,7 +27507,7 @@ window.closeSplitFile = function() {
   if (_split.job) _split.job.cancelled = true;
   document.getElementById('split-overlay').classList.remove('open');
   document.getElementById('split-file-input').value = '';
-  _split = { file: null, total: null, mode: _split.mode, job: null, busy: false };
+  _split = { file: null, total: null, rawTotal: null, encode: false, mode: _split.mode, job: null, busy: false };
 };
 window.splitPickFile = function() {
   if (_split.busy) return;
@@ -27393,7 +27544,21 @@ window.confirmSplitFile = async function() {
   _split.busy = true;
   _splitRender();
   try {
-    const parts = await _splitPlan(file, sizes, f => _splitStatus('Splitting… ' + Math.floor(f * 100) + '%'), job);
+    let parts;
+    if (_split.encode) {
+      // Each part is generated, checksummed and kept as a Blob of small
+      // pieces (which the browser can hold on disk), one part at a time.
+      const src = await _splitEncPrepare(file, job), te = new TextEncoder();
+      parts = [];
+      await _splitEncEach(src, sizes, job, (i, texts) => {
+        _splitStatus('Encoding… ' + (i + 1) + ' / ' + sizes.length);
+        let crc = 0;
+        const blobs = texts.map(t => { const u = te.encode(t); crc = _splitCrc(crc, u, 0, u.length); return new Blob([u]); });
+        parts.push({ blob: new Blob(blobs), crc, lines: sizes[i] });
+      });
+    } else {
+      parts = await _splitPlan(file, sizes, f => _splitStatus('Splitting… ' + Math.floor(f * 100) + '%'), job);
+    }
     const names = parts.map((_, i) => _splitName(i, parts.length));
     const zip = _splitZip(file, parts, names);
     if (zip.size > SPLIT_ZIP_MAX) throw new Error('the .zip would pass 4 GB');
@@ -27422,17 +27587,21 @@ window.confirmSplitRooms = async function() {
   _splitRender();
   const made = [];
   try {
-    const parts = await _splitPlan(file, sizes, f => _splitStatus('Splitting… ' + Math.floor(f * 100) + '%'), job);
-    const names = _splitRoomNames(parts.length);
-    for (let i = 0; i < parts.length; i++) {
+    const names = _splitRoomNames(sizes.length);
+    const toRoom = async (i, text) => {
       if (job.cancelled) throw new Error('cancelled');
-      _splitStatus('Creating rooms… ' + (i + 1) + ' / ' + parts.length);
-      const p = parts[i];
+      _splitStatus('Creating rooms… ' + (i + 1) + ' / ' + sizes.length);
       // The piece's own last line break would show as an empty last line.
-      const text = (await file.slice(p.start, p.end).text()).replace(/\r?\n$/, '');
-      await window.__roomsApi.write(names[i], text, { create: true, reason: 'split-file' });
+      await window.__roomsApi.write(names[i], text.replace(/\r?\n$/, ''), { create: true, reason: 'split-file' });
       made.push(names[i]);
       if (roomMeta[names[i]]) { roomMeta[names[i]].temp = true; saveRoomMeta(); }
+    };
+    if (_split.encode) {
+      const src = await _splitEncPrepare(file, job);
+      await _splitEncEach(src, sizes, job, (i, texts) => toRoom(i, texts.join('')));
+    } else {
+      const parts = await _splitPlan(file, sizes, f => _splitStatus('Splitting… ' + Math.floor(f * 100) + '%'), job);
+      for (let i = 0; i < parts.length; i++) await toRoom(i, await file.slice(parts[i].start, parts[i].end).text());
     }
     closeSplitFile();
     try { renderRoomManagerList(); } catch {}
