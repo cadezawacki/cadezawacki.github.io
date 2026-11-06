@@ -2589,6 +2589,11 @@ label.wp-row { cursor: pointer; }
 .find-cond-label { font-size: var(--text-xs); color: var(--text-muted); }
 .find-cond-select { font-size: var(--text-xs); padding: 4px 6px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .find-cond-hint { font-size: var(--text-xs); color: var(--text-faint); }
+.find-cond-list { display: flex; flex-direction: column; gap: 4px; flex-basis: 100%; }
+.find-cond-item { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.find-cond-item .find-cond-join { min-width: 64px; }
+.find-cond-item .find-cond-lead { min-width: 64px; font-size: var(--text-xs); color: var(--text-muted); }
+.find-cond-item .find-input[hidden] { display: none; }
 .find-input {
   width: 180px;
   padding: 4px 8px;
@@ -3554,25 +3559,20 @@ body.inbox-list .find-panel { display: none !important; }
   <button class="find-btn" id="find-prev" title="Previous match (Shift+Enter)">↑</button>
   <button class="find-btn" id="find-next" title="Next match (Enter)">↓</button>
   <button class="find-btn find-toggle" id="find-case" title="Match case">Aa</button>
-  <button class="find-btn find-toggle" id="find-regex" title="Regular expression">.*</button>
+  <button class="find-btn find-toggle" id="find-regex" title="Regular expression (^ and $ match at each row)">.*</button>
+  <button class="find-btn find-toggle" id="find-word" title="Whole word — only match complete words">W</button>
   <button class="find-btn find-toggle" id="find-invert" title="Invert (NOT) — match everything EXCEPT the Find text">≠</button>
   <input class="find-input" id="replace-input" type="text" placeholder="Replace with… (\n \t work)" autocomplete="off" spellcheck="false">
   <button class="find-btn" id="replace-one" title="Replace current match">Replace</button>
   <button class="find-btn" id="replace-all" title="Replace all matches">All</button>
   <label class="find-opt" title="When a replacement leaves a line blank, delete the line instead of leaving a gap (a blank line that was already there stays)"><input type="checkbox" id="find-dropempty"> Delete emptied lines</label>
-  <button class="find-btn find-toggle" id="find-cond-btn" title="Only if… — match only when text precedes/follows (no regex knowledge needed)">if…</button>
+  <button class="find-btn find-toggle" id="find-cond-btn" title="Only if… — match only when conditions hold: text before/after, start/end of a word or row (no regex knowledge needed)">if…</button>
   <button class="find-btn find-close" id="find-close" title="Close (Esc)">×</button>
   <div class="find-cond-row" id="find-cond-row">
-    <span class="find-cond-label">match only if it</span>
-    <select class="find-cond-select" id="find-cond-type">
-      <option value="followed">is followed by</option>
-      <option value="not-followed">is NOT followed by</option>
-      <option value="preceded">is preceded by</option>
-      <option value="not-preceded">is NOT preceded by</option>
-    </select>
-    <input class="find-input" id="find-cond-text" type="text" placeholder="text (\n \t \s work)" autocomplete="off" spellcheck="false">
-    <button class="find-btn" id="find-cond-apply" title="Builds the pattern into the Find box">Apply</button>
-    <span class="find-cond-hint">wraps your Find text in a lookaround — Aa case toggle still applies</span>
+    <div class="find-cond-list" id="find-cond-list"></div>
+    <button class="find-btn" id="find-cond-add" title="Add another condition (AND / OR)">+ condition</button>
+    <button class="find-btn" id="find-cond-bake" title="Write the Find text + conditions into the Find box as one regular expression">→ regex</button>
+    <span class="find-cond-hint">applies live while “if…” is on · AND binds tighter than OR · Aa still applies</span>
   </div>
 </div>
 
@@ -6438,7 +6438,9 @@ const searchState = {
   query: '',
   caseSensitive: false,
   regex: false,
-  invert: false, // NOT mode — match the gaps BETWEEN normal matches instead
+  wholeWord: false,
+  condsOn: false, // "if…" conditions applied
+  conds: [{ join: 'and', type: 'followed', text: '' }], // [{join:'and'|'or', type, text}] // NOT mode — match the gaps BETWEEN normal matches instead
   matches: [],   // [{from,to}] sorted by from
   current: -1,   // index into matches
   invalid: false // bad regex
@@ -22535,6 +22537,53 @@ function _expandReplaceEscapes(r) {
     c === 'n' ? '\n' : c === 't' ? '\t' : c === '\\' ? '\\' : ' ');
 }
 
+// Whole word / word-edge tests: no letter, digit or _ on that side.
+const FIND_WORD_PRE = '(?<!\\w)', FIND_WORD_POST = '(?!\\w)';
+// "if…" conditions. text: the condition takes a text operand.
+const FIND_COND_TYPES = [
+  ['followed', 'is followed by', true],
+  ['not-followed', 'is NOT followed by', true],
+  ['preceded', 'is preceded by', true],
+  ['not-preceded', 'is NOT preceded by', true],
+  ['word-start', 'starts a word (word starts with it)', false],
+  ['word-end', 'ends a word (word ends with it)', false],
+  ['row-start', 'is at the beginning of a row', false],
+  ['row-end', 'is at the end of a row', false],
+];
+const _condNeedsText = t => !!(FIND_COND_TYPES.find(c => c[0] === t) || [])[2];
+// One condition -> the lookaround/anchor placed before (pre) or after (post)
+// the Find pattern; null while a text condition has no text yet.
+function _condWrap(c) {
+  const t = c.text ? _literalQueryToRegex(c.text) : '';
+  switch (c.type) {
+    case 'followed': return t ? { post: '(?=' + t + ')' } : null;
+    case 'not-followed': return t ? { post: '(?!' + t + ')' } : null;
+    case 'preceded': return t ? { pre: '(?<=' + t + ')' } : null;
+    case 'not-preceded': return t ? { pre: '(?<!' + t + ')' } : null;
+    case 'word-start': return { pre: FIND_WORD_PRE };
+    case 'word-end': return { post: FIND_WORD_POST };
+    case 'row-start': return { pre: '^' };
+    case 'row-end': return { post: '$' };
+  }
+  return null;
+}
+// The regex source(s) for the current query + toggles, one per OR branch of
+// the "if…" conditions (AND binds tighter: consecutive AND-ed conditions share
+// a branch). null when a plain indexOf scan will do.
+function _searchPatterns() {
+  const q = searchState.query;
+  const conds = searchState.condsOn
+    ? searchState.conds.map(c => ({ join: c.join, w: _condWrap(c) })).filter(c => c.w) : [];
+  if (!searchState.regex && !searchState.wholeWord && !conds.length && !FIND_ESCAPE_RE.test(q)) return null;
+  let base = searchState.regex ? '(?:' + q + ')' : _literalQueryToRegex(q);
+  if (searchState.wholeWord) base = FIND_WORD_PRE + base + FIND_WORD_POST;
+  const branches = [[]];
+  conds.forEach((c, i) => { if (i && c.join === 'or') branches.push([]); branches[branches.length - 1].push(c.w); });
+  return branches.map(br => br.map(w => w.pre || '').join('') + base + br.map(w => w.post || '').join(''));
+}
+// 'm' so ^ and $ match at every row, not just the ends of the document.
+const _searchFlags = () => 'gm' + (searchState.caseSensitive ? '' : 'i');
+
 function scanMatches(cap) {
   const out = [];
   const q = searchState.query;
@@ -22543,16 +22592,30 @@ function scanMatches(cap) {
   // Inverted (NOT) mode needs every normal match to build the gaps between
   // them, so the raw scan runs uncapped there and the cap applies to the gaps.
   const rawCap = searchState.invert ? Infinity : cap;
-  const useRegex = searchState.regex || FIND_ESCAPE_RE.test(q);
-  if (useRegex) {
-    let re;
-    const pattern = searchState.regex ? q : _literalQueryToRegex(q);
-    try { re = new RegExp(pattern, searchState.caseSensitive ? 'g' : 'gi'); }
-    catch { return null; }
-    let m;
-    while ((m = re.exec(text)) !== null && out.length < rawCap) {
-      if (m[0].length === 0) { re.lastIndex++; continue; } // zero-width guard
-      out.push({ from: m.index, to: m.index + m[0].length });
+  const pats = _searchPatterns();
+  if (pats) {
+    const flags = _searchFlags();
+    let res;
+    try {
+      if (searchState.regex) new RegExp(q, flags); // the user's pattern must be valid on its own
+      res = pats.map(p => new RegExp(p, flags));
+    } catch { return null; }
+    for (const re of res) {
+      let m, n = 0;
+      while (n < rawCap && (m = re.exec(text)) !== null) {
+        if (m[0].length === 0) { re.lastIndex++; continue; } // zero-width guard
+        // Regex mode keeps the match so $1/$<name>/$& replacements use the
+        // real captures (lookbehinds/anchors can't be re-run on the slice).
+        out.push(searchState.regex ? { from: m.index, to: m.index + m[0].length, m } : { from: m.index, to: m.index + m[0].length });
+        n++;
+      }
+    }
+    if (res.length > 1) {
+      // OR branches: merge in document order, dropping overlaps.
+      out.sort((x, y) => x.from - y.from || y.to - x.to);
+      let w = 0, end = -1;
+      for (const x of out) if (x.from >= end) { out[w++] = x; end = x.to; }
+      out.length = Math.min(w, rawCap);
     }
   } else {
     const hay = searchState.caseSensitive ? text : text.toLowerCase();
@@ -22681,32 +22744,47 @@ function _replaceSpec(changes, ranges) {
   return d ? { spec: { changes: tr.changes.compose(d.changes) }, dropped: d.count } : { spec: { changes }, dropped: 0 };
 }
 
-// Replacement text for one match. In regex mode, re-apply the pattern to the
-// matched substring so $1/$& group references work; (?:) wrapping is not
-// needed since we anchor implicitly by matching the same text.
-function replacementFor(matchText) {
+// Expand $$ $& $` $' $1..$99 $<name> in a replacement template against a
+// stored RegExp match (same rules as String.prototype.replace).
+function _expandReplaceRefs(tpl, m) {
+  const n = m.length - 1;
+  return tpl.replace(/\$(?:(\$)|(&)|(`)|(')|<([^>]*)>|(\d\d?))/g, (all, dollar, amp, pre, post, name, num) => {
+    if (dollar) return '$';
+    if (amp) return m[0];
+    if (pre) return m.input.slice(0, m.index);
+    if (post) return m.input.slice(m.index + m[0].length);
+    if (name !== undefined) return m.groups ? (m.groups[name] ?? '') : all;
+    const k = +num;
+    if (k >= 1 && k <= n) return m[k] ?? '';
+    if (num.length === 2) { const k1 = +num[0]; if (k1 >= 1 && k1 <= n) return (m[k1] ?? '') + num[1]; }
+    return all;
+  });
+}
+
+// Replacement text for one match. Regex mode expands group references from
+// the match captured during the scan — re-running the pattern on the matched
+// slice alone broke ^/$/lookbehinds (and so every "if…" preceded-by replace).
+function replacementFor(match) {
   const raw = _expandReplaceEscapes(document.getElementById('replace-input').value);
   // Inverted matches are the gaps BETWEEN pattern hits — the pattern doesn't
-  // describe them, so $1/$& group references can't apply.
-  if (searchState.invert) return raw;
-  if (!searchState.regex) {
-    // A plain query with escape tokens matched via regex — group refs don't
-    // apply, but the escape expansion above does (item 27).
-    return raw;
-  }
-  try {
-    return matchText.replace(
-      new RegExp(searchState.query, searchState.caseSensitive ? '' : 'i'),
-      raw
-    );
-  } catch { return raw; }
+  // describe them, so $1/$& group references can't apply. Plain queries
+  // (escape tokens included, item 27) take the text as-is.
+  if (searchState.invert || !searchState.regex || !match.m) return raw;
+  return _expandReplaceRefs(raw, match.m);
 }
 
 window.findReplaceCurrent = function() {
-  const m = searchState.matches[searchState.current];
+  let m = searchState.matches[searchState.current];
   if (!m) return;
-  const matchText = editor.state.doc.sliceString(m.from, m.to);
-  editor.dispatch(_replaceSpec({ from: m.from, to: m.to, insert: replacementFor(matchText) }, [m]).spec);
+  // An edit since the last scan (its recompute is debounced) can leave the
+  // stored match stale — rescan before replacing.
+  if (m.m && editor.state.doc.sliceString(m.from, m.to) !== m.m[0]) {
+    clearTimeout(_searchDocTimer);
+    searchRecomputeAndRefresh(false);
+    m = searchState.matches[searchState.current];
+    if (!m) return;
+  }
+  editor.dispatch(_replaceSpec({ from: m.from, to: m.to, insert: replacementFor(m) }, [m]).spec);
   // Immediate recompute (skip the debounce) so the count + next-match are live.
   clearTimeout(_searchDocTimer);
   searchRecomputeAndRefresh(true);
@@ -22719,11 +22797,7 @@ window.findReplaceAll = function() {
   const ms = scanMatches(Infinity);
   if (ms === null) { showToast('Invalid regex', 'error', 1500); return; }
   if (!ms.length) { showToast('No matches', 'error', 1500); return; }
-  const doc = editor.state.doc;
-  const changes = ms.map(m => ({
-    from: m.from, to: m.to,
-    insert: replacementFor(doc.sliceString(m.from, m.to)),
-  }));
+  const changes = ms.map(m => ({ from: m.from, to: m.to, insert: replacementFor(m) }));
   const r = _replaceSpec(changes, ms);
   editor.dispatch(r.spec);
   clearTimeout(_searchDocTimer);
@@ -22800,39 +22874,104 @@ window.closeFindPanel = function() {
     caseBtn.classList.toggle('active', searchState.caseSensitive);
     searchRecomputeAndRefresh(true);
   });
-  // Item 28: "only if…" builder — wraps the plain Find text in a lookaround so
-  // conditional replaces don't require knowing regex. Escape tokens (item 27)
-  // work in both fields via _literalQueryToRegex.
+  const wordBtn = document.getElementById('find-word');
+  wordBtn.addEventListener('click', () => {
+    searchState.wholeWord = !searchState.wholeWord;
+    wordBtn.classList.toggle('active', searchState.wholeWord);
+    searchRecomputeAndRefresh(true);
+  });
+
+  // Item 28: "only if…" conditions — live filters on the Find text (no regex
+  // knowledge needed). Several can be chained with AND / OR via + / −; "→ regex"
+  // writes the whole thing into the Find box as one pattern.
   const condBtn = document.getElementById('find-cond-btn');
   const condRow = document.getElementById('find-cond-row');
+  const condList = document.getElementById('find-cond-list');
+  const refresh = () => { searchState.current = -1; searchRecomputeAndRefresh(true); };
+  function setCondsOn(on) {
+    searchState.condsOn = on;
+    condRow.classList.toggle('open', on);
+    condBtn.classList.toggle('active', on);
+  }
+  function renderConds(focusIdx) {
+    condList.textContent = '';
+    searchState.conds.forEach((c, i) => {
+      const item = document.createElement('div');
+      item.className = 'find-cond-item';
+      if (i === 0) {
+        const lead = document.createElement('span');
+        lead.className = 'find-cond-lead';
+        lead.textContent = 'only if it';
+        item.appendChild(lead);
+      } else {
+        const join = document.createElement('select');
+        join.className = 'find-cond-select find-cond-join';
+        join.title = 'Combine with the condition above';
+        join.innerHTML = '<option value="and">AND it</option><option value="or">OR it</option>';
+        join.value = c.join;
+        join.addEventListener('change', () => { c.join = join.value; refresh(); });
+        item.appendChild(join);
+      }
+      const type = document.createElement('select');
+      type.className = 'find-cond-select';
+      for (const [v, label] of FIND_COND_TYPES) type.add(new Option(label, v));
+      type.value = c.type;
+      type.addEventListener('change', () => {
+        c.type = type.value;
+        txt.hidden = !_condNeedsText(c.type);
+        if (!txt.hidden) txt.focus();
+        refresh();
+      });
+      const txt = document.createElement('input');
+      txt.className = 'find-input';
+      txt.type = 'text';
+      txt.placeholder = 'text (\\n \\t \\s work)';
+      txt.autocomplete = 'off';
+      txt.spellcheck = false;
+      txt.value = c.text;
+      txt.hidden = !_condNeedsText(c.type);
+      txt.addEventListener('input', () => { c.text = txt.value; refresh(); });
+      txt.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); findStep(e.shiftKey ? -1 : 1); }
+        else if (e.key === 'Escape') { e.preventDefault(); setCondsOn(false); refresh(); input.focus(); }
+      });
+      const del = document.createElement('button');
+      del.className = 'find-btn';
+      del.textContent = '−';
+      del.title = 'Remove this condition';
+      del.addEventListener('click', () => {
+        searchState.conds.splice(i, 1);
+        if (!searchState.conds.length) { searchState.conds.push({ join: 'and', type: 'followed', text: '' }); setCondsOn(false); }
+        renderConds();
+        refresh();
+      });
+      item.append(type, txt, del);
+      condList.appendChild(item);
+      if (i === focusIdx) (txt.hidden ? type : txt).focus();
+    });
+  }
+  renderConds();
   condBtn.addEventListener('click', () => {
-    const open = condRow.classList.toggle('open');
-    condBtn.classList.toggle('active', open);
-    if (open) document.getElementById('find-cond-text').focus();
+    setCondsOn(!searchState.condsOn);
+    if (searchState.condsOn) renderConds(0);
+    refresh();
   });
-  function applyCondition() {
-    const base = _literalQueryToRegex(input.value);
-    const cond = _literalQueryToRegex(document.getElementById('find-cond-text').value);
-    if (!input.value || !cond) { showToast('Fill both the Find text and the condition text', 'error', 2200); return; }
-    const type = document.getElementById('find-cond-type').value;
-    let pattern;
-    if (type === 'followed') pattern = base + '(?=' + cond + ')';
-    else if (type === 'not-followed') pattern = base + '(?!' + cond + ')';
-    else if (type === 'preceded') pattern = '(?<=' + cond + ')' + base;
-    else pattern = '(?<!' + cond + ')' + base;
+  document.getElementById('find-cond-add').addEventListener('click', () => {
+    searchState.conds.push({ join: 'and', type: 'word-start', text: '' });
+    renderConds(searchState.conds.length - 1);
+    refresh();
+  });
+  document.getElementById('find-cond-bake').addEventListener('click', () => {
+    const pats = input.value ? _searchPatterns() : null;
+    if (!pats) { showToast('Type something to find first', 'error', 2000); return; }
+    const pattern = pats.length === 1 ? pats[0] : '(?:' + pats.join('|') + ')';
     input.value = pattern;
     searchState.query = pattern;
     if (!searchState.regex) { searchState.regex = true; regexBtn.classList.add('active'); }
-    condRow.classList.remove('open');
-    condBtn.classList.remove('active');
-    searchState.current = -1;
-    searchRecomputeAndRefresh(true);
+    if (searchState.wholeWord) { searchState.wholeWord = false; wordBtn.classList.remove('active'); }
+    setCondsOn(false);
+    refresh();
     input.focus();
-  }
-  document.getElementById('find-cond-apply').addEventListener('click', applyCondition);
-  document.getElementById('find-cond-text').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); applyCondition(); }
-    if (e.key === 'Escape') { e.preventDefault(); condRow.classList.remove('open'); condBtn.classList.remove('active'); }
   });
 
   regexBtn.addEventListener('click', () => {
