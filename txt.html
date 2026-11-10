@@ -4385,8 +4385,10 @@ window.Cade = (function () {
       store(file, name) { return _storeAttachment(file, name); },
       // Store it and drop a pill at the cursor (Upload File).
       attach(file) { return insertAttachmentFile(file); },
-      // { name, mime, size, blob, checked } or null while the bytes aren't
-      // here yet; rejects 'checksum' / 'decode' on damaged data.
+      // { name, mime, size, blob, checked, vol } or null while the bytes
+      // aren't here yet; rejects 'checksum' / 'decode' on damaged data. vol is
+      // { name, i, n, size, sha256 } for one volume of a file split past
+      // MAX_BYTES (attach() splits; store() still rejects oversize files).
       get(hash) { return _readAttachment(hash); },
       // The file tokens in a text: [{ name, hash, size, index, length }].
       tokens(text) {
@@ -8584,7 +8586,7 @@ function _sanitizeAttachmentName(name) {
 // out-of-document (IndexedDB + encrypted upload, queued while offline). Resolves
 // { token, hash, name, size, encoded } — the caller places the token. Rejects
 // with a user-facing message. (Cade.files.store for modules.)
-async function _storeAttachment(file, nameOverride) {
+async function _storeAttachment(file, nameOverride, vol) {
   if (!file) throw new Error('No file');
   const name = _sanitizeAttachmentName(nameOverride || file.name);
   if (file.size > FILE_MAX_BYTES) throw new Error('File too large to attach (max 25 MB): ' + name);
@@ -8599,6 +8601,7 @@ async function _storeAttachment(file, nameOverride) {
     if (c && c.length < raw.length) { body = c; enc = 'deflate-raw'; }
   } catch {}
   const rec = { v: 1, name, size: raw.length, mime: file.type || '', sha256: sha, enc, data: _bytesToB64(body) };
+  if (vol) rec.vol = vol;
   const payload = JSON.stringify(rec);
   let hash = null;
   try { hash = await _imgHash(payload); } catch {}
@@ -8612,25 +8615,69 @@ async function _storeAttachment(file, nameOverride) {
   return { token: '![file:' + name + '#' + hash + '|s' + raw.length + ']', hash, name, size: raw.length, encoded: rec.data.length };
 }
 
+// ---- Volumes: files over FILE_MAX_BYTES ----
+// A file past the cap is cut into FILE_MAX_BYTES volumes, each stored as its
+// own ordinary attachment named "<name>.001", "<name>.002"… (7-Zip style), so
+// every volume syncs, dedupes and GCs exactly like any other file. Each
+// volume's record carries vol: { name, i, n, size, sha256 } describing the
+// WHOLE file (sha256 of all the original bytes), which is how a download finds
+// and checks the rest of the set.
+const FILE_VOL_RE = /^(.*)\.(\d{3,})$/;
+function _volumeName(name, i, n) {
+  return _sanitizeAttachmentName(name + '.' + String(i).padStart(Math.max(3, String(n).length), '0'));
+}
+// Store every volume of `file` → the _storeAttachment results, in order.
+async function _storeAttachmentVolumes(file, onProgress) {
+  const name = _sanitizeAttachmentName(file.name);
+  const V = FILE_MAX_BYTES, n = Math.ceil(file.size / V);
+  // Whole-file checksum first, a volume at a time (never the whole file in memory).
+  const h = _splitSha256();
+  try {
+    for (let i = 0; i < n; i++) h.update(new Uint8Array(await file.slice(i * V, Math.min((i + 1) * V, file.size)).arrayBuffer()));
+  } catch { throw new Error('Could not read ' + name); }
+  const vol = { name, n, size: file.size, sha256: h.hex() };
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    if (onProgress) onProgress(i + 1, n);
+    const part = file.slice(i * V, Math.min((i + 1) * V, file.size), file.type || '');
+    out.push(await _storeAttachment(part, _volumeName(name, i + 1, n), Object.assign({ i: i + 1 }, vol)));
+  }
+  return out;
+}
+
 // Attach ANY file as a pill token at the cursor. Mirrors insertImageFile.
+// Files over the cap attach as a run of volume pills, one per line.
 async function insertAttachmentFile(file) {
   if (!file) return;
-  if (file.size > 2 * 1024 * 1024) showToast('Encoding ' + _sanitizeAttachmentName(file.name) + '…', 'info', 1500);
-  let r;
-  try { r = await _storeAttachment(file); } catch (e) { showToast((e && e.message) || 'Attach failed', 'error', 4000); return; }
+  const name = _sanitizeAttachmentName(file.name);
+  let rs;
+  try {
+    if (file.size > FILE_MAX_BYTES) {
+      const n = Math.ceil(file.size / FILE_MAX_BYTES);
+      showToast('Splitting ' + name + ' (' + _fmtBytes(file.size) + ') into ' + n + ' volumes…', 'info', 2000);
+      rs = await _storeAttachmentVolumes(file, (i, k) => { if (i > 1) showToast('Encoding volume ' + i + ' of ' + k + '…', 'info', 1500); });
+    } else {
+      if (file.size > 2 * 1024 * 1024) showToast('Encoding ' + name + '…', 'info', 1500);
+      rs = [await _storeAttachment(file)];
+    }
+  } catch (e) { showToast((e && e.message) || 'Attach failed', 'error', 4000); return; }
+  const tokens = rs.map(r => r.token).join('\n');
   const sel = editor.state.selection.main;
   const doc = editor.state.doc;
   const pre = (sel.from > 0 && doc.sliceString(sel.from - 1, sel.from) !== '\n') ? '\n' : '';
-  editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: pre + r.token + '\n' }, selection: { anchor: sel.from + pre.length + r.token.length + 1 } });
+  editor.dispatch({ changes: { from: sel.from, to: sel.to, insert: pre + tokens + '\n' }, selection: { anchor: sel.from + pre.length + tokens.length + 1 } });
   // Seed the removal-check baseline immediately: without this, attaching and
   // deleting within one debounce window (2.5s) would never trigger the GC.
-  try { _lastDocFileHashes.add(r.hash); } catch {}
-  showToast('Attached ' + r.name + ' (' + _fmtBytes(r.size) + ' → ' + _fmtBytes(r.encoded) + ' encoded)', 'success', 2500);
+  try { rs.forEach(r => _lastDocFileHashes.add(r.hash)); } catch {}
+  const enc = rs.reduce((a, r) => a + r.encoded, 0);
+  if (rs.length > 1) showToast('Attached ' + name + ' as ' + rs.length + ' volumes (' + _fmtBytes(file.size) + ' → ' + _fmtBytes(enc) + ' encoded)', 'success', 3000);
+  else showToast('Attached ' + rs[0].name + ' (' + _fmtBytes(rs[0].size) + ' → ' + _fmtBytes(enc) + ' encoded)', 'success', 2500);
 }
 window.insertAttachmentFile = insertAttachmentFile;
 
 // An attached file's bytes, decoded and integrity-checked: { name, mime, size,
-// blob, checked } — null while they aren't here yet (still uploading from the
+// blob, checked, vol } (vol: volume info when it's one volume of a bigger
+// file, else null) — null while they aren't here yet (still uploading from the
 // sender, or offline). Throws 'checksum' / 'decode' on damaged data.
 // (Cade.files.get for modules.)
 async function _readAttachment(hash) {
@@ -8643,11 +8690,58 @@ async function _readAttachment(hash) {
     if (rec.enc === 'deflate-raw') bytes = await _inflateBytes(bytes);
   } catch { throw new Error('decode'); }
   if (rec.sha256 && (await _sha256Hex(bytes)) !== rec.sha256) throw new Error('checksum');
-  return { name: rec.name || 'file', mime: rec.mime || '', size: bytes.length, blob: new Blob([bytes], { type: rec.mime || 'application/octet-stream' }), checked: !!rec.sha256 };
+  const vol = rec.vol && rec.vol.n > 1 && rec.vol.i >= 1 && rec.vol.i <= rec.vol.n ? rec.vol : null;
+  return { name: rec.name || 'file', mime: rec.mime || '', size: bytes.length, blob: new Blob([bytes], { type: rec.mime || 'application/octet-stream' }), checked: !!rec.sha256, vol };
+}
+
+// The other volumes of `f` (volume `hash`) among the current note's pills,
+// then joined and checked against the whole-file SHA-256 and saved. Returns
+// false — leaving the caller to save just this volume — when some volume isn't
+// in the note or its bytes aren't here yet.
+async function _downloadVolumeSet(f, hash) {
+  const vol = f.vol, m = FILE_VOL_RE.exec(f.name);
+  const parts = new Array(vol.n + 1);
+  parts[vol.i] = f;
+  let text = '';
+  try { text = editor.state.doc.toString(); } catch {}
+  const re = new RegExp(FILE_TOKEN_RE.source, 'g'); let t;
+  const seen = new Set([hash]);
+  let damaged = 0;
+  if (m) while ((t = re.exec(text)) !== null) {
+    const tm = FILE_VOL_RE.exec(t[1]);
+    if (!tm || tm[1] !== m[1] || seen.has(t[2])) continue;
+    const i = parseInt(tm[2], 10);
+    if (!(i >= 1 && i <= vol.n) || parts[i]) continue;
+    seen.add(t[2]);
+    let p = null;
+    try { p = await _readAttachment(t[2]); } catch { damaged++; continue; }
+    if (p && p.vol && p.vol.sha256 === vol.sha256 && p.vol.n === vol.n && !parts[p.vol.i]) parts[p.vol.i] = p;
+  }
+  const missing = [];
+  for (let i = 1; i <= vol.n; i++) if (!parts[i]) missing.push(i);
+  if (missing.length) {
+    showToast('Can’t rebuild ' + vol.name + ': volume' + (missing.length > 1 ? 's ' : ' ') + missing.join(', ') + ' of ' + vol.n
+      + (damaged ? ' damaged, missing from this note, or not downloaded yet' : ' missing from this note or not downloaded yet') + ' — saving ' + f.name + ' only', 'error', 5000);
+    return false;
+  }
+  if (vol.n > 2) showToast('Combining ' + vol.n + ' volumes of ' + vol.name + '…', 'info', 1500);
+  const blobs = parts.slice(1).map(p => p.blob);
+  let ok = blobs.reduce((a, b) => a + b.size, 0) === vol.size;
+  if (ok && vol.sha256) {
+    const h = _splitSha256();
+    for (const b of blobs) h.update(new Uint8Array(await b.arrayBuffer()));
+    ok = h.hex() === vol.sha256;
+  }
+  if (!ok) { showToast('Checksum mismatch rebuilding ' + vol.name + ' from its volumes — the file data is corrupted', 'error', 4500); return true; }
+  _dlSaveBlob(new Blob(blobs, { type: f.mime || 'application/octet-stream' }), vol.name);
+  showToast('Restored ' + vol.name + ' from ' + vol.n + ' volumes (' + _fmtBytes(vol.size) + ', checksum OK)', 'success', 3000);
+  return true;
 }
 
 // Decode + integrity-check + save (the browser port of decode_from_txt.py).
-async function downloadFileAttachment(hash, fallbackName) {
+// One volume of a split file downloads the whole file when every volume is
+// in the note (opts.single: just that volume).
+async function downloadFileAttachment(hash, fallbackName, opts) {
   let f = null;
   try { f = await _readAttachment(hash); }
   catch (e) {
@@ -8656,6 +8750,7 @@ async function downloadFileAttachment(hash, fallbackName) {
     return;
   }
   if (!f) { showToast('File bytes not available yet (still uploading from the sender, or offline) — try again shortly', 'error', 4000); return; }
+  if (f.vol && !(opts && opts.single) && await _downloadVolumeSet(f, hash)) return;
   const outName = f.name || fallbackName || 'file';
   _dlSaveBlob(f.blob, outName);
   showToast('Restored ' + outName + ' (' + _fmtBytes(f.size) + (f.checked ? ', checksum OK' : '') + ')', 'success', 2800);
@@ -8709,8 +8804,14 @@ function showFileMenu(x, y, name, hash, posOf) {
   };
   const items = [
     { label: '⬇ Download ' + name, run: () => downloadFileAttachment(hash, name) },
-    { label: '⎘ Copy as encoded text', run: () => copyFileAsText(hash, name) },
   ];
+  // A volume of a split file: the item above rebuilds the whole file.
+  const vm = FILE_VOL_RE.exec(name);
+  if (vm) {
+    items[0].label = '⬇ Download ' + vm[1] + ' (all volumes)';
+    items.push({ label: '⬇ Download this volume only', run: () => downloadFileAttachment(hash, name, { single: true }) });
+  }
+  items.push({ label: '⎘ Copy as encoded text', run: () => copyFileAsText(hash, name) });
   // Items modules add (Beam: send to a device / as a QR stream). Their code
   // may not be loaded yet, so each item only names a command to run and what
   // to hand it (Cade.files.take on the other side).
