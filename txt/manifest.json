@@ -1963,6 +1963,17 @@
       "default": true
     },
     {
+      "id": "modkeys",
+      "type": "plugin",
+      "name": "Mobile Ctrl / Shift keys and arrow pad",
+      "description": "On phones and tablets: Ctrl and Shift buttons above the keyboard — tap one and the next key you type runs as Ctrl+key / Shift+key; double-tap to lock it on until tapped off. Its arrow button (or View → Arrow Keys Pad) opens a floating arrow pad for moving the cursor or playing games",
+      "entry": "widgets/modkeys/modkeys.js",
+      "css": "widgets/modkeys/modkeys.css",
+      "settingKey": "plugins.modkeys",
+      "section": "Editor",
+      "default": true
+    },
+    {
       "id": "typewriter",
       "type": "plugin",
       "name": "Typewriter sounds",

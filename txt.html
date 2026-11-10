@@ -3403,6 +3403,15 @@ body.inbox-list .find-panel { display: none !important; }
   <div style="position:relative;">
     <button class="menu-trigger" id="menu-view-btn">View</button>
     <div class="menu-dropdown" id="menu-view">
+      <button class="menu-item" onclick="closeAllMenus(); addRoomPrompt()" title="Create a new room">
+        <span>+ New Room</span>
+        <kbd>Ctrl+N</kbd>
+      </button>
+      <button class="menu-item" onclick="closeAllMenus(); createTempRoom()" title="A scratch room that deletes itself after the temp-room lifetime set in Preferences">
+        <span>+ Temp Room</span>
+        <kbd>Ctrl+Shift+N</kbd>
+      </button>
+      <div class="menu-separator"></div>
       <button class="menu-item" onclick="toggleMdStyle()">
         <span id="mdstyle-label">Markdown Styling: On</span>
         <span></span>
@@ -3438,6 +3447,10 @@ body.inbox-list .find-panel { display: none !important; }
       </button>
       <button class="menu-item" onclick="toggleZen()">
         <span id="zen-label">Zen Mode</span>
+        <span></span>
+      </button>
+      <button class="menu-item" onclick="closeAllMenus(); toggleArrowPad()" title="A floating arrow-key pad for moving the cursor or playing games on a touch screen">
+        <span>Arrow Keys Pad</span>
         <span></span>
       </button>
       <button class="menu-item" onclick="openEventsCalendar()" title="Events + daily-note rooms by date">
@@ -25144,6 +25157,12 @@ window.openTimer = function () { const w = WIDGETS.find(x => x.name === 'Timer')
 window.togglePomodoro = function () { window.openTimer(); };
 
 // ---- Zen / typewriter mode (#33) ----
+// View → Arrow Keys Pad: the floating D-pad lives in the "modkeys" plugin
+// (txt/widgets/modkeys), so it's only there while that plugin is on.
+window.toggleArrowPad = function() {
+  if (window.__cadeArrowPad) { window.__cadeArrowPad.toggle(); return; }
+  showToast('Turn on "Mobile Ctrl / Shift keys and arrow pad" in Preferences → Editor to use the arrow pad', 'error', 4000);
+};
 window.toggleZen = function() {
   closeAllMenus();
   const on = document.body.classList.toggle('zen');
