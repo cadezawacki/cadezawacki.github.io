@@ -907,6 +907,8 @@ body.sel-mode .editor-wrap .cm-content { -webkit-touch-callout: none; }
 .xfer-btn[hidden] { display: none; }
 .xfer-track { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
 .xfer-fill { width: 0; height: 100%; background: var(--accent); transition: width 200ms linear; }
+.xfer-indet .xfer-fill { width: 35%; transition: none; animation: xfer-slide 1.1s ease-in-out infinite; }
+@keyframes xfer-slide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
 .xfer-preview { position: absolute; inset: 0; z-index: 30; background: var(--bg); }
 .xfer-preview[hidden] { display: none; }
 /* Phones: clear of the floating scroll buttons on the right edge. */
@@ -3155,9 +3157,11 @@ body.readonly .cm-img-grip { display: none; }
 }
 .ibx[hidden] { display: none; }
 .ibx-top { flex: none; padding-top: 10px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.ibx-searchrow { display: flex; gap: 8px; margin: 0 12px; }
 .ibx-search {
+  flex: 1; min-width: 0;
   display: flex; align-items: center; gap: 8px;
-  height: 42px; margin: 0 12px; padding: 0 3px 0 12px;
+  height: 42px; margin: 0; padding: 0 3px 0 12px;
   border: 1px solid var(--border); border-radius: var(--radius-lg);
   background: var(--surface);
 }
@@ -3177,6 +3181,16 @@ body.readonly .cm-img-grip { display: none; }
   border: 0; border-radius: var(--radius-md); background: none; color: var(--text-muted); cursor: pointer;
 }
 .ibx-clear[hidden] { display: none; }
+.ibx-add-btn {
+  flex: none; width: 42px; height: 42px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface); color: var(--text); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ibx-add-btn svg { width: 18px; height: 18px; }
+.ibx-add-btn:active { background: var(--surface-hover); }
+@media (hover: hover) { .ibx-add-btn:hover { background: var(--surface-hover); border-color: var(--border-focus); } }
 .ibx-clear svg { width: 16px; height: 16px; }
 .ibx-chips {
   display: flex; gap: 6px; padding: 8px 12px;
@@ -3317,13 +3331,32 @@ mark.ibx-hit { background: var(--ibx-hit-bg); color: inherit; border-radius: 2px
   background: var(--bg); color: var(--text); font: inherit; font-size: 14px; text-transform: uppercase;
 }
 .ibx-newsec input:focus { outline: none; border-color: var(--border-focus); }
+.ibx-addform { padding-left: 14px; padding-right: 14px; }
+.ibx-addform .ibx-sheet-head { padding: 0 0 12px; margin-bottom: 10px; }
+.ibx-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.ibx-field[hidden] { display: none; }
+.ibx-field-l { font-size: 12px; color: var(--text-muted); letter-spacing: 0.02em; }
+.ibx-field-l i { font-style: normal; opacity: 0.75; }
+.ibx-field input, .ibx-field select {
+  width: 100%; box-sizing: border-box; height: 40px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--bg); color: var(--text); font: inherit; font-size: 14px;
+}
+.ibx-field select { padding-right: 6px; }
+.ibx-field input:focus, .ibx-field select:focus { outline: none; border-color: var(--border-focus); }
+#ibx-add-new { text-transform: uppercase; }
+#ibx-add-new::placeholder { text-transform: none; }
+.ibx-add-err { margin: -4px 0 10px; font-size: 12.5px; color: var(--error); }
+.ibx-add-err[hidden] { display: none; }
+.ibx-add-btns { display: flex; justify-content: flex-end; gap: 8px; padding-top: 2px; }
+.ibx-add-btns .btn { font-family: var(--font-mono); min-height: 38px; }
 @media (min-width: 769px) {
   .ibx-sheet-wrap { align-items: center; }
   .ibx-sheet { border-bottom: 1px solid var(--border); border-radius: 14px; padding-bottom: 10px; }
 }
 /* Wide screens: one reading column, so a date stays near its title. */
 @media (min-width: 820px) {
-  .ibx-search { max-width: 756px; margin: 0 auto; }
+  .ibx-searchrow { max-width: 756px; margin: 0 auto; }
   .ibx-chips { max-width: 780px; margin: 0 auto; }
   .ibx-list > * { max-width: 780px; margin-left: auto; margin-right: auto; }
 }
@@ -3334,7 +3367,7 @@ body.inbox-list .mobile-toolbar,
 body.inbox-list .mobile-scroll-btns,
 body.inbox-list .find-panel { display: none !important; }
 @media (max-width: 768px) {
-  .ibx-q, .ibx-newsec input { font-size: 16px; }   /* under 16px iOS zooms the page on focus */
+  .ibx-q, .ibx-newsec input, .ibx-field input, .ibx-field select { font-size: 16px; }   /* under 16px iOS zooms the page on focus */
   .ibx-l1 { font-size: 14.5px; line-height: 21px; }
   .ibx-l2, .ibx-quote { font-size: 12.5px; }
   .ibx-sec-head { font-size: 13px; }
@@ -3613,6 +3646,7 @@ body.inbox-list .find-panel { display: none !important; }
 <!-- Inbox list view (see INBOX LIST VIEW) — covers the editor in the clip inbox room. -->
 <div class="ibx" id="inbox-view" hidden>
   <div class="ibx-top">
+    <div class="ibx-searchrow">
     <label class="ibx-search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
       <input class="ibx-q" id="ibx-q" type="search" placeholder="Search links" aria-label="Search links" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
@@ -3620,6 +3654,10 @@ body.inbox-list .find-panel { display: none !important; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
       </button>
     </label>
+    <button class="ibx-add-btn" id="ibx-add-btn" type="button" aria-label="Add a link" title="Add a link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    </div>
     <div class="ibx-chips" id="ibx-chips" role="toolbar" aria-label="Filter by section"></div>
   </div>
   <div class="ibx-list" id="ibx-list"></div>
@@ -3670,6 +3708,26 @@ body.inbox-list .find-panel { display: none !important; }
     <button class="ibx-act" type="button" data-act="text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>Show in text</button>
     <button class="ibx-act danger" type="button" data-act="delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete</button>
   </div>
+</div>
+
+<!-- Inbox: add a link by hand -->
+<div class="ibx-sheet-wrap" id="ibx-add" hidden>
+  <form class="ibx-sheet ibx-addform" id="ibx-add-form" role="dialog" aria-modal="true" aria-labelledby="ibx-add-title" novalidate autocomplete="off">
+    <div class="ibx-sheet-head"><div class="ibx-sheet-title" id="ibx-add-title">Add a link</div></div>
+    <label class="ibx-field"><span class="ibx-field-l">Link</span>
+      <input id="ibx-add-url" type="url" inputmode="url" placeholder="https://…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="next"></label>
+    <label class="ibx-field"><span class="ibx-field-l">Title <i>optional</i></span>
+      <input id="ibx-add-name" type="text" placeholder="Taken from the link if left blank" autocomplete="off" enterkeyhint="done"></label>
+    <label class="ibx-field"><span class="ibx-field-l">Category</span>
+      <select id="ibx-add-cat"></select></label>
+    <label class="ibx-field" id="ibx-add-newwrap" hidden><span class="ibx-field-l">New category</span>
+      <input id="ibx-add-new" type="text" placeholder="category name" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="done"></label>
+    <div class="ibx-add-err" id="ibx-add-err" role="alert" hidden></div>
+    <div class="ibx-add-btns">
+      <button class="btn" type="button" data-add-cancel>Cancel</button>
+      <button class="btn btn-primary" type="submit">Add link</button>
+    </div>
+  </form>
 </div>
 
 <!-- ========== SHARE ========== -->
@@ -8469,28 +8527,133 @@ function _fileRefCachePut(hash, rec) {
   _fileRefCache.set(hash, rec);
 }
 // Pull a file payload from Firebase into IndexedDB (mirror of fetchImageFromServer).
-async function fetchFileFromServer(hash) {
+// Downloads through the RTDB REST endpoint as a byte stream, so a big file can
+// show progress in the transfer pill (opts.ui; opts.name labels it) — the
+// SDK's once('value') hands the whole node over at once, with no progress and
+// (with a live listener nearby) possibly from a stale cache. The SDK stays the
+// fallback when REST is refused. Concurrent requests for one hash share a
+// download. On null, _fileFetchErr says why: 'nosync' | 'offline' | 'missing'
+// | 'network' | 'decrypt' (see _fileUnavailableMsg).
+const _fileFetchErr = new Map();
+const _fileFetchInflight = new Map();
+function fetchFileFromServer(hash, opts) {
+  let p = _fileFetchInflight.get(hash);
+  if (!p) {
+    p = _fetchFileFromServer(hash, opts || {}).finally(() => _fileFetchInflight.delete(hash));
+    _fileFetchInflight.set(hash, p);
+  }
+  return p;
+}
+// GET a JSON value over REST, reporting body bytes as they arrive. An idle
+// timeout (restarted by every chunk) so a slow link finishes rather than fails.
+async function _restGetJson(url, onBytes, idleMs) {
+  const ctrl = new AbortController();
+  idleMs = idleMs || 15000;
+  let t = setTimeout(() => ctrl.abort(), idleMs);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+    if (!r.ok) throw new Error('rest-' + r.status);
+    if (!r.body || typeof r.body.getReader !== 'function') return await r.json();
+    const reader = r.body.getReader(), dec = new TextDecoder(), out = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      out.push(dec.decode(value, { stream: true }));
+      clearTimeout(t); t = setTimeout(() => ctrl.abort(), idleMs);
+      if (onBytes) onBytes(value.length);
+    }
+    out.push(dec.decode());
+    return JSON.parse(out.join(''));
+  } finally { clearTimeout(t); }
+}
+// The encrypted payload of files/<fp>/<hash> over REST: null when it isn't
+// there (or only partly uploaded). Chunked payloads come part by part, so the
+// total is known up front (every part but the last is FB_CHUNK_SIZE chars).
+async function _fileRestFetch(fbUrl, fp, hash, prog) {
+  const base = fbUrl.replace(/\/+$/, '') + '/files/' + fp + '/' + hash;
+  const n = await _restGetJson(base + '/_chunks.json');
+  if (typeof n === 'number' && n > 0) {
+    const total = n * (FB_CHUNK_SIZE + 2);
+    let done = 0;
+    const parts = [];
+    prog(0, total);
+    for (let i = 0; i < n; i++) {
+      const part = await _restGetJson(base + '/parts/' + i + '.json', b => { done += b; prog(Math.min(done, total), total); });
+      if (typeof part !== 'string') return null;
+      parts.push(part);
+    }
+    prog(total, total);
+    return parts.join('');
+  }
+  let done = 0;
+  const v = await _restGetJson(base + '.json', b => { done += b; prog(done, 0); });
+  return typeof v === 'string' ? v : unpackRoomText(v);
+}
+async function _fetchFileFromServer(hash, opts) {
+  const fail = (why) => { _fileFetchErr.set(hash, why); return null; };
   const baseKey = store.get('cade-sync-key') || '';
   const fbUrl = store.get('cade-firebase-url') || '';
-  if (!baseKey || !fbUrl) return null;
+  if (!baseKey || !fbUrl) return fail('nosync');
+  if (navigator.onLine === false) return fail('offline');
+  // The pill appears only for a download that's big or slow enough to notice
+  // — including a slow first byte (the timer), not just once bytes flow.
+  let xfer = null, last = [0, 0], over = false, showT = 0;
+  const t0 = Date.now();
+  const prog = (done, total) => {
+    last = [done, total];
+    if (!opts.ui || over) return;
+    if (!xfer) {
+      if (done < 256 * 1024 && Date.now() - t0 < 400) return;
+      xfer = StreamXfer.begin({ room: activeRoom, dir: 'down', total, done, label: '↓ Downloading ' + (opts.name || 'file') });
+    } else xfer.progress(done, total);
+  };
+  if (opts.ui) showT = setTimeout(() => prog(last[0], last[1]), 400);
   try {
-    const db = initFirebase(fbUrl);
-    const fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey));
-    const snap = await db.ref('files/' + fp + '/' + hash).once('value');
-    const enc = unpackRoomText(snap.val()); // large payloads are chunked like room text
-    if (!enc) return null;
+    let fp;
+    try { fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey)); } catch { return fail('network'); }
+    let enc;
+    try { enc = await _fileRestFetch(fbUrl, fp, hash, prog); }
+    catch {
+      // REST refused or dropped: the SDK read (no progress) is the fallback.
+      try {
+        if (xfer) xfer.setLabel('↓ Downloading ' + (opts.name || 'file') + ' (retrying)');
+        // Bounded: offline, once() would wait for a connection forever.
+        const snap = await Promise.race([
+          initFirebase(fbUrl).ref('files/' + fp + '/' + hash).once('value'),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000)),
+        ]);
+        enc = unpackRoomText(snap.val()); // large payloads are chunked like room text
+      } catch { return fail('network'); }
+    }
+    if (!enc) return fail('missing');
+    if (xfer) xfer.setLabel('Decrypting ' + (opts.name || 'file') + '…');
     const dec = await decryptText(enc, baseKey);
-    if (!dec) return null;
+    if (!dec) return fail('decrypt');
+    _fileFetchErr.delete(hash);
     try { idbStore.set('file:' + hash, dec); } catch {}
     return dec;
-  } catch { return null; }
+  } finally {
+    over = true;
+    clearTimeout(showT);
+    if (xfer) xfer.end();
+  }
 }
-async function resolveFileRef(hash) {
+// Why an attached file's bytes couldn't be had (after resolveFileRef → null).
+function _fileUnavailableMsg(hash) {
+  switch (_fileFetchErr.get(hash)) {
+    case 'nosync': return 'This file’s bytes aren’t on this device, and sync isn’t set up here to fetch them';
+    case 'offline': return 'You’re offline — this file hasn’t been downloaded to this device yet';
+    case 'network': return 'Couldn’t download the file — check your connection and try again';
+    case 'decrypt': return 'Couldn’t decrypt the file — is this device using the same sync key as the one that attached it?';
+    default: return 'File not on the server yet — it may still be uploading from the device that attached it. Try again shortly';
+  }
+}
+async function resolveFileRef(hash, opts) {
   let hit = _fileRefCache.get(hash);
   if (hit) { _fileRefCache.delete(hash); _fileRefCache.set(hash, hit); return hit; }
   let stored = null;
   try { stored = await idbStore.get('file:' + hash); } catch {}
-  if (!stored) stored = await fetchFileFromServer(hash);
+  if (!stored) stored = await fetchFileFromServer(hash, opts);
   if (!stored) return null;
   let rec = null;
   try { rec = JSON.parse(stored); } catch { return null; }
@@ -8693,9 +8856,9 @@ window.insertAttachmentFile = insertAttachmentFile;
 // file, else null) — null while they aren't here yet (still uploading from the
 // sender, or offline). Throws 'checksum' / 'decode' on damaged data.
 // (Cade.files.get for modules.)
-async function _readAttachment(hash) {
+async function _readAttachment(hash, opts) {
   let rec = null;
-  try { rec = await resolveFileRef(hash); } catch {}
+  try { rec = await resolveFileRef(hash, opts); } catch {}
   if (!rec) return null;
   let bytes;
   try {
@@ -8727,7 +8890,7 @@ async function _downloadVolumeSet(f, hash) {
     if (!(i >= 1 && i <= vol.n) || parts[i]) continue;
     seen.add(t[2]);
     let p = null;
-    try { p = await _readAttachment(t[2]); } catch { damaged++; continue; }
+    try { p = await _readAttachment(t[2], { ui: true, name: t[1] }); } catch { damaged++; continue; }
     if (p && p.vol && p.vol.sha256 === vol.sha256 && p.vol.n === vol.n && !parts[p.vol.i]) parts[p.vol.i] = p;
   }
   const missing = [];
@@ -8756,13 +8919,13 @@ async function _downloadVolumeSet(f, hash) {
 // in the note (opts.single: just that volume).
 async function downloadFileAttachment(hash, fallbackName, opts) {
   let f = null;
-  try { f = await _readAttachment(hash); }
+  try { f = await _readAttachment(hash, { ui: true, name: fallbackName }); }
   catch (e) {
     if (e && e.message === 'checksum') showToast('Checksum mismatch — the file data is corrupted', 'error', 4500);
     else showToast('File decode failed — was the data modified or truncated?', 'error', 4000);
     return;
   }
-  if (!f) { showToast('File bytes not available yet (still uploading from the sender, or offline) — try again shortly', 'error', 4000); return; }
+  if (!f) { showToast(_fileUnavailableMsg(hash), 'error', 5000); return; }
   if (f.vol && !(opts && opts.single) && await _downloadVolumeSet(f, hash)) return;
   const outName = f.name || fallbackName || 'file';
   _dlSaveBlob(f.blob, outName);
@@ -8784,8 +8947,8 @@ function _fileToEncodedText(rec) {
 }
 async function copyFileAsText(hash, fallbackName) {
   let rec = null;
-  try { rec = await resolveFileRef(hash); } catch {}
-  if (!rec) { showToast('File bytes not available yet (still uploading from the sender, or offline) — try again shortly', 'error', 4000); return; }
+  try { rec = await resolveFileRef(hash, { ui: true, name: fallbackName }); } catch {}
+  if (!rec) { showToast(_fileUnavailableMsg(hash), 'error', 5000); return; }
   const text = _fileToEncodedText(rec);
   try {
     await navigator.clipboard.writeText(text);
@@ -13138,6 +13301,7 @@ function inboxViewSync() {
       _ibxSeen = null;                 // no "new" flash for what was already there
     } else {
       _ibxCloseSheet();
+      _ibxCloseAdd();
       _ibxHideUndo();
     }
   }
@@ -13305,6 +13469,116 @@ function _ibxSheetAction(act) {
   else if (act === 'delete') _ibxDelete(it);
 }
 
+// ---- add a link by hand ----------------------------------------------------
+// The "+" beside the search box: a link, an optional title and a category
+// (an existing section, UNSORTED, or a new one). It goes in exactly the way a
+// clip does — same line format, same section rules — as one undoable edit.
+const _IBX_NEW_CAT = '__new__';   // section names are upper-case, so never this
+
+// "example.com/x" → "https://example.com/x". Returns '' for anything that
+// isn't a link we'd want to file.
+function _ibxNormUrl(v) {
+  v = String(v || '').trim();
+  if (!v || /\s/.test(v)) return '';
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(v)) {
+    if (!/^[^\/?#]+\.[^\/?#.]{2,}/.test(v) && !/^localhost\b/i.test(v)) return '';
+    v = 'https://' + v.replace(/^\/+/, '');
+  }
+  try {
+    const u = new URL(v);
+    if ((u.protocol === 'http:' || u.protocol === 'https:') && !u.hostname) return '';
+    return v;
+  } catch { return ''; }
+}
+
+function _ibxAddErr(msg) {
+  const el = document.getElementById('ibx-add-err');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.hidden = !msg;
+}
+
+function _ibxAddSyncCat() {
+  const sel = document.getElementById('ibx-add-cat');
+  const wrap = document.getElementById('ibx-add-newwrap');
+  const isNew = sel && sel.value === _IBX_NEW_CAT;
+  if (wrap) wrap.hidden = !isNew;
+  return isNew;
+}
+
+function _ibxOpenAdd() {
+  if (editor.state.readOnly) { showToast('This room is read-only', 'info', 2000); return; }
+  const wrap = document.getElementById('ibx-add');
+  if (!wrap) return;
+  _ibxCloseSheet();
+  const names = [];
+  for (const sec of _ibxParse(editor.state.doc)) {
+    if (sec.name && sec.name !== CLIP_UNSORTED && !names.includes(sec.name)) names.push(sec.name);
+  }
+  const sel = document.getElementById('ibx-add-cat');
+  let opts = '<option value="">Unsorted</option>';
+  for (const n of names) opts += '<option value="' + escapeHtml(n) + '">' + escapeHtml(n.toLowerCase()) + '</option>';
+  opts += '<option value="' + _IBX_NEW_CAT + '">+ New category…</option>';
+  sel.innerHTML = opts;
+  // Start in the section the list is filtered to, if any.
+  sel.value = (_ibxFilter && names.includes(_ibxFilter)) ? _ibxFilter : '';
+  _ibxAddSyncCat();
+  const url = document.getElementById('ibx-add-url');
+  // A link typed into the search box is probably the one to add.
+  url.value = _ibxNormUrl(_ibxQuery) ? _ibxQuery.trim() : '';
+  document.getElementById('ibx-add-name').value = '';
+  document.getElementById('ibx-add-new').value = '';
+  _ibxAddErr('');
+  wrap.hidden = false;
+  try { url.focus({ preventScroll: true }); } catch {}
+}
+
+function _ibxCloseAdd() {
+  const wrap = document.getElementById('ibx-add');
+  if (wrap) wrap.hidden = true;
+}
+
+function _ibxSubmitAdd() {
+  const urlEl = document.getElementById('ibx-add-url');
+  const url = _ibxNormUrl(urlEl.value);
+  if (!url) { _ibxAddErr(urlEl.value.trim() ? 'That doesn’t look like a link' : 'Paste or type a link'); urlEl.focus(); return; }
+  let cat = document.getElementById('ibx-add-cat').value;
+  if (cat === _IBX_NEW_CAT) {
+    const newEl = document.getElementById('ibx-add-new');
+    cat = newEl.value.replace(/[\[\]]/g, ' ').trim().replace(/\s+/g, ' ');
+    if (!cat) { _ibxAddErr('Name the new category'); newEl.focus(); return; }
+  }
+  if (editor.state.readOnly) { _ibxCloseAdd(); showToast('This room is read-only', 'info', 2000); return; }
+  const at = Date.now();
+  const title = document.getElementById('ibx-add-name').value.trim();
+  const entry = { cat, url, at, text: _clipEntry({ url, title, at }) };
+  if (_clipAlreadyIn(editor.state.doc.toString(), entry)) { _ibxAddErr('That link is already here from today'); return; }
+  _ibxCloseAdd();
+  const before = editor.state.doc.toString();
+  const changes = _clipChangesFor(new Map([[_clipCat(cat), entry.text]]));
+  editor.dispatch({ changes });
+  const dest = _clipCat(cat);
+  // Make sure the new row is on screen: clear a search it wouldn't match, and
+  // follow it out of a filtered section or a fold.
+  if (_ibxQuery) {
+    const q = document.getElementById('ibx-q');
+    if (q) q.value = '';
+    _ibxQuery = '';
+    _ibxSearchFolds = new Set();
+    const clear = document.getElementById('ibx-clear');
+    if (clear) clear.hidden = true;
+  }
+  if (_ibxFilter && _ibxFilter !== dest) _ibxFilter = '';
+  const f = _ibxFolds();
+  if (f[dest]) { delete f[dest]; try { store.set(INBOX_FOLDS_KEY, JSON.stringify(f)); } catch {} }
+  inboxViewRender();
+  _ibxShowUndo('Added to ' + dest.toLowerCase(), before, editor.state.doc.toString());
+  requestAnimationFrame(() => {
+    const row = document.querySelector('#ibx-list .ibx-item.fresh');
+    if (row) try { row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
+  });
+}
+
 // ---- wiring ----------------------------------------------------------------
 function _ibxFocusSearch() {
   const q = document.getElementById('ibx-q');
@@ -13376,6 +13650,22 @@ function inboxViewInit() {
   });
   document.getElementById('ibx-undo-btn').addEventListener('click', _ibxUndoNow);
 
+  const addWrap = document.getElementById('ibx-add');
+  document.getElementById('ibx-add-btn').addEventListener('click', _ibxOpenAdd);
+  addWrap.addEventListener('click', (e) => {
+    if (e.target === addWrap || e.target.closest('[data-add-cancel]')) _ibxCloseAdd();
+  });
+  addWrap.addEventListener('submit', (e) => { e.preventDefault(); _ibxSubmitAdd(); });
+  document.getElementById('ibx-add-cat').addEventListener('change', () => {
+    _ibxAddErr('');
+    if (_ibxAddSyncCat()) { const n = document.getElementById('ibx-add-new'); if (n) n.focus(); }
+  });
+  ['ibx-add-url', 'ibx-add-new'].forEach(id => document.getElementById(id).addEventListener('input', () => _ibxAddErr('')));
+  // Enter in the link box moves on to the title rather than submitting half a form.
+  document.getElementById('ibx-add-url').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); document.getElementById('ibx-add-name').focus(); }
+  });
+
   const sheet = document.getElementById('ibx-sheet');
   sheet.addEventListener('click', (e) => {
     if (e.target === sheet) { _ibxCloseSheet(); return; }
@@ -13400,6 +13690,7 @@ function inboxViewInit() {
 
   document.addEventListener('keydown', (e) => {
     if (!sheet.hidden && e.key === 'Escape') { e.preventDefault(); _ibxCloseSheet(); return; }
+    if (!addWrap.hidden && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _ibxCloseAdd(); return; }
     if (!_ibxVisible || e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
     const el = e.target;
     if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
@@ -15107,13 +15398,15 @@ const StreamXfer = (() => {
     if (!x) { pill.hidden = true; return; }
     pill.hidden = false;
     const pct = x.total > 0 ? Math.min(100, Math.floor(x.done / x.total * 100)) : 0;
-    labelEl.textContent = (x.dir === 'up' ? '↑ Sending' : '↓ Receiving') + ' “' + x.room + '”';
-    let meta = pct + '% · ' + _fmtBytes(x.done) + ' of ' + _fmtBytes(x.total);
+    labelEl.textContent = x.label || ((x.dir === 'up' ? '↑ Sending' : '↓ Receiving') + ' “' + x.room + '”');
+    // Unknown total (a file download that isn't chunked): bytes so far, sliding bar.
+    pill.classList.toggle('xfer-indet', !(x.total > 0));
+    let meta = x.total > 0 ? pct + '% · ' + _fmtBytes(x.done) + ' of ' + _fmtBytes(x.total) : _fmtBytes(x.done) + ' so far';
     const secs = (Date.now() - x.t0) / 1000, moved = x.done - x.d0;
     if (secs > 3 && moved > 0 && x.done < x.total) meta += ' · ~' + fmtSecs((x.total - x.done) / (moved / secs)) + ' left';
     if (xfers.size > 1) meta += ' · +' + (xfers.size - 1) + ' more';
     metaEl.textContent = meta;
-    fillEl.style.width = pct + '%';
+    fillEl.style.width = x.total > 0 ? pct + '%' : '';
     const showBtn = !!(pv && pv.room === x.room);
     btnEl.hidden = !showBtn;
     if (showBtn) btnEl.textContent = pv.hidden ? 'Show preview' : 'Hide preview';
@@ -15163,13 +15456,16 @@ const StreamXfer = (() => {
     schedule();
   }
 
+  // o: { room, dir: 'up' | 'down', total, done, preview, label } — label
+  // replaces the "Receiving “room”" line (file downloads); total 0 = unknown.
   function begin(o) {
-    const x = { id: ++seq, room: o.room, dir: o.dir, total: o.total, done: o.done || 0, d0: o.done || 0, t0: Date.now(), preview: false, fed: 0 };
+    const x = { id: ++seq, room: o.room, dir: o.dir, total: o.total || 0, done: o.done || 0, d0: o.done || 0, t0: Date.now(), preview: false, fed: 0, label: o.label || '' };
     xfers.set(x.id, x);
     if (o.preview && o.dir === 'down' && o.room === activeRoom) x.preview = openPreview(o.room);
     schedule();
     return {
-      progress(done) { x.done = done; schedule(); },
+      progress(done, total) { x.done = done; if (total != null) x.total = total; schedule(); },
+      setLabel(label) { x.label = label; schedule(); },
       append(text) {
         if (!x.preview || !pv || pv.room !== x.room) return;
         // Two transfers of one document can feed one preview (the live upload,
