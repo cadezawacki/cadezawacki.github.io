@@ -3157,9 +3157,11 @@ body.readonly .cm-img-grip { display: none; }
 }
 .ibx[hidden] { display: none; }
 .ibx-top { flex: none; padding-top: 10px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.ibx-searchrow { display: flex; gap: 8px; margin: 0 12px; }
 .ibx-search {
+  flex: 1; min-width: 0;
   display: flex; align-items: center; gap: 8px;
-  height: 42px; margin: 0 12px; padding: 0 3px 0 12px;
+  height: 42px; margin: 0; padding: 0 3px 0 12px;
   border: 1px solid var(--border); border-radius: var(--radius-lg);
   background: var(--surface);
 }
@@ -3179,6 +3181,16 @@ body.readonly .cm-img-grip { display: none; }
   border: 0; border-radius: var(--radius-md); background: none; color: var(--text-muted); cursor: pointer;
 }
 .ibx-clear[hidden] { display: none; }
+.ibx-add-btn {
+  flex: none; width: 42px; height: 42px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface); color: var(--text); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ibx-add-btn svg { width: 18px; height: 18px; }
+.ibx-add-btn:active { background: var(--surface-hover); }
+@media (hover: hover) { .ibx-add-btn:hover { background: var(--surface-hover); border-color: var(--border-focus); } }
 .ibx-clear svg { width: 16px; height: 16px; }
 .ibx-chips {
   display: flex; gap: 6px; padding: 8px 12px;
@@ -3319,13 +3331,32 @@ mark.ibx-hit { background: var(--ibx-hit-bg); color: inherit; border-radius: 2px
   background: var(--bg); color: var(--text); font: inherit; font-size: 14px; text-transform: uppercase;
 }
 .ibx-newsec input:focus { outline: none; border-color: var(--border-focus); }
+.ibx-addform { padding-left: 14px; padding-right: 14px; }
+.ibx-addform .ibx-sheet-head { padding: 0 0 12px; margin-bottom: 10px; }
+.ibx-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.ibx-field[hidden] { display: none; }
+.ibx-field-l { font-size: 12px; color: var(--text-muted); letter-spacing: 0.02em; }
+.ibx-field-l i { font-style: normal; opacity: 0.75; }
+.ibx-field input, .ibx-field select {
+  width: 100%; box-sizing: border-box; height: 40px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--bg); color: var(--text); font: inherit; font-size: 14px;
+}
+.ibx-field select { padding-right: 6px; }
+.ibx-field input:focus, .ibx-field select:focus { outline: none; border-color: var(--border-focus); }
+#ibx-add-new { text-transform: uppercase; }
+#ibx-add-new::placeholder { text-transform: none; }
+.ibx-add-err { margin: -4px 0 10px; font-size: 12.5px; color: var(--error); }
+.ibx-add-err[hidden] { display: none; }
+.ibx-add-btns { display: flex; justify-content: flex-end; gap: 8px; padding-top: 2px; }
+.ibx-add-btns .btn { font-family: var(--font-mono); min-height: 38px; }
 @media (min-width: 769px) {
   .ibx-sheet-wrap { align-items: center; }
   .ibx-sheet { border-bottom: 1px solid var(--border); border-radius: 14px; padding-bottom: 10px; }
 }
 /* Wide screens: one reading column, so a date stays near its title. */
 @media (min-width: 820px) {
-  .ibx-search { max-width: 756px; margin: 0 auto; }
+  .ibx-searchrow { max-width: 756px; margin: 0 auto; }
   .ibx-chips { max-width: 780px; margin: 0 auto; }
   .ibx-list > * { max-width: 780px; margin-left: auto; margin-right: auto; }
 }
@@ -3336,7 +3367,7 @@ body.inbox-list .mobile-toolbar,
 body.inbox-list .mobile-scroll-btns,
 body.inbox-list .find-panel { display: none !important; }
 @media (max-width: 768px) {
-  .ibx-q, .ibx-newsec input { font-size: 16px; }   /* under 16px iOS zooms the page on focus */
+  .ibx-q, .ibx-newsec input, .ibx-field input, .ibx-field select { font-size: 16px; }   /* under 16px iOS zooms the page on focus */
   .ibx-l1 { font-size: 14.5px; line-height: 21px; }
   .ibx-l2, .ibx-quote { font-size: 12.5px; }
   .ibx-sec-head { font-size: 13px; }
@@ -3615,6 +3646,7 @@ body.inbox-list .find-panel { display: none !important; }
 <!-- Inbox list view (see INBOX LIST VIEW) — covers the editor in the clip inbox room. -->
 <div class="ibx" id="inbox-view" hidden>
   <div class="ibx-top">
+    <div class="ibx-searchrow">
     <label class="ibx-search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
       <input class="ibx-q" id="ibx-q" type="search" placeholder="Search links" aria-label="Search links" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
@@ -3622,6 +3654,10 @@ body.inbox-list .find-panel { display: none !important; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
       </button>
     </label>
+    <button class="ibx-add-btn" id="ibx-add-btn" type="button" aria-label="Add a link" title="Add a link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    </div>
     <div class="ibx-chips" id="ibx-chips" role="toolbar" aria-label="Filter by section"></div>
   </div>
   <div class="ibx-list" id="ibx-list"></div>
@@ -3672,6 +3708,26 @@ body.inbox-list .find-panel { display: none !important; }
     <button class="ibx-act" type="button" data-act="text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>Show in text</button>
     <button class="ibx-act danger" type="button" data-act="delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete</button>
   </div>
+</div>
+
+<!-- Inbox: add a link by hand -->
+<div class="ibx-sheet-wrap" id="ibx-add" hidden>
+  <form class="ibx-sheet ibx-addform" id="ibx-add-form" role="dialog" aria-modal="true" aria-labelledby="ibx-add-title" novalidate autocomplete="off">
+    <div class="ibx-sheet-head"><div class="ibx-sheet-title" id="ibx-add-title">Add a link</div></div>
+    <label class="ibx-field"><span class="ibx-field-l">Link</span>
+      <input id="ibx-add-url" type="url" inputmode="url" placeholder="https://…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="next"></label>
+    <label class="ibx-field"><span class="ibx-field-l">Title <i>optional</i></span>
+      <input id="ibx-add-name" type="text" placeholder="Taken from the link if left blank" autocomplete="off" enterkeyhint="done"></label>
+    <label class="ibx-field"><span class="ibx-field-l">Category</span>
+      <select id="ibx-add-cat"></select></label>
+    <label class="ibx-field" id="ibx-add-newwrap" hidden><span class="ibx-field-l">New category</span>
+      <input id="ibx-add-new" type="text" placeholder="category name" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="done"></label>
+    <div class="ibx-add-err" id="ibx-add-err" role="alert" hidden></div>
+    <div class="ibx-add-btns">
+      <button class="btn" type="button" data-add-cancel>Cancel</button>
+      <button class="btn btn-primary" type="submit">Add link</button>
+    </div>
+  </form>
 </div>
 
 <!-- ========== SHARE ========== -->
@@ -13245,6 +13301,7 @@ function inboxViewSync() {
       _ibxSeen = null;                 // no "new" flash for what was already there
     } else {
       _ibxCloseSheet();
+      _ibxCloseAdd();
       _ibxHideUndo();
     }
   }
@@ -13412,6 +13469,116 @@ function _ibxSheetAction(act) {
   else if (act === 'delete') _ibxDelete(it);
 }
 
+// ---- add a link by hand ----------------------------------------------------
+// The "+" beside the search box: a link, an optional title and a category
+// (an existing section, UNSORTED, or a new one). It goes in exactly the way a
+// clip does — same line format, same section rules — as one undoable edit.
+const _IBX_NEW_CAT = '__new__';   // section names are upper-case, so never this
+
+// "example.com/x" → "https://example.com/x". Returns '' for anything that
+// isn't a link we'd want to file.
+function _ibxNormUrl(v) {
+  v = String(v || '').trim();
+  if (!v || /\s/.test(v)) return '';
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(v)) {
+    if (!/^[^\/?#]+\.[^\/?#.]{2,}/.test(v) && !/^localhost\b/i.test(v)) return '';
+    v = 'https://' + v.replace(/^\/+/, '');
+  }
+  try {
+    const u = new URL(v);
+    if ((u.protocol === 'http:' || u.protocol === 'https:') && !u.hostname) return '';
+    return v;
+  } catch { return ''; }
+}
+
+function _ibxAddErr(msg) {
+  const el = document.getElementById('ibx-add-err');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.hidden = !msg;
+}
+
+function _ibxAddSyncCat() {
+  const sel = document.getElementById('ibx-add-cat');
+  const wrap = document.getElementById('ibx-add-newwrap');
+  const isNew = sel && sel.value === _IBX_NEW_CAT;
+  if (wrap) wrap.hidden = !isNew;
+  return isNew;
+}
+
+function _ibxOpenAdd() {
+  if (editor.state.readOnly) { showToast('This room is read-only', 'info', 2000); return; }
+  const wrap = document.getElementById('ibx-add');
+  if (!wrap) return;
+  _ibxCloseSheet();
+  const names = [];
+  for (const sec of _ibxParse(editor.state.doc)) {
+    if (sec.name && sec.name !== CLIP_UNSORTED && !names.includes(sec.name)) names.push(sec.name);
+  }
+  const sel = document.getElementById('ibx-add-cat');
+  let opts = '<option value="">Unsorted</option>';
+  for (const n of names) opts += '<option value="' + escapeHtml(n) + '">' + escapeHtml(n.toLowerCase()) + '</option>';
+  opts += '<option value="' + _IBX_NEW_CAT + '">+ New category…</option>';
+  sel.innerHTML = opts;
+  // Start in the section the list is filtered to, if any.
+  sel.value = (_ibxFilter && names.includes(_ibxFilter)) ? _ibxFilter : '';
+  _ibxAddSyncCat();
+  const url = document.getElementById('ibx-add-url');
+  // A link typed into the search box is probably the one to add.
+  url.value = _ibxNormUrl(_ibxQuery) ? _ibxQuery.trim() : '';
+  document.getElementById('ibx-add-name').value = '';
+  document.getElementById('ibx-add-new').value = '';
+  _ibxAddErr('');
+  wrap.hidden = false;
+  try { url.focus({ preventScroll: true }); } catch {}
+}
+
+function _ibxCloseAdd() {
+  const wrap = document.getElementById('ibx-add');
+  if (wrap) wrap.hidden = true;
+}
+
+function _ibxSubmitAdd() {
+  const urlEl = document.getElementById('ibx-add-url');
+  const url = _ibxNormUrl(urlEl.value);
+  if (!url) { _ibxAddErr(urlEl.value.trim() ? 'That doesn’t look like a link' : 'Paste or type a link'); urlEl.focus(); return; }
+  let cat = document.getElementById('ibx-add-cat').value;
+  if (cat === _IBX_NEW_CAT) {
+    const newEl = document.getElementById('ibx-add-new');
+    cat = newEl.value.replace(/[\[\]]/g, ' ').trim().replace(/\s+/g, ' ');
+    if (!cat) { _ibxAddErr('Name the new category'); newEl.focus(); return; }
+  }
+  if (editor.state.readOnly) { _ibxCloseAdd(); showToast('This room is read-only', 'info', 2000); return; }
+  const at = Date.now();
+  const title = document.getElementById('ibx-add-name').value.trim();
+  const entry = { cat, url, at, text: _clipEntry({ url, title, at }) };
+  if (_clipAlreadyIn(editor.state.doc.toString(), entry)) { _ibxAddErr('That link is already here from today'); return; }
+  _ibxCloseAdd();
+  const before = editor.state.doc.toString();
+  const changes = _clipChangesFor(new Map([[_clipCat(cat), entry.text]]));
+  editor.dispatch({ changes });
+  const dest = _clipCat(cat);
+  // Make sure the new row is on screen: clear a search it wouldn't match, and
+  // follow it out of a filtered section or a fold.
+  if (_ibxQuery) {
+    const q = document.getElementById('ibx-q');
+    if (q) q.value = '';
+    _ibxQuery = '';
+    _ibxSearchFolds = new Set();
+    const clear = document.getElementById('ibx-clear');
+    if (clear) clear.hidden = true;
+  }
+  if (_ibxFilter && _ibxFilter !== dest) _ibxFilter = '';
+  const f = _ibxFolds();
+  if (f[dest]) { delete f[dest]; try { store.set(INBOX_FOLDS_KEY, JSON.stringify(f)); } catch {} }
+  inboxViewRender();
+  _ibxShowUndo('Added to ' + dest.toLowerCase(), before, editor.state.doc.toString());
+  requestAnimationFrame(() => {
+    const row = document.querySelector('#ibx-list .ibx-item.fresh');
+    if (row) try { row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
+  });
+}
+
 // ---- wiring ----------------------------------------------------------------
 function _ibxFocusSearch() {
   const q = document.getElementById('ibx-q');
@@ -13483,6 +13650,22 @@ function inboxViewInit() {
   });
   document.getElementById('ibx-undo-btn').addEventListener('click', _ibxUndoNow);
 
+  const addWrap = document.getElementById('ibx-add');
+  document.getElementById('ibx-add-btn').addEventListener('click', _ibxOpenAdd);
+  addWrap.addEventListener('click', (e) => {
+    if (e.target === addWrap || e.target.closest('[data-add-cancel]')) _ibxCloseAdd();
+  });
+  addWrap.addEventListener('submit', (e) => { e.preventDefault(); _ibxSubmitAdd(); });
+  document.getElementById('ibx-add-cat').addEventListener('change', () => {
+    _ibxAddErr('');
+    if (_ibxAddSyncCat()) { const n = document.getElementById('ibx-add-new'); if (n) n.focus(); }
+  });
+  ['ibx-add-url', 'ibx-add-new'].forEach(id => document.getElementById(id).addEventListener('input', () => _ibxAddErr('')));
+  // Enter in the link box moves on to the title rather than submitting half a form.
+  document.getElementById('ibx-add-url').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); document.getElementById('ibx-add-name').focus(); }
+  });
+
   const sheet = document.getElementById('ibx-sheet');
   sheet.addEventListener('click', (e) => {
     if (e.target === sheet) { _ibxCloseSheet(); return; }
@@ -13507,6 +13690,7 @@ function inboxViewInit() {
 
   document.addEventListener('keydown', (e) => {
     if (!sheet.hidden && e.key === 'Escape') { e.preventDefault(); _ibxCloseSheet(); return; }
+    if (!addWrap.hidden && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _ibxCloseAdd(); return; }
     if (!_ibxVisible || e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
     const el = e.target;
     if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
