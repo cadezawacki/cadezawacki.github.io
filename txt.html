@@ -3440,7 +3440,7 @@ body.inbox-list .find-panel { display: none !important; }
         <span>+ New Room</span>
         <kbd>Ctrl+N</kbd>
       </button>
-      <button class="menu-item" onclick="closeAllMenus(); createTempRoom()" title="A scratch room that deletes itself after the temp-room lifetime set in Preferences">
+      <button class="menu-item" onclick="closeAllMenus(); createTempRoom()" title="A scratch room that deletes itself once it goes unedited for the temp-room lifetime set in Preferences">
         <span>+ Temp Room</span>
         <kbd>Ctrl+Shift+N</kbd>
       </button>
@@ -19088,7 +19088,7 @@ window.deleteRoomFromServer = async function(name) {
 };
 
 // ---- Temp rooms (item 33): Ctrl+Shift+N creates temp_<stamp>; a sweep
-// deletes expired ones (server + all devices) after the configured TTL. ----
+// deletes ones left unedited (server + all devices) for the configured TTL. ----
 function _tempStamp() {
   const d = new Date(), p = n => String(n).padStart(2, '0');
   return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
@@ -19109,7 +19109,7 @@ window.createTempRoom = function() {
   renderRoomTabs();
   switchRoom(name);
   const ttl = (window.Settings && Settings.get('behavior.tempRoomTtl')) || '24';
-  showToast('Temp room created' + (ttl === 'never' ? '' : ' — self-deletes after ' + ttl + 'h'), 'success', 3000);
+  showToast('Temp room created' + (ttl === 'never' ? '' : ' — self-deletes after ' + ttl + 'h without edits'), 'success', 3000);
 };
 
 // Silent full deletion (no prompts): server node + tombstone + local purge.
@@ -19132,9 +19132,16 @@ function sweepTempRooms() {
   if (ttlPref === 'never') return;
   const ttlMs = (parseFloat(ttlPref) || 24) * 3600 * 1000;
   const now = Date.now();
+  // The clock runs from the LAST EDIT (roomMeta.modified, bumped on every
+  // persist and synced account-wide), falling back to creation for a room
+  // never typed in. Measuring from `created` deleted rooms mid-edit. The room
+  // open in this editor is never swept — it goes once you've left it idle.
+  const open = activeRoom || (syncState && syncState.roomName) || '';
   const expired = rooms.filter(r => {
     const m = roomMeta[r];
-    return m && m.temp && m.created && (now - m.created > ttlMs);
+    if (!m || !m.temp || r === open) return false;
+    const last = Math.max(m.modified || 0, m.created || 0);
+    return last > 0 && (now - last > ttlMs);
   });
   if (!expired.length) return;
   expired.forEach(r => { _hardDeleteRoom(r).catch(() => {}); });
@@ -26843,7 +26850,7 @@ try {
   registerSetting({ key: 'capture.inbox', label: 'Clip inbox room', type: 'text', default: 'inbox', section: 'Behavior', hint: 'Room that ?clip= links are appended to — from the iOS share sheet or the desktop bookmarklet. Created on the first clip.', apply() { try { inboxViewSync(); } catch {} } });
   registerSetting({ key: 'capture.listView', label: 'Inbox as a link list', type: 'toggle', default: true, section: 'Behavior', hint: 'Show the clip inbox room as a searchable list of links. The List | Text pill switches to the raw text.', apply() { try { inboxViewSync(); } catch {} } });
   // Temp-room lifetime (item 33): Ctrl+Shift+N rooms self-delete after this.
-  registerSetting({ key: 'behavior.tempRoomTtl', label: 'Temp room lifetime', type: 'select', default: '24', section: 'Behavior', hint: 'Ctrl+Shift+N creates a temp_<stamp> room that deletes itself (server + all devices) after this long.', options: [
+  registerSetting({ key: 'behavior.tempRoomTtl', label: 'Temp room lifetime', type: 'select', default: '24', section: 'Behavior', hint: 'Ctrl+Shift+N creates a temp_<stamp> room that deletes itself (server + all devices) once it goes this long without an edit. The room you have open is never deleted.', options: [
     { value: '1', label: '1 hour' },
     { value: '3', label: '3 hours' },
     { value: '6', label: '6 hours' },
@@ -28522,7 +28529,7 @@ window.confirmSplitRooms = async function() {
     switchRoom(names[0]);
     const ttl = (window.Settings && Settings.get('behavior.tempRoomTtl')) || '24';
     showToast('Split ' + file.name + ' into ' + made.length + ' temp room' + (made.length === 1 ? '' : 's')
-      + (ttl === 'never' ? '' : ' — they self-delete after ' + ttl + 'h'), 'success', 3500);
+      + (ttl === 'never' ? '' : ' — they self-delete after ' + ttl + 'h without edits'), 'success', 3500);
   } catch (e) {
     _split.busy = false;
     if (e.message === 'cancelled' && !made.length) return;
