@@ -19130,6 +19130,9 @@ function sweepTempRooms() {
   let ttlPref = '24';
   try { ttlPref = String((window.Settings && Settings.get('behavior.tempRoomTtl')) || '24'); } catch {}
   if (ttlPref === 'never') return;
+  // Synced: wait until this session has merged the cloud blob, so edit stamps
+  // from other devices are in roomMeta before anything is judged idle.
+  try { if (store.get('cade-sync-key') && store.get('cade-firebase-url') && !_wsPulledOnce) return; } catch { return; }
   const ttlMs = (parseFloat(ttlPref) || 24) * 3600 * 1000;
   const now = Date.now();
   // The clock runs from the LAST EDIT (roomMeta.modified, bumped on every
@@ -20525,6 +20528,7 @@ function touchRoomCreated(name) {
   if (!roomMeta[name].created) { roomMeta[name].created = Date.now(); saveRoomMeta(); }
 }
 let _lastMetaSaveAt = 0;
+let _lastTempStampPushAt = 0;
 function touchRoomModified(name) {
   if (!name) return;
   roomMeta[name] = roomMeta[name] || {};
@@ -20533,6 +20537,15 @@ function touchRoomModified(name) {
   // every few seconds so continuous typing doesn't write on every persist tick.
   const now = Date.now();
   if (now - _lastMetaSaveAt > 4000) { _lastMetaSaveAt = now; saveRoomMeta(); }
+  // Temp rooms expire by last edit, and the sweep runs on EVERY device — so
+  // the stamp must reach the cloud while you type, or another device holding
+  // a stale one deletes the room out from under you. Throttled to one blob
+  // push per 5 minutes (the shortest lifetime is 1 hour).
+  if (roomMeta[name].temp && now - _lastTempStampPushAt > 5 * 60 * 1000) {
+    _lastTempStampPushAt = now;
+    saveRoomMeta();
+    try { schedulePushWorkspaces(); } catch {}
+  }
 }
 
 function workspaceColorClassForRoom(name) {
