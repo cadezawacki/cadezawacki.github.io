@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121615" media="(prefers-color-scheme: dark)">
+<meta name="robots" content="noindex">
+<title>Vote Admin</title>
+<style>
+:root {
+  --bg: #f6f7f7; --surface: #ffffff; --ink: #18201f; --muted: #6b7675; --line: #dfe4e3; --line-2: #eef1f0;
+  --teal: #0f8f86; --teal-ink: #ffffff; --teal-soft: #e2f3f1; --danger: #c2413a;
+  --gold: #d9a92b; --silver: #a4adb3; --bronze: #b97a4a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121615; --surface: #1c2221; --ink: #e8eeed; --muted: #8d9897; --line: #2b3332; --line-2: #232a29;
+    --teal: #2bb3a8; --teal-ink: #062421; --teal-soft: #173431; --danger: #e5675f;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--ink); min-height: 100vh;
+  font: 16px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation; -webkit-text-size-adjust: 100%;
+}
+input { -webkit-user-select: text; user-select: text; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; touch-action: manipulation; }
+button:disabled { opacity: .4; cursor: default; }
+[hidden] { display: none !important; }
+svg { display: block; }
+
+.wrap {
+  max-width: 620px; margin: 0 auto;
+  padding: calc(env(safe-area-inset-top) + 12px) max(16px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 32px) max(16px, env(safe-area-inset-left));
+}
+.bar { display: flex; align-items: center; gap: 8px; min-height: 48px; margin-bottom: 12px; }
+.bar h1 { font-size: 20px; font-weight: 700; letter-spacing: -.02em; flex: 1; min-width: 0; }
+.icon {
+  width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; flex: none; color: var(--ink);
+}
+.icon:active { background: var(--line-2); }
+.icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.icon.teal { color: var(--teal); }
+.icon.spin svg { animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 14px; overflow: hidden; }
+.card-head { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 16px; min-height: 52px; border-bottom: 1px solid var(--line-2); }
+.card-head h2 { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); flex: 1; }
+.card-head .count { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.field { display: block; padding: 12px 16px; border-bottom: 1px solid var(--line-2); }
+.field:last-of-type { border-bottom: 0; }
+.field span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+input[type=text], input[type=password], input[type=url] {
+  font: inherit; font-size: 16px; color: var(--ink); background: transparent; border: 0; outline: 0; width: 100%; min-width: 0;
+}
+input::placeholder { color: var(--muted); opacity: .7; }
+
+.primary {
+  display: block; width: 100%; height: 52px; border-radius: 14px; background: var(--teal); color: var(--teal-ink);
+  font-weight: 700; letter-spacing: .04em;
+}
+.primary:active { transform: scale(.99); }
+.err { color: var(--danger); font-size: 14px; padding: 0 4px 12px; }
+
+.add { display: flex; align-items: center; gap: 4px; padding: 4px 6px 4px 16px; border-bottom: 1px solid var(--line-2); min-height: 52px; }
+.row { display: flex; align-items: center; gap: 10px; padding: 4px 6px 4px 16px; min-height: 52px; border-bottom: 1px solid var(--line-2); }
+.row:last-child { border-bottom: 0; }
+.row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .sub { font-size: 13px; color: var(--muted); }
+.row.link { cursor: pointer; }
+.row.link:active { background: var(--line-2); }
+.row .chev { color: var(--muted); width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; margin-right: 10px; flex: none; }
+.row .x { color: var(--muted); }
+.tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 7px; border-radius: 6px; background: var(--teal-soft); color: var(--teal); flex: none; }
+.tag.lock { background: var(--line-2); color: var(--muted); }
+.empty { padding: 16px; color: var(--muted); font-size: 15px; }
+
+.title-input { font-size: 20px !important; font-weight: 700; letter-spacing: -.02em; }
+
+/* switch */
+.switch { display: flex; align-items: center; gap: 12px; padding: 0 16px; min-height: 56px; cursor: pointer; }
+.switch .label { flex: 1; font-weight: 600; }
+.track { width: 50px; height: 30px; border-radius: 15px; background: var(--line); position: relative; transition: background .15s; flex: none; }
+.track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s; }
+.switch.on .track { background: var(--teal); }
+.switch.on .track::after { transform: translateX(20px); }
+.switch.busy { opacity: .5; pointer-events: none; }
+
+/* results */
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { font-size: 12px; font-weight: 700; color: var(--muted); text-align: center; padding: 10px 4px 6px; }
+th:nth-child(2) { text-align: left; }
+td { padding: 9px 4px; text-align: center; border-top: 1px solid var(--line-2); font-size: 15px; }
+td:first-child, th:first-child { padding-left: 16px; width: 34px; color: var(--muted); text-align: left; }
+td:last-child, th:last-child { padding-right: 16px; }
+td.nm { text-align: left; max-width: 0; width: 100%; }
+td.nm div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.nm i { display: block; height: 4px; border-radius: 2px; background: var(--teal); margin-top: 5px; opacity: .85; }
+td.pts { font-weight: 700; }
+tr.zero td { color: var(--muted); }
+tr.tied td:first-child { color: var(--danger); font-weight: 700; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+.d0 { background: var(--gold); } .d1 { background: var(--silver); } .d2 { background: var(--bronze); }
+.tie { display: flex; align-items: center; gap: 10px; padding: 10px 6px 10px 16px; border-top: 1px solid var(--line-2); background: color-mix(in srgb, var(--danger) 7%, transparent); }
+.tie .what { flex: 1; min-width: 0; font-size: 14px; }
+.tie .what b { color: var(--danger); }
+.small-btn { height: 38px; padding: 0 14px; border-radius: 10px; background: var(--teal); color: var(--teal-ink); font-size: 14px; font-weight: 700; flex: none; }
+.meta-line { padding: 10px 16px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line-2); }
+
+.danger-link { display: block; margin: 22px auto 0; color: var(--danger); font-size: 15px; padding: 10px 16px; }
+
+/* QR sheet */
+.sheet-bg { position: fixed; inset: 0; background: rgba(8, 12, 12, .55); display: grid; place-items: center; z-index: 20; padding: 16px; }
+.sheet { background: var(--surface); border-radius: 20px; width: 100%; max-width: 380px; padding: 20px; text-align: center; }
+.sheet .qr { background: #fff; border-radius: 12px; padding: 14px; aspect-ratio: 1; }
+.sheet .qr svg { width: 100%; height: 100%; }
+.sheet h3 { font-size: 17px; margin-bottom: 14px; }
+.sheet .acts { display: flex; gap: 8px; margin-top: 14px; }
+.sheet .acts button { flex: 1; height: 48px; border-radius: 12px; font-weight: 700; background: var(--line-2); }
+.sheet .acts button.go { background: var(--teal); color: var(--teal-ink); }
+
+.toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 20px); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px; z-index: 30; max-width: calc(100% - 32px); }
+</style>
+</head>
+<body>
+
+<!-- connect -->
+<div class="wrap" id="v-connect" hidden>
+  <div class="bar"><h1>Connect</h1></div>
+  <div class="card">
+    <label class="field"><span>Firebase URL</span><input type="url" id="c-url" placeholder="https://your-project.firebaseio.com" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <label class="field"><span>Admin passphrase</span><input type="password" id="c-key" autocomplete="off"></label>
+  </div>
+  <p class="err" id="c-err" hidden></p>
+  <button class="primary" id="c-go">Connect</button>
+</div>
+
+<!-- race list -->
+<div class="wrap" id="v-list" hidden>
+  <div class="bar">
+    <h1>Votes</h1>
+    <button class="icon" id="l-refresh" aria-label="Refresh"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+    <button class="icon" id="l-settings" aria-label="Connection"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  </div>
+  <div class="card">
+    <form class="add" id="l-add">
+      <input type="text" id="l-name" placeholder="New vote" autocomplete="off" enterkeyhint="done">
+      <button class="icon teal" aria-label="Create"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    </form>
+    <div id="l-items"></div>
+  </div>
+</div>
+
+<!-- race -->
+<div class="wrap" id="v-race" hidden>
+  <div class="bar">
+    <button class="icon" id="r-back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <input type="text" class="title-input" id="r-name" placeholder="Untitled" autocomplete="off" enterkeyhint="done">
+    <button class="icon teal" id="r-qr" aria-label="QR code"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg></button>
+  </div>
+
+  <div class="card">
+    <div class="switch" id="r-lock" role="switch" aria-checked="false"><span class="label">Locked</span><span class="track"></span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Entries</h2><span class="count" id="r-ecount"></span></div>
+    <form class="add" id="r-add">
+      <input type="text" id="r-entry" placeholder="Add entry" autocomplete="off" enterkeyhint="enter">
+      <button class="icon teal" aria-label="Add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    </form>
+    <div id="r-entries"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2>Results</h2><span class="count" id="r-vcount"></span>
+      <button class="icon teal" id="r-refresh" aria-label="Refresh"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+    </div>
+    <div id="r-results"></div>
+  </div>
+
+  <button class="danger-link" id="r-delete">Delete vote</button>
+</div>
+
+<div class="sheet-bg" id="qr-sheet" hidden>
+  <div class="sheet">
+    <h3 id="qr-title"></h3>
+    <div class="qr" id="qr-code"></div>
+    <div class="acts">
+      <button id="qr-copy">Copy link</button>
+      <button id="qr-share" class="go">Share</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="core.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const views = ['v-connect', 'v-list', 'v-race'];
+  const show = (id) => { views.forEach((v) => { $(v).hidden = v !== id; }); scrollTo(0, 0); };
+  let toastT;
+  const toast = (t) => { const el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; }, 2200); };
+  const fail = (e) => toast(e && e.message ? e.message : 'Something went wrong');
+
+  // ---------- connection ----------
+  let conn = V.store.get('vote-admin');   // { u, k }
+  let fp = null;
+  let races = [];                          // [{ id, k, name, created, parent?, tie? }]
+
+  async function saveIndex() {
+    V.store.set('vote-admin-races', races);
+    await V.rest(conn.u, V.indexPath(fp), 'PUT', await V.seal(races, conn.k));
+  }
+  async function loadIndex() {
+    const sealed = await V.rest(conn.u, V.indexPath(fp));
+    races = sealed ? await V.unseal(sealed, conn.k) : [];
+    V.store.set('vote-admin-races', races);
+  }
+
+  async function connect(u, k) {
+    u = V.normUrl(u);
+    if (!/^https:\/\/[^/]+$/.test(u)) throw new Error('Enter the database URL, e.g. https://name.firebaseio.com');
+    if (!k) throw new Error('Enter a passphrase');
+    conn = { u, k };
+    fp = await V.fingerprint(k);
+    try { await loadIndex(); }
+    catch (e) { if (e.name === 'OperationError') throw new Error('Wrong passphrase for this database'); throw e; }
+    V.store.set('vote-admin', conn);
+  }
+
+  $('c-go').addEventListener('click', async () => {
+    const btn = $('c-go');
+    btn.disabled = true; $('c-err').hidden = true;
+    try { await connect($('c-url').value, $('c-key').value); renderList(); show('v-list'); }
+    catch (e) { $('c-err').textContent = e.message || 'Could not connect'; $('c-err').hidden = false; }
+    finally { btn.disabled = false; }
+  });
+  $('c-key').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('c-go').click(); });
+  $('l-settings').addEventListener('click', () => {
+    $('c-url').value = conn ? conn.u : ''; $('c-key').value = conn ? conn.k : '';
+    show('v-connect');
+  });
+
+  // ---------- race list ----------
+  function renderList() {
+    const el = $('l-items');
+    if (!races.length) { el.innerHTML = ''; return; }
+    const sorted = races.slice().sort((a, b) => b.created - a.created);
+    el.innerHTML = sorted.map((r) => `
+      <div class="row link" data-id="${V.esc(r.id)}">
+        <span class="name">${V.esc(r.name || 'Untitled')}</span>
+        ${r.parent ? '<span class="tag">Tiebreaker</span>' : ''}
+        <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+      </div>`).join('');
+  }
+  $('l-items').addEventListener('click', (e) => {
+    const row = e.target.closest('.row');
+    if (row) openRace(row.dataset.id);
+  });
+  $('l-refresh').addEventListener('click', async () => {
+    spin($('l-refresh'), true);
+    try { await loadIndex(); renderList(); } catch (e) { fail(e); }
+    spin($('l-refresh'), false);
+  });
+
+  async function createRace(name, entries, extra) {
+    const race = Object.assign({ id: V.rid(9), k: V.rid(16), name, created: Date.now() }, extra || {});
+    const meta = { name, entries: entries || [] };
+    if (race.parent) meta.parent = race.parent;
+    await V.rest(conn.u, V.racePath(race.id) + '/meta', 'PUT', await V.seal(meta, race.k));
+    races.push(race);
+    await saveIndex();
+    return race;
+  }
+
+  $('l-add').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('l-name').value.trim();
+    if (!name) return $('l-name').focus();
+    try {
+      const race = await createRace(name, []);
+      $('l-name').value = ''; $('l-name').blur();
+      renderList();
+      openRace(race.id);
+    } catch (err) { fail(err); }
+  });
+
+  // ---------- race detail ----------
+  let cur = null;          // index entry
+  let meta = null;         // { name, entries, parent? }
+  let locked = null;       // server timestamp or null
+  let saving = Promise.resolve();
+
+  const saveMeta = () => {
+    const race = cur, snapshot = JSON.parse(JSON.stringify(meta));
+    saving = saving.then(async () => {
+      await V.rest(conn.u, V.racePath(race.id) + '/meta', 'PUT', await V.seal(snapshot, race.k));
+    }).catch(fail);
+    return saving;
+  };
+
+  async function openRace(id) {
+    const race = races.find((r) => r.id === id);
+    if (!race) return;
+    cur = race;
+    meta = { name: race.name, entries: [] };
+    $('r-name').value = race.name || '';
+    $('r-results').innerHTML = ''; $('r-vcount').textContent = '';
+    renderEntries(); renderLock();
+    show('v-race');
+    try {
+      const [sealed, lock] = await Promise.all([V.rest(conn.u, V.racePath(id) + '/meta'), V.rest(conn.u, V.racePath(id) + '/lock')]);
+      if (cur !== race) return;
+      if (sealed) meta = await V.unseal(sealed, race.k);
+      locked = lock || null;
+      $('r-name').value = meta.name || '';
+      renderEntries(); renderLock();
+      await refresh();
+    } catch (e) { fail(e); }
+  }
+
+  $('r-back').addEventListener('click', () => { cur = null; renderList(); show('v-list'); });
+
+  $('r-name').addEventListener('change', async () => {
+    const name = $('r-name').value.trim();
+    meta.name = name; cur.name = name;
+    saveMeta();
+    try { await saveIndex(); } catch (e) { fail(e); }
+  });
+  $('r-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
+
+  function renderEntries() {
+    const list = meta.entries || [];
+    $('r-ecount').textContent = list.length || '';
+    $('r-entries').innerHTML = list.map((en) => `
+      <div class="row" data-id="${V.esc(en.id)}">
+        <span class="name">${V.esc(en.name)}</span>
+        <button class="icon x" aria-label="Remove"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>`).join('');
+  }
+  $('r-add').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = $('r-entry');
+    const name = input.value.trim();
+    if (!name) return;
+    if (meta.entries.some((en) => en.name.toLowerCase() === name.toLowerCase())) { toast('Already added'); return; }
+    meta.entries.push({ id: V.rid(4), name });
+    input.value = '';
+    renderEntries(); saveMeta();
+  });
+  $('r-entries').addEventListener('click', (e) => {
+    const btn = e.target.closest('.x');
+    if (!btn) return;
+    const id = btn.closest('.row').dataset.id;
+    const en = meta.entries.find((x) => x.id === id);
+    if (!confirm(`Remove “${en.name}”?`)) return;
+    meta.entries = meta.entries.filter((x) => x.id !== id);
+    renderEntries(); saveMeta(); renderResults();
+  });
+
+  function renderLock() {
+    const sw = $('r-lock');
+    sw.classList.toggle('on', !!locked);
+    sw.setAttribute('aria-checked', String(!!locked));
+  }
+  $('r-lock').addEventListener('click', async () => {
+    const sw = $('r-lock');
+    sw.classList.add('busy');
+    const path = V.racePath(cur.id) + '/lock';
+    try {
+      if (locked) { await V.rest(conn.u, path, 'DELETE'); locked = null; }
+      else { locked = await V.rest(conn.u, path, 'PUT', V.SERVER_TIME); }
+      renderLock(); renderResults();
+    } catch (e) { fail(e); }
+    sw.classList.remove('busy');
+  });
+
+  $('r-delete').addEventListener('click', async () => {
+    if (!confirm(`Delete “${cur.name || 'Untitled'}” and all of its votes?`)) return;
+    try {
+      await V.rest(conn.u, V.racePath(cur.id), 'DELETE');
+      races = races.filter((r) => r !== cur);
+      await saveIndex();
+      cur = null; renderList(); show('v-list');
+    } catch (e) { fail(e); }
+  });
+
+  // ---------- results ----------
+  // Scoring: a Borda count. With three podium places, 1st = 3 pts, 2nd = 2,
+  // 3rd = 1 (a two-way tiebreaker uses 2/1). Equal points are separated by
+  // countback — more 1st places, then more 2nd, then more 3rd. Anything still
+  // equal is a genuine tie.
+  let votes = [];          // [{ r:[ids], t }]
+
+  const spin = (btn, on) => { btn.classList.toggle('spin', on); btn.disabled = on; };
+
+  async function refresh() {
+    const race = cur;
+    spin($('r-refresh'), true);
+    try {
+      const [raw, lock] = await Promise.all([V.rest(conn.u, V.racePath(race.id) + '/votes'), V.rest(conn.u, V.racePath(race.id) + '/lock')]);
+      const out = [];
+      await Promise.all(Object.values(raw || {}).map(async (v) => {
+        try { const d = await V.unseal(v.d, race.k); if (Array.isArray(d.r)) out.push({ r: d.r, t: v.t }); } catch {}
+      }));
+      if (cur !== race) return;
+      votes = out; locked = lock || null;
+      renderLock(); renderResults();
+    } catch (e) { fail(e); }
+    finally { spin($('r-refresh'), false); }
+  }
+  $('r-refresh').addEventListener('click', refresh);
+
+  function tally() {
+    const entries = meta.entries || [];
+    const slots = Math.min(3, entries.length);
+    const rows = new Map(entries.map((en) => [en.id, { id: en.id, name: en.name, c: [0, 0, 0], pts: 0 }]));
+    let counted = 0;
+    for (const v of votes) {
+      if (locked && typeof v.t === 'number' && v.t > locked) continue;
+      const seen = new Set();
+      let any = false;
+      v.r.slice(0, slots).forEach((id, i) => {
+        const row = rows.get(id);
+        if (!row || seen.has(id)) return;
+        seen.add(id); row.c[i]++; row.pts += slots - i; any = true;
+      });
+      if (any) counted++;
+    }
+    const key = (r) => [r.pts, r.c[0], r.c[1], r.c[2]];
+    const cmp = (a, b) => { const ka = key(a), kb = key(b); for (let i = 0; i < 4; i++) if (ka[i] !== kb[i]) return kb[i] - ka[i]; return 0; };
+    const list = [...rows.values()].sort((a, b) => cmp(a, b) || a.name.localeCompare(b.name));
+    list.forEach((r, i) => { r.rank = i && !cmp(r, list[i - 1]) ? list[i - 1].rank : i + 1; });
+    // Ties that decide a podium place.
+    const groups = new Map();
+    list.forEach((r) => { if (r.pts > 0 && r.rank <= slots) (groups.get(r.rank) || groups.set(r.rank, []).get(r.rank)).push(r); });
+    const ties = [...groups.entries()].filter(([, g]) => g.length > 1).map(([rank, g]) => ({ rank, rows: g }));
+    return { list, slots, counted, ties };
+  }
+
+  const ord = (n) => ['1st', '2nd', '3rd'][n - 1] || n + 'th';
+  const tieKey = (ids) => ids.slice().sort().join(',');
+
+  function renderResults() {
+    if (!cur) return;
+    const { list, slots, counted, ties } = tally();
+    $('r-vcount').textContent = counted === 1 ? '1 vote' : counted + ' votes';
+    if (!list.length) { $('r-results').innerHTML = ''; return; }
+    const max = Math.max(1, ...list.map((r) => r.pts));
+    const tiedIds = new Set(ties.flatMap((t) => t.rows.map((r) => r.id)));
+    const heads = [0, 1, 2].slice(0, slots).map((i) => `<th><span class="dot d${i}"></span></th>`).join('');
+    const body = list.map((r) => `
+      <tr class="${tiedIds.has(r.id) ? 'tied' : ''}${r.pts ? '' : ' zero'}">
+        <td>${r.pts ? (tiedIds.has(r.id) ? '=' : '') + r.rank : ''}</td>
+        <td class="nm"><div>${V.esc(r.name)}</div><i style="width:${(r.pts / max) * 100}%"></i></td>
+        ${r.c.slice(0, slots).map((n) => `<td>${n}</td>`).join('')}
+        <td class="pts">${r.pts}</td>
+      </tr>`).join('');
+    const tieRows = ties.map((t) => {
+      const ids = t.rows.map((r) => r.id);
+      const existing = races.find((x) => x.parent === cur.id && x.tie === tieKey(ids));
+      return `<div class="tie" data-ids="${V.esc(ids.join(','))}">
+        <div class="what"><b>Tie for ${ord(t.rank)}</b> · ${t.rows.map((r) => V.esc(r.name)).join(' vs ')}</div>
+        <button class="small-btn">${existing ? 'Open tiebreaker' : 'Tiebreaker'}</button>
+      </div>`;
+    }).join('');
+    $('r-results').innerHTML = `<table><thead><tr><th>#</th><th></th>${heads}<th>Pts</th></tr></thead><tbody>${body}</tbody></table>${tieRows}`;
+  }
+
+  $('r-results').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.small-btn');
+    if (!btn) return;
+    const ids = btn.closest('.tie').dataset.ids.split(',');
+    const key = tieKey(ids);
+    let tb = races.find((x) => x.parent === cur.id && x.tie === key);
+    if (!tb) {
+      btn.disabled = true;
+      try {
+        const entries = ids.map((id) => meta.entries.find((en) => en.id === id)).filter(Boolean);
+        tb = await createRace((cur.name || 'Untitled') + ' · Tiebreaker', entries, { parent: cur.id, tie: key });
+        renderResults();
+      } catch (err) { btn.disabled = false; return fail(err); }
+    }
+    openQr(tb);
+  });
+
+  // ---------- QR ----------
+  const voterUrl = (race) => new URL('./', location.href).href + '#' + V.encodeLink({ u: conn.u, r: race.id, k: race.k });
+
+  function qrSvg(text) {
+    const q = qrcode(0, 'M');
+    q.addData(text);
+    q.make();
+    const n = q.getModuleCount();
+    let d = '';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d += `M${c} ${r}h1v1h-1z`;
+    return `<svg viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges"><path d="${d}" fill="#000"/></svg>`;
+  }
+
+  let qrRace = null;
+  function openQr(race) {
+    qrRace = race;
+    $('qr-title').textContent = race.name || 'Untitled';
+    $('qr-code').innerHTML = qrSvg(voterUrl(race));
+    $('qr-share').hidden = !navigator.share;
+    $('qr-sheet').hidden = false;
+  }
+  $('r-qr').addEventListener('click', () => {
+    if ((meta.entries || []).length < 2) toast('Add at least two entries');
+    openQr(cur);
+  });
+  $('qr-sheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) $('qr-sheet').hidden = true; });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') $('qr-sheet').hidden = true; });
+  $('qr-copy').addEventListener('click', async () => {
+    const url = voterUrl(qrRace);
+    try { await navigator.clipboard.writeText(url); toast('Link copied'); }
+    catch { prompt('Copy this link', url); }
+  });
+  $('qr-share').addEventListener('click', () => {
+    navigator.share({ title: qrRace.name || 'Vote', url: voterUrl(qrRace) }).catch(() => {});
+  });
+
+  // ---------- boot ----------
+  (async () => {
+    if (!conn) {
+      // Same database as txt.html, when it has been set up in this browser.
+      let u = ''; try { u = localStorage.getItem('cade-firebase-url') || ''; } catch {}
+      $('c-url').value = u;
+      return show('v-connect');
+    }
+    fp = await V.fingerprint(conn.k);
+    races = V.store.get('vote-admin-races') || [];
+    renderList(); show('v-list');
+    try { await loadIndex(); renderList(); } catch (e) { fail(e); }
+  })();
+})();
+</script>
+</body>
+</html>

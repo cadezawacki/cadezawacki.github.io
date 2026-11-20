@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f6f7f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121615" media="(prefers-color-scheme: dark)">
+<meta name="robots" content="noindex">
+<title>Vote</title>
+<style>
+:root {
+  --bg: #f6f7f7; --surface: #ffffff; --ink: #18201f; --muted: #6b7675; --line: #dfe4e3;
+  --teal: #0f8f86; --teal-ink: #ffffff; --teal-soft: #e2f3f1;
+  --gold: #d9a92b; --silver: #a4adb3; --bronze: #b97a4a;
+  --gold-soft: #fbf1d6; --silver-soft: #eef0f2; --bronze-soft: #f6e8dd;
+  --shadow: 0 1px 2px rgba(16, 24, 23, .06), 0 1px 1px rgba(16, 24, 23, .04);
+  --lift: 0 10px 24px rgba(16, 24, 23, .18), 0 2px 6px rgba(16, 24, 23, .12);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121615; --surface: #1c2221; --ink: #e8eeed; --muted: #8d9897; --line: #2b3332;
+    --teal: #2bb3a8; --teal-ink: #062421; --teal-soft: #173431;
+    --gold-soft: #3a311a; --silver-soft: #2b3034; --bronze-soft: #3a2a1f;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3); --lift: 0 12px 28px rgba(0, 0, 0, .5);
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 16px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  overscroll-behavior: none; overflow: hidden; -webkit-text-size-adjust: 100%;
+}
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; touch-action: manipulation; }
+[hidden] { display: none !important; }
+
+.screen {
+  position: fixed; inset: 0; display: flex; flex-direction: column;
+  padding: calc(env(safe-area-inset-top) + 14px) max(16px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 14px) max(16px, env(safe-area-inset-left));
+  max-width: 560px; margin: 0 auto;
+}
+
+/* ---------- ballot ---------- */
+.race-name { font-size: 17px; font-weight: 600; text-align: center; padding: 2px 0 10px; letter-spacing: -.01em; }
+.race-name:empty { display: none; }
+
+.podium { display: flex; align-items: flex-end; gap: 8px; padding-top: 6px; flex: none; }
+.step { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.block {
+  border-radius: 10px 10px 4px 4px; display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 6px; font-weight: 700; font-size: 18px; color: rgba(0, 0, 0, .55);
+}
+.p0 .block { height: 62px; background: var(--gold); }
+.p1 .block { height: 44px; background: var(--silver); }
+.p2 .block { height: 30px; background: var(--bronze); }
+
+.slot {
+  height: 64px; border-radius: 12px; border: 2px dashed var(--line); position: relative;
+  transition: border-color .12s, background-color .12s, transform .12s;
+}
+.p0 .slot { border-color: color-mix(in srgb, var(--gold) 70%, transparent); }
+.p1 .slot { border-color: color-mix(in srgb, var(--silver) 80%, transparent); }
+.p2 .slot { border-color: color-mix(in srgb, var(--bronze) 70%, transparent); }
+.slot.over { transform: scale(1.04); }
+.p0 .slot.over { background: var(--gold-soft); }
+.p1 .slot.over { background: var(--silver-soft); }
+.p2 .slot.over { background: var(--bronze-soft); }
+.slot.filled { border-style: solid; }
+.slot .chip { position: absolute; inset: -2px; height: auto; border: 2px solid transparent; padding: 0 6px; font-size: 14px; }
+.p0 .slot .chip { background: var(--gold-soft); border-color: var(--gold); }
+.p1 .slot .chip { background: var(--silver-soft); border-color: var(--silver); }
+.p2 .slot .chip { background: var(--bronze-soft); border-color: var(--bronze); }
+
+.chip {
+  height: 54px; padding: 0 10px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow);
+  border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; text-align: center;
+  font-size: 15px; font-weight: 500; touch-action: none; cursor: grab; min-width: 0;
+}
+.chip span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: auto; }
+.chip.lifted { opacity: .3; }
+.pool.scrolls .chip { touch-action: pan-y; }
+
+.ghost {
+  position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none; margin: 0;
+  box-shadow: var(--lift); transform-origin: center; will-change: transform;
+}
+
+/* pool */
+.pool-wrap {
+  flex: 1 1 auto; min-height: 120px; position: relative; margin-top: 18px;
+  border-top: 1px solid var(--line); transition: background-color .12s;
+}
+.pool-wrap.over { background: var(--teal-soft); border-radius: 0 0 12px 12px; }
+.pool {
+  position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; scrollbar-width: none; padding: 14px 0 14px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-content: start;
+}
+.pool::-webkit-scrollbar { display: none; }
+.pool.scrolls { padding-right: 16px; }
+.rail {
+  position: absolute; right: 2px; top: 14px; bottom: 14px; width: 5px; border-radius: 3px;
+  background: var(--line); pointer-events: none;
+}
+.thumb { position: absolute; left: 0; right: 0; border-radius: 3px; background: var(--teal); }
+.fade {
+  position: absolute; left: 0; right: 16px; height: 34px; pointer-events: none;
+  transition: opacity .15s;
+}
+.fade.bottom { bottom: 0; background: linear-gradient(to bottom, transparent, var(--bg)); }
+.fade.top { top: 0; background: linear-gradient(to top, transparent, var(--bg)); }
+
+.cast, .btn {
+  flex: none; height: 56px; border-radius: 14px; background: var(--teal); color: var(--teal-ink);
+  font-size: 16px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; width: 100%;
+  transition: opacity .15s, transform .08s;
+}
+.cast { margin-top: 10px; }
+.cast:disabled { opacity: .28; cursor: default; }
+.cast:not(:disabled):active, .btn:active { transform: scale(.98); }
+
+/* ---------- confirmation ---------- */
+.center { justify-content: center; align-items: center; text-align: center; gap: 22px; }
+.done-art { width: 168px; height: 168px; }
+.done-art .ring { stroke-dasharray: 302; stroke-dashoffset: 302; animation: draw .6s .05s ease-out forwards; }
+.done-art .tick { stroke-dasharray: 60; stroke-dashoffset: 60; animation: draw .35s .5s ease-out forwards; }
+.done-art .bar { transform-box: fill-box; transform-origin: bottom; transform: scaleY(0); animation: rise .4s ease-out forwards; }
+.done-art .bar.b0 { animation-delay: .25s; } .done-art .bar.b1 { animation-delay: .15s; } .done-art .bar.b2 { animation-delay: .35s; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes rise { to { transform: scaleY(1); } }
+.done-title { font-size: 24px; font-weight: 700; letter-spacing: -.02em; }
+.done .btn { max-width: 320px; background: transparent; color: var(--teal); border: 2px solid var(--teal); }
+.note { color: var(--muted); font-size: 15px; }
+.spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--teal); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.shake { animation: shake .3s; }
+@keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01s !important; animation-delay: 0s !important; transition: none !important; } }
+@media (max-height: 600px) {
+  .slot { height: 56px; } .chip { height: 48px; font-size: 14px; }
+  .p0 .block { height: 44px; } .p1 .block { height: 32px; } .p2 .block { height: 22px; font-size: 15px; padding-top: 2px; }
+  .pool-wrap { margin-top: 12px; } .cast { height: 50px; }
+}
+</style>
+</head>
+<body>
+
+<section class="screen center" id="s-loading"><div class="spinner"></div></section>
+
+<section class="screen center" id="s-msg" hidden><p class="note" id="msg"></p></section>
+
+<section class="screen" id="s-ballot" hidden>
+  <h1 class="race-name" id="race-name"></h1>
+  <div class="podium" id="podium"></div>
+  <div class="pool-wrap" id="pool-wrap">
+    <div class="pool" id="pool"></div>
+    <div class="fade top"></div><div class="fade bottom"></div>
+    <div class="rail" id="rail" hidden><div class="thumb" id="thumb"></div></div>
+  </div>
+  <button class="cast" id="cast" disabled>Cast vote</button>
+</section>
+
+<section class="screen center done" id="s-done" hidden>
+  <svg class="done-art" viewBox="0 0 120 120" aria-hidden="true">
+    <circle class="ring" cx="60" cy="48" r="38" fill="none" stroke="var(--teal)" stroke-width="5" stroke-linecap="round" transform="rotate(-90 60 48)"/>
+    <path class="tick" d="M44 49 l11 11 l21 -23" fill="none" stroke="var(--teal)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect class="bar b1" x="22" y="100" width="24" height="14" rx="3" fill="var(--silver)"/>
+    <rect class="bar b0" x="48" y="92" width="24" height="22" rx="3" fill="var(--gold)"/>
+    <rect class="bar b2" x="74" y="105" width="24" height="9" rx="3" fill="var(--bronze)"/>
+  </svg>
+  <h1 class="done-title">Your vote has been cast</h1>
+  <button class="btn" id="change">Change my vote</button>
+  <p class="note" id="closed-note" hidden>Voting is closed</p>
+</section>
+
+<script src="core.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const screens = ['s-loading', 's-msg', 's-ballot', 's-done'];
+  const show = (id) => screens.forEach((s) => { $(s).hidden = s !== id; });
+  const message = (t) => { $('msg').textContent = t; show('s-msg'); };
+
+  const link = V.decodeLink(location.hash.slice(1));
+  if (!link || !link.u || !link.r || !link.k) { message('This link is incomplete. Scan the QR code again.'); return; }
+
+  const RACE = V.racePath(link.r);
+  const LOCAL = 'vote-race-' + link.r;
+
+  let uid = V.store.get('vote-uid');
+  if (!uid) {
+    uid = crypto.randomUUID ? crypto.randomUUID() : V.rid(16);
+    V.store.set('vote-uid', uid);
+  }
+
+  let entries = [];       // [{id, name}]
+  let byId = new Map();
+  let slots = 3;
+  let picks = [];         // entry id or null, per podium place
+  let order = [];         // pool display order (shuffled once per voter)
+  let local = V.store.get(LOCAL) || {};
+
+  const save = () => { local.draft = picks; V.store.set(LOCAL, local); };
+
+  async function fetchLock() { return V.rest(link.u, RACE + '/lock'); }
+
+  async function load() {
+    let sealed, lock;
+    try { [sealed, lock] = await Promise.all([V.rest(link.u, RACE + '/meta'), fetchLock()]); }
+    catch { message('Can’t reach the server. Check your connection and reload.'); return; }
+    if (!sealed) { message('This vote doesn’t exist anymore.'); return; }
+    let meta;
+    try { meta = await V.unseal(sealed, link.k); } catch { message('This link is invalid.'); return; }
+
+    entries = (meta.entries || []).filter((e) => e && e.id && e.name);
+    byId = new Map(entries.map((e) => [e.id, e]));
+    slots = Math.min(3, entries.length);
+    $('race-name').textContent = meta.name || '';
+    document.title = meta.name || 'Vote';
+    if (!slots) { message('Nothing to vote on yet.'); return; }
+
+    // Stable per-voter shuffle so list position doesn't favor anyone.
+    const known = (local.order || []).filter((id) => byId.has(id));
+    const fresh = entries.map((e) => e.id).filter((id) => !known.includes(id));
+    for (let i = fresh.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [fresh[i], fresh[j]] = [fresh[j], fresh[i]]; }
+    order = known.concat(fresh);
+    local.order = order;
+
+    const clean = (arr) => {
+      const out = Array(slots).fill(null), seen = new Set();
+      (arr || []).slice(0, slots).forEach((id, i) => { if (byId.has(id) && !seen.has(id)) { out[i] = id; seen.add(id); } });
+      return out;
+    };
+    picks = clean(local.draft || local.cast);
+    save();
+    buildPodium();
+    render();
+
+    if (local.cast) showDone(!!lock);
+    else if (lock) message('Voting is closed');
+    else show('s-ballot');
+    requestAnimationFrame(updateRail);
+  }
+
+  // ---------- rendering ----------
+  const chipHtml = (id) => `<div class="chip" data-id="${V.esc(id)}"><span>${V.esc(byId.get(id).name)}</span></div>`;
+
+  function buildPodium() {
+    // Visual order: silver, gold, bronze.
+    const visual = slots === 3 ? [1, 0, 2] : slots === 2 ? [1, 0] : [0];
+    $('podium').innerHTML = visual.map((p) =>
+      `<div class="step p${p}"><div class="slot" data-slot="${p}"></div><div class="block">${p + 1}</div></div>`).join('');
+  }
+
+  function render() {
+    document.querySelectorAll('.slot').forEach((el) => {
+      const id = picks[+el.dataset.slot];
+      el.innerHTML = id ? chipHtml(id) : '';
+      el.classList.toggle('filled', !!id);
+    });
+    const placed = new Set(picks.filter(Boolean));
+    $('pool').innerHTML = order.filter((id) => !placed.has(id)).map(chipHtml).join('');
+    $('cast').disabled = picks.some((p) => !p);
+    updateRail();
+  }
+
+  // Always-visible scroll indicator (iOS hides native scrollbars).
+  const pool = $('pool');
+  const fadeTop = document.querySelector('.fade.top'), fadeBottom = document.querySelector('.fade.bottom');
+  function updateRail() {
+    const { scrollHeight: sh, clientHeight: ch, scrollTop: st } = pool;
+    const scrolls = sh > ch + 2;
+    pool.classList.toggle('scrolls', scrolls);
+    $('rail').hidden = !scrolls;
+    fadeTop.style.opacity = scrolls && st > 4 ? 1 : 0;
+    fadeBottom.style.opacity = scrolls && st + ch < sh - 4 ? 1 : 0;
+    if (!scrolls) return;
+    const track = $('rail').clientHeight;
+    const h = Math.max(28, track * ch / sh);
+    $('thumb').style.height = h + 'px';
+    $('thumb').style.top = ((track - h) * st / (sh - ch)) + 'px';
+  }
+  pool.addEventListener('scroll', updateRail, { passive: true });
+  addEventListener('resize', updateRail);
+
+  // ---------- placing ----------
+  function place(id, slot) {
+    const from = picks.indexOf(id);
+    const occupant = picks[slot];
+    if (from === slot) return;
+    if (from >= 0) picks[from] = occupant;   // podium -> podium swaps
+    picks[slot] = id;                        // pool -> occupied slot bumps occupant back
+    save(); render();
+  }
+  function unplace(id) {
+    const i = picks.indexOf(id);
+    if (i >= 0) { picks[i] = null; save(); render(); }
+  }
+  function tap(id) {
+    if (picks.includes(id)) return unplace(id);
+    const empty = picks.indexOf(null);
+    if (empty >= 0) place(id, empty);
+    else { const el = $('podium'); el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); }
+  }
+
+  // ---------- drag ----------
+  // Pointer events for everything; touch drags from a scrollable list start on
+  // a sideways move or a short hold, so a vertical swipe still scrolls.
+  let drag = null;
+  const HOLD_MS = 170, SLOP = 7;
+
+  document.addEventListener('pointerdown', (e) => {
+    if (drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    const inPool = !!chip.closest('.pool');
+    drag = { id: chip.dataset.id, chip, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, pid: e.pointerId, started: false, target: null };
+    if (inPool && pool.classList.contains('scrolls') && e.pointerType === 'touch') {
+      drag.gated = true;
+      drag.timer = setTimeout(() => drag && !drag.started && start(), HOLD_MS);
+    }
+  });
+
+  function start() {
+    const r = drag.chip.getBoundingClientRect();
+    const g = drag.chip.cloneNode(true);
+    g.classList.add('ghost');
+    g.style.width = r.width + 'px'; g.style.height = r.height + 'px';
+    drag.dx = drag.x0 - r.left; drag.dy = drag.y0 - r.top;
+    document.body.appendChild(g);
+    drag.ghost = g; drag.started = true;
+    drag.chip.classList.add('lifted');
+    if (navigator.vibrate) try { navigator.vibrate(8); } catch {}
+    move();
+  }
+
+  function move() {
+    const { ghost, x, y } = drag;
+    ghost.style.transform = `translate(${x - drag.dx}px, ${y - drag.dy}px) scale(1.05)`;
+    const hit = document.elementFromPoint(x, y);
+    const t = hit && (hit.closest('.slot') || hit.closest('.pool-wrap'));
+    if (t !== drag.target) {
+      if (drag.target) drag.target.classList.remove('over');
+      if (t) t.classList.add('over');
+      drag.target = t;
+    }
+  }
+
+  addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.pid) return;
+    drag.x = e.clientX; drag.y = e.clientY;
+    if (!drag.started) {
+      const dx = Math.abs(drag.x - drag.x0), dy = Math.abs(drag.y - drag.y0);
+      if (Math.max(dx, dy) < SLOP) return;
+      if (drag.gated && dy > dx) return end();  // vertical swipe: let the list scroll
+      clearTimeout(drag.timer);
+      start();
+    }
+    e.preventDefault();
+    move();
+  }, { passive: false });
+
+  // Once a drag is live, stop the browser from also scrolling.
+  addEventListener('touchmove', (e) => { if (drag && drag.started) e.preventDefault(); }, { passive: false });
+
+  function end(drop) {
+    if (!drag) return;
+    clearTimeout(drag.timer);
+    const d = drag;
+    drag = null;
+    if (d.target) d.target.classList.remove('over');
+    if (d.ghost) d.ghost.remove();
+    d.chip.classList.remove('lifted');
+    if (!drop) return;
+    if (!d.started) return tap(d.id);
+    if (d.target && d.target.classList.contains('slot')) place(d.id, +d.target.dataset.slot);
+    else if (d.target) unplace(d.id);
+  }
+  addEventListener('pointerup', (e) => { if (drag && e.pointerId === drag.pid) end(true); });
+  addEventListener('pointercancel', (e) => { if (drag && e.pointerId === drag.pid) end(false); });
+  addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // ---------- cast ----------
+  $('cast').addEventListener('click', async () => {
+    const btn = $('cast');
+    if (btn.disabled) return;
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = 'Casting…';
+    try {
+      if (await fetchLock()) { local.draft = null; save(); return message('Voting is closed'); }
+      const vote = picks.slice();
+      await V.rest(link.u, RACE + '/votes/' + uid, 'PUT', { d: await V.seal({ r: vote }, link.k), t: V.SERVER_TIME });
+      local.cast = vote; local.draft = null; V.store.set(LOCAL, local);
+      showDone(false);
+    } catch {
+      btn.classList.remove('shake'); void btn.offsetWidth; btn.classList.add('shake');
+    } finally {
+      btn.textContent = label;
+      btn.disabled = picks.some((p) => !p);
+    }
+  });
+
+  function showDone(closed) {
+    $('change').hidden = closed;
+    $('closed-note').hidden = !closed;
+    const art = document.querySelector('.done-art');
+    const fresh = art.cloneNode(true);   // restart the animation
+    art.replaceWith(fresh);
+    show('s-done');
+  }
+
+  $('change').addEventListener('click', async () => {
+    const btn = $('change');
+    btn.disabled = true;
+    let lock = null;
+    try { lock = await fetchLock(); } catch {}
+    btn.disabled = false;
+    if (lock) return showDone(true);
+    picks = picks.map((_, i) => (local.cast && local.cast[i]) || null);
+    save(); render();
+    show('s-ballot');
+    requestAnimationFrame(updateRail);
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>
