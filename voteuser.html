@@ -52,46 +52,50 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 }
 .race-name:empty { display: none; }
 
-.podium { display: flex; align-items: flex-end; gap: 6px; padding-top: 4px; flex: none; position: relative; }
+.podium { display: flex; align-items: flex-end; gap: 4px; padding-top: 4px; flex: none; position: relative; }
 /* spotlight on the top step */
 .podium::before {
   content: ""; position: absolute; left: 50%; top: -60px; bottom: 0; width: 70%; transform: translateX(-50%);
   background: linear-gradient(180deg, rgba(255, 236, 180, .10), rgba(255, 236, 180, 0) 85%);
   clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%); pointer-events: none;
 }
-.step { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; position: relative; }
+.step { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; position: relative; }
 .p0 { --m: var(--gold); --metal: var(--gold-metal); }
 .p1 { --m: var(--silver); --metal: var(--silver-metal); }
 .p2 { --m: var(--bronze); --metal: var(--bronze-metal); }
 .block {
-  background: var(--metal); display: flex; align-items: flex-start; justify-content: center; padding-top: 4px;
-  font-weight: 800; font-size: 44px; line-height: 1; color: rgba(10, 8, 4, .62);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -10px 18px rgba(0, 0, 0, .25);
-  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%, 0 8px);
+  background: var(--metal); display: flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .6), inset 0 -14px 20px rgba(0, 0, 0, .22);
 }
-.block sup { font-size: 15px; letter-spacing: .04em; margin-left: 1px; position: relative; top: 4px; vertical-align: top; }
-.p0 .block { height: 86px; }
-.p1 .block { height: 62px; }
-.p2 .block { height: 44px; font-size: 36px; }
+.block b { position: relative; font-weight: 800; font-size: 46px; line-height: 1; color: rgba(12, 9, 4, .6); }
+.block sup {
+  position: absolute; left: 100%; top: .1em; margin-left: 2px;
+  font-size: .34em; letter-spacing: .04em; line-height: 1;
+}
+.p0 .block { height: 88px; }
+.p1 .block { height: 64px; }
+.p1 .block b { font-size: 40px; }
+.p2 .block { height: 46px; }
+.p2 .block b { font-size: 34px; }
 
-/* empty slot: corner brackets in the medal color */
+/* the spot an entry stands on: a lit case sitting flush on its block */
 .slot {
-  height: 66px; position: relative; transition: transform .12s, background-color .12s;
-  --t: 14px; --w: 2px;
-  background:
-    linear-gradient(var(--m), var(--m)) 0 0 / var(--t) var(--w),
-    linear-gradient(var(--m), var(--m)) 0 0 / var(--w) var(--t),
-    linear-gradient(var(--m), var(--m)) 100% 0 / var(--t) var(--w),
-    linear-gradient(var(--m), var(--m)) 100% 0 / var(--w) var(--t),
-    linear-gradient(var(--m), var(--m)) 0 100% / var(--t) var(--w),
-    linear-gradient(var(--m), var(--m)) 0 100% / var(--w) var(--t),
-    linear-gradient(var(--m), var(--m)) 100% 100% / var(--t) var(--w),
-    linear-gradient(var(--m), var(--m)) 100% 100% / var(--w) var(--t),
-    rgba(255, 255, 255, .025);
-  background-repeat: no-repeat;
+  height: 68px; position: relative; transition: background-color .12s, box-shadow .12s;
+  background: linear-gradient(0deg, color-mix(in srgb, var(--m) 20%, transparent), color-mix(in srgb, var(--m) 3%, transparent));
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--m) 30%, transparent), inset -1px 0 0 color-mix(in srgb, var(--m) 30%, transparent), inset 0 1px 0 color-mix(in srgb, var(--m) 30%, transparent);
 }
-.slot.over { transform: scale(1.05); --t: 22px; background-color: color-mix(in srgb, var(--m) 16%, transparent); }
+.slot.over {
+  background: linear-gradient(0deg, color-mix(in srgb, var(--m) 42%, transparent), color-mix(in srgb, var(--m) 10%, transparent));
+  box-shadow: inset 0 0 0 2px var(--m), 0 0 22px color-mix(in srgb, var(--m) 35%, transparent);
+}
 .slot .chip {
+  position: absolute; inset: 0; height: auto; padding: 0 6px; font-size: 17px; font-weight: 700; border: 0; color: #fff;
+  background: linear-gradient(0deg, color-mix(in srgb, var(--m) 30%, var(--surface)), var(--surface) 85%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--m) 70%, transparent), 0 -6px 22px color-mix(in srgb, var(--m) 18%, transparent);
+  clip-path: none;
+}
+
+.chip {
   position: absolute; inset: 0; height: auto; padding: 0 6px; font-size: 17px; font-weight: 700;
   background: linear-gradient(180deg, color-mix(in srgb, var(--m) 22%, var(--surface)), var(--surface));
   border: 0; border-top: 3px solid var(--m); color: #fff;
@@ -189,8 +193,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .race-name { font-size: 22px; padding-bottom: 8px; }
   .slot { height: 56px; } .chip { height: 46px; font-size: 16px; }
   .slot .chip { font-size: 15px; }
-  .p0 .block { height: 58px; font-size: 36px; } .p1 .block { height: 42px; font-size: 30px; } .p2 .block { height: 30px; font-size: 24px; }
-  .block sup { font-size: 12px; top: 2px; }
+  .p0 .block { height: 60px; } .p1 .block { height: 44px; } .p2 .block { height: 32px; }
+  .p0 .block b { font-size: 36px; } .p1 .block b { font-size: 30px; } .p2 .block b { font-size: 24px; }
   .pool-wrap { margin-top: 12px; } .cast { height: 52px; font-size: 21px; }
 }
 </style>
@@ -311,7 +315,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
     // Visual order: silver, gold, bronze.
     const visual = slots === 3 ? [1, 0, 2] : slots === 2 ? [1, 0] : [0];
     $('podium').innerHTML = visual.map((p) =>
-      `<div class="step p${p}"><div class="slot" data-slot="${p}"></div><div class="block">${p + 1}<sup>${['ST', 'ND', 'RD'][p]}</sup></div></div>`).join('');
+      `<div class="step p${p}"><div class="slot" data-slot="${p}"></div><div class="block"><b>${p + 1}<sup>${['ST', 'ND', 'RD'][p]}</sup></b></div></div>`).join('');
   }
 
   function render() {
