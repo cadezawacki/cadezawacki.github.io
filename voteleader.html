@@ -202,7 +202,7 @@ tr.tied td:first-child { color: var(--danger); font-weight: 700; }
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-<script src="core.js"></script>
+<script src="vote/core.js"></script>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -495,7 +495,7 @@ tr.tied td:first-child { color: var(--danger); font-weight: 700; }
   });
 
   // ---------- QR ----------
-  const voterUrl = (race) => new URL('./', location.href).href + '#' + V.encodeLink({ u: conn.u, r: race.id, k: race.k });
+  const voterUrl = (race) => new URL('voteuser.html', location.href).href + '#' + V.encodeLink({ u: conn.u, r: race.id, k: race.k });
 
   function qrSvg(text) {
     const q = qrcode(0, 'M');

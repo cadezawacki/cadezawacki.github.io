@@ -1,4 +1,4 @@
-// Shared by the voter page (index.html) and the admin page (admin.html).
+// Shared by the voter page (voteuser.html) and the admin page (voteleader.html).
 //
 // Storage follows the same approach as txt.html: Firebase Realtime Database
 // over its REST API, no sign-in, payloads AES-GCM encrypted in the browser
