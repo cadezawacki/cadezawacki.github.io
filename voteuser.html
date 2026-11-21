@@ -59,36 +59,40 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   background: linear-gradient(180deg, rgba(255, 236, 180, .10), rgba(255, 236, 180, 0) 85%);
   clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%); pointer-events: none;
 }
-.step { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; position: relative; }
+.step { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; position: relative; }
 .p0 { --m: var(--gold); --metal: var(--gold-metal); }
 .p1 { --m: var(--silver); --metal: var(--silver-metal); }
 .p2 { --m: var(--bronze); --metal: var(--bronze-metal); }
 .block {
   background: var(--metal); display: flex; align-items: center; justify-content: center;
-  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .6), inset 0 -14px 20px rgba(0, 0, 0, .22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6);
 }
-.block b { position: relative; font-weight: 800; font-size: 46px; line-height: 1; color: rgba(12, 9, 4, .6); }
-.block sup {
-  position: absolute; left: 100%; top: .1em; margin-left: 2px;
-  font-size: .34em; letter-spacing: .04em; line-height: 1;
-}
+.block b { font-weight: 800; font-size: 46px; line-height: 1; color: rgba(12, 9, 4, .6); }
 .p0 .block { height: 88px; }
 .p1 .block { height: 64px; }
 .p1 .block b { font-size: 40px; }
 .p2 .block { height: 46px; }
 .p2 .block b { font-size: 34px; }
 
-/* the spot an entry stands on: a lit case sitting flush on its block */
+/* the plate an entry is placed on, floating above its block */
 .slot {
-  height: 68px; position: relative; transition: background-color .12s, box-shadow .12s;
-  background: linear-gradient(0deg, color-mix(in srgb, var(--m) 20%, transparent), color-mix(in srgb, var(--m) 3%, transparent));
-  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--m) 30%, transparent), inset -1px 0 0 color-mix(in srgb, var(--m) 30%, transparent), inset 0 1px 0 color-mix(in srgb, var(--m) 30%, transparent);
+  height: 66px; position: relative; transition: background-color .12s, box-shadow .12s, transform .12s;
+  background: rgba(255, 255, 255, .03);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--m) 55%, transparent);
 }
 .slot.over {
-  background: linear-gradient(0deg, color-mix(in srgb, var(--m) 42%, transparent), color-mix(in srgb, var(--m) 10%, transparent));
+  transform: scale(1.04);
+  background: color-mix(in srgb, var(--m) 16%, transparent);
   box-shadow: inset 0 0 0 2px var(--m), 0 0 22px color-mix(in srgb, var(--m) 35%, transparent);
 }
 .slot .chip {
+  position: absolute; inset: 0; height: auto; padding: 0 6px; font-size: 17px; font-weight: 700; border: 0; color: #fff;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 2px var(--m), 0 0 20px color-mix(in srgb, var(--m) 25%, transparent);
+  clip-path: none;
+}
+
+.chip {
   position: absolute; inset: 0; height: auto; padding: 0 6px; font-size: 17px; font-weight: 700; border: 0; color: #fff;
   background: linear-gradient(0deg, color-mix(in srgb, var(--m) 30%, var(--surface)), var(--surface) 85%);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--m) 70%, transparent), 0 -6px 22px color-mix(in srgb, var(--m) 18%, transparent);
@@ -315,7 +319,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
     // Visual order: silver, gold, bronze.
     const visual = slots === 3 ? [1, 0, 2] : slots === 2 ? [1, 0] : [0];
     $('podium').innerHTML = visual.map((p) =>
-      `<div class="step p${p}"><div class="slot" data-slot="${p}"></div><div class="block"><b>${p + 1}<sup>${['ST', 'ND', 'RD'][p]}</sup></b></div></div>`).join('');
+      `<div class="step p${p}"><div class="slot" data-slot="${p}"></div><div class="block"><b>${p + 1}</b></div></div>`).join('');
   }
 
   function render() {
