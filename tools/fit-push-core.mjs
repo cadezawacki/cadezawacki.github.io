@@ -1,4 +1,4 @@
-// The Wire — core pass shared by the GitHub Actions script (tools/fit-push.mjs)
+// The Wire — core pass shared by the GitLab CI script (tools/fit-push.mjs)
 // and the Cloudflare Worker (wire/src/index.mjs). Reads the RTDB over REST,
 // decides which notification (if any) is due for each partner right now, and
 // hands payloads to the caller's `send`.

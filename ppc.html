@@ -1293,7 +1293,7 @@ svg[data-tool]:not([data-tool="select"]):not([data-tool="erase"]) .bld-shape { p
 <!-- ===== App shell ===== -->
 <div id="app" hidden>
   <div class="menubar">
-    <a class="menubar-logo" href="https://cadezawacki.github.io/" aria-label="home"></a>
+    <a class="menubar-logo" href="./" aria-label="home"></a>
     <nav class="app-tabs" aria-label="apps">
       <button class="seg-tab" data-app="today" id="tab-today">
         <svg viewBox="0 0 24 24"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5l1.5 3h-3L12 2zm0 20l-1.5-3h3L12 22zM2 12l3-1.5v3L2 12zm20 0l-3 1.5v-3L22 12zM4.9 4.9l3.2 1.1-2.1 2.1L4.9 4.9zm14.2 14.2l-3.2-1.1 2.1-2.1 1.1 3.2zM4.9 19.1l1.1-3.2 2.1 2.1-3.2 1.1zM19.1 4.9l-1.1 3.2-2.1-2.1 3.2-1.1z"/></svg>
@@ -8038,7 +8038,7 @@ const Fit = (() => {
         <label class="arc-knob"><span>Evening report</span><input class="form-input" type="time" data-ptime="pushEvening" value="${C.pushEvening || '19:00'}"></label>
         <label class="arc-knob"><span>Last call</span><input class="form-input" type="time" data-ptime="pushLast" value="${C.pushLast || '21:30'}"></label>
       </div>
-      <div class="form-hint" style="margin:8px 0 4px">Cloudflare Worker (wire/) — the live sender. Leave blank to rely on the GitHub cron only.</div>
+      <div class="form-hint" style="margin:8px 0 4px">Cloudflare Worker (wire/) — the live sender. Leave blank to rely on the manual GitLab CI job only.</div>
       <div class="arc-knobs" style="grid-template-columns:1fr">
         <label class="arc-knob"><span>Worker URL</span><input class="form-input" type="url" data-pstr="wireUrl" placeholder="https://ppc-wire.you.workers.dev" value="${esc(C.wireUrl || '')}" style="width:62%"></label>
         <label class="arc-knob"><span>Poke token</span><input class="form-input" type="text" data-pstr="wireToken" autocomplete="off" placeholder="same as the POKE_TOKEN secret" value="${esc(C.wireToken || '')}" style="width:62%"></label>

@@ -15,8 +15,12 @@
 //     Code Runner's Python 'cade-py-<version>'): bypass, so nothing is stored twice
 // ============================================
 
-const CACHE_VERSION = 229;
+const CACHE_VERSION = 230;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
+// Cade.project's folder, resolved against this worker's own URL so it is right
+// whether the site is served at a domain root or under a sub-path (e.g. a
+// GitLab Pages project URL, <group>.gitlab.io/<project>/).
+const PROJECT_PATH = new URL('./project/', self.location).pathname;
 
 // Same-origin pages to precache on install.
 // Note: we use absolute paths so the cache keys match navigation requests.
@@ -180,7 +184,7 @@ self.addEventListener('fetch', (e) => {
 
   // /project/ (Cade.project) registers its own service worker with that
   // scope; leave its requests alone so the two apps never share cache entries.
-  if (url.origin === self.location.origin && url.pathname.startsWith('/project/')) return;
+  if (url.origin === self.location.origin && url.pathname.startsWith(PROJECT_PATH)) return;
 
   // Servers on this computer or the local network (Ollama, LM Studio, Unsloth
   // Studio… for the AI widget) and API calls carrying a key are live, private
@@ -270,7 +274,7 @@ self.addEventListener('message', (e) => {
   }
 });
 
-// ---- Web Push (ppc fitness arcade — sent by the repo's Actions cron) ----
+// ---- Web Push (ppc fitness arcade — sent by The Wire, wire/) ----
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data.json(); } catch { d = { title: 'ppc', body: e.data ? e.data.text() : '' }; }
