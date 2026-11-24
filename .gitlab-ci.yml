@@ -1,0 +1,85 @@
+# GitLab CI/CD. The repo IS the website: there is no build step.
+#
+#   pages       Every push to the default branch publishes the site to GitLab
+#               Pages. The repo is copied into public/ (top-level dotfiles and
+#               CI config left out, as GitHub Pages' Jekyll step did), and each
+#               text file gets .gz and .br siblings: GitLab Pages serves those
+#               to browsers that accept them but, unlike GitHub Pages, never
+#               compresses on the fly (txt.html alone is ~1.7 MB raw).
+#   site-check  The same copy on merge requests, so a broken site build shows
+#               up before it reaches the live site. Deploys nothing.
+#   fit-push    The Wire's manual sender (was .github/workflows/fit-push.yml).
+#               Build > Pipelines > Run pipeline, then press play on fit-push.
+#               Needs the VAPID_PRIVATE_KEY CI/CD variable (Settings > CI/CD >
+#               Variables); without it the pass runs as a dry run. The live
+#               sender is still the Cloudflare Worker in wire/.
+
+stages:
+  - check
+  - deploy
+
+# Pipelines run for merge requests, the default branch and manual runs only,
+# so pushes to work-in-progress branches don't use CI minutes.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+.site:
+  image: alpine:3.22
+  before_script:
+    - apk add --no-cache brotli findutils gzip
+  script:
+    # Copy everything except top-level dotfiles (.git, .gitlab-ci.yml, .github ...).
+    - mkdir .site
+    - find . -mindepth 1 -maxdepth 1 ! -name '.*' -exec cp -R {} .site/ \;
+    - rm -rf public && mv .site public
+    # Pre-compress text files (over 1 KiB) next to the originals.
+    - |
+      find public -type f -size +1k \( \
+          -name '*.html' -o -name '*.htm' -o -name '*.js' -o -name '*.mjs' -o -name '*.css' \
+          -o -name '*.json' -o -name '*.webmanifest' -o -name '*.svg' -o -name '*.txt' -o -name '*.md' \
+          -o -name '*.xml' -o -name '*.csv' -o -name '*.wasm' -o -name '*.ico' -o -name '*.map' \
+          -o -name '*.aff' -o -name '*.dic' \) -print0 \
+        | xargs -0 -r -n 8 -P "$(nproc)" sh -c 'for f; do gzip -9 -k -f "$f" && brotli -f "$f" || exit 1; done' sh
+    # Sanity check: the entry points made it; print the site's size.
+    - |
+      for f in index.html txt.html ppc.html sw.js manifest.webmanifest txt/manifest.json txt.html.gz txt.html.br; do
+        test -f "public/$f" || { echo "public/$f is missing"; exit 1; }
+      done
+      du -sh public
+
+pages:
+  extends: .site
+  stage: deploy
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+site-check:
+  extends: .site
+  stage: check
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+fit-push:
+  stage: deploy
+  image: node:22-alpine
+  needs: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+      allow_failure: true
+  resource_group: fit-push
+  timeout: 5m
+  script:
+    - npm install --no-save web-push@3
+    - |
+      if [ -z "$VAPID_PRIVATE_KEY" ]; then
+        echo "WARNING: The Wire is muted. VAPID_PRIVATE_KEY is not set (Settings > CI/CD > Variables), so this is a DRY_RUN."
+        export DRY_RUN=1
+      fi
+      node tools/fit-push.mjs

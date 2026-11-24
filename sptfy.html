@@ -1297,7 +1297,7 @@
         // --- Configuration ---
         let clientId = null;
         const CLIENT_ID_STORAGE_KEY = 'spotifyMinimalPlayerClientId';
-        const redirectUri = 'https://cadezawacki.github.io/sptfy.html'; // MUST match Spotify Dashboard
+        const redirectUri = new URL('./sptfy.html', location.href).href; // MUST be registered in the Spotify Dashboard (Redirect URIs)
         const spotifyAuthorizeUrl = 'https://accounts.spotify.com/authorize'; 
 
         // Scopes needed for playback and control
