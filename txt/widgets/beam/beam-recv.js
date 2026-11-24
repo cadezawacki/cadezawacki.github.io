@@ -227,6 +227,7 @@
       '<span class="beam-cf-n"><b>' + esc(F.n) + '</b><small class="beam-cf-s">' + esc(sub) + '</small></span>' +
       (ok ? '<span class="beam-acts">' +
         '<button type="button" data-act="save">Save</button>' +
+        (Cade.files.copyAsText ? '<button type="button" data-act="copytxt" title="Copy as encoded text — paste it anywhere; restore with the “Decode Encoded Text” script">Copy as text</button>' : '') +
         '<button type="button" data-act="attach"' + (big ? ' class="dim" title="Over 25 MB — too big to attach to a note"' : '') + '>Attach</button>' +
         (open ? '<button type="button" data-act="open">Open</button>' : '') +
         '<button type="button" class="beam-x" data-act="dismiss" title="Remove from Inbox" aria-label="Remove from Inbox">×</button></span>' : '');
@@ -248,6 +249,7 @@
     var li = b.closest('.beam-cf'), i = li ? +li.getAttribute('data-i') : -1, F = J.files[i];
     if (!F || !F.blob) return;
     if (a === 'save') Cade.files.save(F.blob, F.n);
+    else if (a === 'copytxt') Cade.files.copyAsText(F.blob, F.n, F.t);
     else if (a === 'attach') attach(F.blob, F.n, F.t);
     else if (a === 'open') openBlob(F.blob, F.n, F.t);
     else if (a === 'dismiss') {

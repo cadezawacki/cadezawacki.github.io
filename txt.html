@@ -4470,6 +4470,10 @@ window.Cade = (function () {
       },
       // Save a Blob as a download (iPhone: Safari's download sheet).
       save(blob, name) { return _dlSaveBlob(blob, name || 'file'); },
+      // Copy a Blob to the clipboard as encoded text (the file pill's "Copy as
+      // encoded text" format; restore with the "Decode Encoded Text" script).
+      // Call it straight from a click. → true when copied.
+      copyAsText(blob, name, mime) { return copyBlobAsText(blob, name, mime); },
       // Add an item to a file pill's menu: { label, command, kind } — picking
       // it runs the palette command `command` with the file handed over
       // (take(kind) → { hash, name } within a minute, once).
@@ -9059,19 +9063,60 @@ function _fileToEncodedText(rec) {
   const meta = 'enc=' + (rec.enc || 'raw') + ' size=' + (rec.size || 0) + (rec.mime ? ' mime=' + rec.mime : '');
   return '![file-txt:v1]\n' + (rec.name || 'file') + '\n' + (rec.sha256 || '-') + '\n' + meta + '\n' + lines.join('\n') + '\n![/file-txt]';
 }
-async function copyFileAsText(hash, fallbackName) {
-  let rec = null;
-  try { rec = await resolveFileRef(hash, { ui: true, name: fallbackName }); } catch {}
-  if (!rec) { showToast(_fileUnavailableMsg(hash), 'error', 5000); return; }
-  const text = _fileToEncodedText(rec);
-  try {
-    await navigator.clipboard.writeText(text);
-    showToast('Copied ' + (rec.name || fallbackName) + ' as encoded text (' + _fmtBytes(text.length) + ') — restore it with the "Decode Encoded Text" script', 'success', 3500);
-  } catch {
-    showToast('Failed to copy to clipboard', 'error', 2500);
+// Copy text that takes a while to make. Safari drops the click's permission
+// to write the clipboard once an await has passed, so where ClipboardItem
+// takes a promise the write starts right away and the text follows.
+// → the text, or null when it couldn't be made; throws when copying failed.
+async function _copyTextLater(make) {
+  let text = null;
+  const p = make().then(t => (text = t));
+  if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': p.then(t => { if (t == null) throw new Error('none'); return new Blob([t], { type: 'text/plain' }); }) })]);
+      return text;
+    } catch { if (text == null && await p.catch(() => null) == null) return null; }
   }
+  const t = await p;
+  if (t == null) return null;
+  await navigator.clipboard.writeText(t);
+  return t;
+}
+function _copiedAsTextToast(name, text) {
+  showToast('Copied ' + name + ' as encoded text (' + _fmtBytes(text.length) + ') — restore it with the "Decode Encoded Text" script', 'success', 3500);
+}
+async function copyFileAsText(hash, fallbackName) {
+  let rec = null, text;
+  try {
+    text = await _copyTextLater(async () => {
+      try { rec = await resolveFileRef(hash, { ui: true, name: fallbackName }); } catch {}
+      return rec ? _fileToEncodedText(rec) : null;
+    });
+  } catch { showToast('Failed to copy to clipboard', 'error', 2500); return; }
+  if (!text) { showToast(_fileUnavailableMsg(hash), 'error', 5000); return; }
+  _copiedAsTextToast(rec.name || fallbackName, text);
 }
 window.copyFileAsText = copyFileAsText;
+// The same encoded text for any Blob (a Beam-received file, say), made the
+// way an attachment is stored: checksum, then deflate when it helps.
+async function _blobToEncodedText(blob, name, mime) {
+  const raw = new Uint8Array(await blob.arrayBuffer());
+  let sha = '';
+  try { sha = await _sha256Hex(raw); } catch {}
+  let enc = 'raw', body = raw;
+  try { const c = await _compress(raw); if (c && c.length < raw.length) { body = c; enc = 'deflate-raw'; } } catch {}
+  return _fileToEncodedText({ name: _sanitizeAttachmentName(name), size: raw.length, mime: mime || blob.type || '', sha256: sha, enc, data: _bytesToB64(body) });
+}
+async function copyBlobAsText(blob, name, mime) {
+  if (!blob) return false;
+  name = name || 'file';
+  if (blob.size > 2 * 1024 * 1024) showToast('Encoding ' + name + '…', 'info', 1500);
+  let text;
+  try { text = await _copyTextLater(() => _blobToEncodedText(blob, name, mime).catch(() => null)); }
+  catch { showToast('Failed to copy to clipboard' + (blob.size > 50 * 1024 * 1024 ? ' — ' + name + ' may be too big for it (try Save instead)' : ''), 'error', 3500); return false; }
+  if (!text) { showToast('Couldn’t read ' + name, 'error', 3000); return false; }
+  _copiedAsTextToast(name, text);
+  return true;
+}
 
 // Click/tap or right-click a file pill → download / copy as text / remove.
 function showFileMenu(x, y, name, hash, posOf) {
