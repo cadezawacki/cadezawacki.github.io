@@ -417,7 +417,9 @@
         var open = K.openKind(r.mime, r.name);
         return '<li class="beam-ir" data-id="' + esc(r.id) + '">' + (th || '<span class="beam-ic" aria-hidden="true">📄</span>') +
           '<span class="beam-cf-n"><b>' + esc(r.name) + '</b><small>' + K.fmtBytes(r.size) + (r.from ? ' · from ' + esc(r.from) : '') + ' · ' + K.ago(t - r.at) + (r.mem ? ' · until reload' : '') + '</small></span>' +
-          '<span class="beam-acts"><button type="button" data-act="in-save">Save</button><button type="button" data-act="in-attach"' + (r.size > Cade.files.MAX_BYTES ? ' class="dim" title="Over 25 MB — too big to attach to a note"' : '') + '>Attach</button>' +
+          '<span class="beam-acts"><button type="button" data-act="in-save">Save</button>' +
+          (Cade.files.copyAsText ? '<button type="button" data-act="in-copytxt" title="Copy as encoded text — paste it anywhere; restore with the “Decode Encoded Text” script">Copy as text</button>' : '') +
+          '<button type="button" data-act="in-attach"' + (r.size > Cade.files.MAX_BYTES ? ' class="dim" title="Over 25 MB — too big to attach to a note"' : '') + '>Attach</button>' +
           (open ? '<button type="button" data-act="in-open">Open</button>' : '') +
           '<button type="button" class="beam-x" data-act="in-del" title="Delete" aria-label="Delete ' + esc(r.name) + '">🗑</button></span></li>';
       }).join('');
@@ -518,6 +520,7 @@
     else if (a === 'qr-choose') { el.qrInput.value = ''; el.qrInput.click(); }
     else if (a === 'qr-note') setQrFile(noteFile());
     else if (a === 'in-save') { r = inboxRec(t); if (r && r.blob) Cade.files.save(r.blob, r.name); }
+    else if (a === 'in-copytxt') { r = inboxRec(t); if (r && r.blob) Cade.files.copyAsText(r.blob, r.name, r.mime); }
     else if (a === 'in-attach') { r = inboxRec(t); if (r && r.blob) attachBlob(r.blob, r.name, r.mime); }
     else if (a === 'in-open') { r = inboxRec(t); if (r && r.blob) openBlob(r.blob, r.name, r.mime); }
     else if (a === 'in-cancel') { var J = L.active('in').filter(function (j) { return j.x === t.getAttribute('data-x'); })[0]; if (J) J.cancel(); }
