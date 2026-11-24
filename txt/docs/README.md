@@ -15,7 +15,7 @@ module by following it top to bottom.
 
 Cade.txt is a **single-file** static web app: the entire core (the CodeMirror 6
 editor, Firebase sync, local storage, settings, the command palette) lives in
-**`txt.html`** and is hosted as static files on GitHub Pages (`*.github.io`).
+**`txt.html`** and is hosted as static files on GitLab Pages (`*.gitlab.io`).
 There is **no build step** and **no server** — everything is plain static files
 loaded directly by the browser, and a service worker (`sw.js`) makes it work
 offline as a PWA.

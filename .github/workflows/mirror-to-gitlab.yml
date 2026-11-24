@@ -1,0 +1,62 @@
+# Mirror this repo to GitLab, where pushes to master deploy the site to
+# GitLab Pages (see .gitlab-ci.yml).
+#
+# Every branch or tag pushed here is pushed to the same name on GitLab, and
+# deleting one here deletes it there. One-way: make changes on GitHub only.
+# A rewritten master is refused by GitLab (protected branch), so the job fails
+# instead of overwriting history; other branches are force-updated.
+#
+# Needs the GITLAB_TOKEN repository secret (Settings > Secrets and variables >
+# Actions): a GitLab personal access token of the cadezawacki account with
+# only the write_repository scope. Without it the job skips with a warning.
+# Run it by hand (Actions > Mirror to GitLab > Run workflow) to re-sync a branch.
+name: Mirror to GitLab
+on:
+  push:
+  delete:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mirror-to-gitlab-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  # Change these if the GitLab project is renamed or moved.
+  GITLAB_USER: cadezawacki
+  GITLAB_REPO: gitlab.com/cadezawacki/cadezawacki-github-io.git
+jobs:
+  mirror:
+    if: github.event_name != 'push' || !github.event.deleted
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check for the token
+        id: token
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          if [ -z "$GITLAB_TOKEN" ]; then
+            echo "::warning title=Not mirrored to GitLab::Add a GITLAB_TOKEN repository secret (a GitLab personal access token with the write_repository scope)."
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v5
+        if: steps.token.outputs.skip != '1' && github.event_name != 'delete'
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Push to GitLab
+        if: steps.token.outputs.skip != '1'
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          DELETED_NAME: ${{ github.event.ref }}
+          DELETED_TYPE: ${{ github.event.ref_type }}
+        run: |
+          url="https://${GITLAB_USER}:${GITLAB_TOKEN}@${GITLAB_REPO}"
+          if [ "$EVENT" = delete ]; then
+            if [ "$DELETED_TYPE" = tag ]; then ref="refs/tags/$DELETED_NAME"; else ref="refs/heads/$DELETED_NAME"; fi
+            git init -q .
+            git push "$url" --delete "$ref" || echo "$ref was already gone on GitLab."
+          else
+            git push --force "$url" "$GITHUB_SHA:$GITHUB_REF"
+          fi

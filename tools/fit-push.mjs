@@ -1,7 +1,6 @@
-// The Wire — GitHub Actions entry point (see .github/workflows/fit-push.yml).
-// Manual dispatch / dry runs only now: the Cloudflare Worker in wire/ is the
-// live sender (every minute + instant pokes from the app). Both call the
-// same pass in tools/fit-push-core.mjs.
+// The Wire — GitLab CI entry point (the manual `fit-push` job in .gitlab-ci.yml).
+// Runs one pass by hand, or as a dry run; nothing sends on a schedule. The
+// pass itself is in tools/fit-push-core.mjs.
 //
 // Env: VAPID_PRIVATE_KEY (secret, required unless DRY_RUN=1)
 //      PPC_DB (default https://cadetxt-default-rtdb.firebaseio.com)
