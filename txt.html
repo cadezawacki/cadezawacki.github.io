@@ -8573,7 +8573,10 @@ async function _fileRestFetch(fbUrl, fp, hash, prog) {
   const base = fbUrl.replace(/\/+$/, '') + '/files/' + fp + '/' + hash;
   const n = await _restGetJson(base + '/_chunks.json');
   if (typeof n === 'number' && n > 0) {
-    const total = n * (FB_CHUNK_SIZE + 2);
+    // `_len` is the exact size (files stored before it existed: estimate).
+    let len = null;
+    try { len = await _restGetJson(base + '/_len.json'); } catch {}
+    const total = typeof len === 'number' && len > 0 ? len + 2 * n : n * (FB_CHUNK_SIZE + 2);
     let done = 0;
     const parts = [];
     prog(0, total);
@@ -8585,9 +8588,11 @@ async function _fileRestFetch(fbUrl, fp, hash, prog) {
     prog(total, total);
     return parts.join('');
   }
+  // No `_chunks`: a small payload stored as one string, or a chunked upload
+  // still running. Shallow, so the latter doesn't download its parts so far.
   let done = 0;
-  const v = await _restGetJson(base + '.json', b => { done += b; prog(done, 0); });
-  return typeof v === 'string' ? v : unpackRoomText(v);
+  const v = await _restGetJson(base + '.json?shallow=true', b => { done += b; prog(done, 0); });
+  return typeof v === 'string' ? v : null;
 }
 async function _fetchFileFromServer(hash, opts) {
   const fail = (why) => { _fileFetchErr.set(hash, why); return null; };
@@ -8625,6 +8630,14 @@ async function _fetchFileFromServer(hash, opts) {
         enc = unpackRoomText(snap.val()); // large payloads are chunked like room text
       } catch { return fail('network'); }
     }
+    // Not there yet: when the user asked for it, wait for it — following the
+    // other device's upload (`_up`) — rather than failing straight away.
+    if (!enc && opts.ui) {
+      clearTimeout(showT);
+      const w = await _waitForFileUpload(fbUrl, fp, hash, opts.name || 'file', x => { xfer = x; });
+      if (w.why) return fail(w.why);
+      enc = w.enc;
+    }
     if (!enc) return fail('missing');
     if (xfer) xfer.setLabel('Decrypting ' + (opts.name || 'file') + '…');
     const dec = await decryptText(enc, baseKey);
@@ -8638,6 +8651,65 @@ async function _fetchFileFromServer(hash, opts) {
     if (xfer) xfer.end();
   }
 }
+// Wait (with a progress pill) for a file another device is still uploading,
+// then download it. Polls `_up` — { n, len, done } parts, written by the
+// uploader — over REST. Gives up when there's no sign of an upload at all for
+// FILE_WAIT_IDLE_MS, or when a running upload stops moving for
+// FILE_WAIT_STALL_MS (the uploader went offline or was closed mid-upload; it
+// resumes when it reconnects). The pill's Cancel stops waiting.
+// → { enc } | { why: 'missing' | 'stalled' | 'cancelled' }
+const FILE_WAIT_IDLE_MS = 30000, FILE_WAIT_STALL_MS = 60000, FILE_WAIT_POLL_MS = 2000;
+async function _waitForFileUpload(fbUrl, fp, hash, name, setXfer) {
+  const base = fbUrl.replace(/\/+$/, '') + '/files/' + fp + '/' + hash;
+  let cancelled = false, wake = null;
+  const xfer = StreamXfer.begin({
+    room: activeRoom, dir: 'down', total: 0, done: 0,
+    label: '⏳ Waiting for ' + name + ' to reach the server…',
+    meta: 'Downloads as soon as it arrives',
+    onCancel: () => { cancelled = true; if (wake) wake(); },
+  });
+  setXfer(xfer);
+  const t0 = Date.now();
+  let lastMove = t0, lastDone = -1, seenUp = false;
+  try {
+    for (;;) {
+      await new Promise(r => { wake = r; setTimeout(r, FILE_WAIT_POLL_MS); });
+      wake = null;
+      if (cancelled) return { why: 'cancelled' };
+      let up = null;
+      try { up = await _restGetJson(base + '/_up.json'); } catch {}
+      if (cancelled) return { why: 'cancelled' };
+      if (up && up.n > 0 && typeof up.done === 'number' && up.done < up.n) {
+        if (!seenUp || up.done !== lastDone) { lastDone = up.done; lastMove = Date.now(); }
+        seenUp = true;
+        const total = up.len > 0 ? up.len : 0;
+        const done = total ? Math.min(total, Math.round(total * up.done / up.n)) : up.done;
+        xfer.setLabel('↑ ' + name + ' is uploading from another device (' + up.done + '/' + up.n + ' parts)');
+        xfer.setMeta(null);
+        xfer.progress(done, total);
+        if (Date.now() - lastMove > FILE_WAIT_STALL_MS) return { why: 'stalled' };
+        continue;
+      }
+      // No upload running (or it just finished): is it there now?
+      let enc = null;
+      try {
+        enc = await _fileRestFetch(fbUrl, fp, hash, (d, t) => {
+          if (cancelled) throw new Error('cancelled');
+          if (!(t > 0) && d < 64) return; // a probe answering "null", not a download
+          xfer.setLabel('↓ Downloading ' + name); xfer.setMeta(null); xfer.progress(d, t);
+        });
+      } catch {}
+      if (cancelled) return { why: 'cancelled' };
+      if (enc) return { enc };
+      const quietFor = Date.now() - (seenUp ? lastMove : t0);
+      if (quietFor > (seenUp ? FILE_WAIT_STALL_MS : FILE_WAIT_IDLE_MS)) return { why: seenUp ? 'stalled' : 'missing' };
+      if (!seenUp) xfer.setLabel('⏳ Waiting for ' + name + ' to reach the server… (' + Math.ceil((FILE_WAIT_IDLE_MS - quietFor) / 1000) + 's)');
+    }
+  } finally {
+    xfer.end();
+    setXfer(null);
+  }
+}
 // Why an attached file's bytes couldn't be had (after resolveFileRef → null).
 function _fileUnavailableMsg(hash) {
   switch (_fileFetchErr.get(hash)) {
@@ -8645,7 +8717,9 @@ function _fileUnavailableMsg(hash) {
     case 'offline': return 'You’re offline — this file hasn’t been downloaded to this device yet';
     case 'network': return 'Couldn’t download the file — check your connection and try again';
     case 'decrypt': return 'Couldn’t decrypt the file — is this device using the same sync key as the one that attached it?';
-    default: return 'File not on the server yet — it may still be uploading from the device that attached it. Try again shortly';
+    case 'cancelled': return 'Stopped waiting for the file';
+    case 'stalled': return 'The upload from the other device stalled — it may have gone offline or been closed. It resumes when that device reconnects';
+    default: return 'File isn’t on the server — the device that attached it hasn’t started uploading it (is it offline, or closed?). It uploads when that device next connects';
   }
 }
 async function resolveFileRef(hash, opts) {
@@ -8694,23 +8768,54 @@ window.flushPendingFileDeletes = flushPendingFileDeletes;
 // Firebase caps a single WRITE REQUEST at 16 MB (SDK) on top of the 10 MB
 // per-string-value cap. packRoomText solves the string cap, but setting the
 // whole chunked object at once is still ONE write — a big encrypted file
-// blows the 16 MB request limit ("too big to write"). So each ≤8 MB part is
-// written as its OWN request, with the `_chunks` count landing LAST: readers
-// go through unpackRoomText, which treats a node without `_chunks` as absent,
-// so a half-uploaded payload is never mistaken for a complete one.
-async function _fbSetLargePayload(ref, encoded) {
-  if (encoded.length <= FB_CHUNK_SIZE) { await ref.set(encoded); return; }
-  const n = Math.ceil(encoded.length / FB_CHUNK_SIZE);
+// blows the 16 MB request limit ("too big to write"). So the payload is
+// written as parts, each its OWN request, with the `_chunks` count landing
+// LAST: readers go through unpackRoomText, which treats a node without
+// `_chunks` as absent, so a half-uploaded payload is never mistaken for a
+// complete one. Parts are small (FILE_PART_SIZE) so both ends can show
+// progress: `_len` is the whole encoded length (readers size their bar from
+// it), and `_up` ({ n, len, done }) tracks parts written while the upload
+// runs, so another device asking for the file can watch it arrive instead
+// of failing with "not on the server yet". `_up` is removed at the end. Both
+// are best-effort: a write they can't make never fails the upload.
+const FILE_PART_SIZE = 512 * 1024;
+async function _fbSetLargePayload(ref, encoded, onPart) {
+  if (encoded.length <= FILE_PART_SIZE) { await ref.set(encoded); if (onPart) onPart(encoded.length); return; }
+  const n = Math.ceil(encoded.length / FILE_PART_SIZE);
   await ref.remove(); // clear stale parts from any earlier aborted attempt
+  const meta = (p, v) => ref.child(p).set(v).catch(() => {});
+  await meta('_len', encoded.length);
+  await meta('_up', { n, len: encoded.length, done: 0 });
   for (let i = 0; i < n; i++) {
-    await ref.child('parts/' + i).set(encoded.slice(i * FB_CHUNK_SIZE, (i + 1) * FB_CHUNK_SIZE));
+    await ref.child('parts/' + i).set(encoded.slice(i * FILE_PART_SIZE, (i + 1) * FILE_PART_SIZE));
+    meta('_up/done', i + 1); // not awaited: the next part needn't wait on it
+    if (onPart) onPart(Math.min((i + 1) * FILE_PART_SIZE, encoded.length));
   }
   await ref.child('_chunks').set(n);
+  await ref.child('_up').remove().catch(() => {});
 }
-async function uploadFile(hash, payload) {
+// The name inside a stored payload ('{"v":1,"name":"…",…}'), cheaply.
+function _filePayloadName(payload) {
+  const m = /"name":("(?:[^"\\]|\\.)*")/.exec(String(payload || '').slice(0, 600));
+  try { return m ? JSON.parse(m[1]) : 'file'; } catch { return 'file'; }
+}
+// Uploads running in this tab, by hash (one per hash: a second, concurrent
+// upload of the same file would remove() the first one's parts).
+const _fileUpInflight = new Map();
+function uploadFile(hash, payload, opts) {
+  let p = _fileUpInflight.get(hash);
+  if (!p) {
+    p = _uploadFile(hash, payload, opts || {}).finally(() => _fileUpInflight.delete(hash));
+    _fileUpInflight.set(hash, p);
+  }
+  return p;
+}
+async function _uploadFile(hash, payload, opts) {
   const baseKey = store.get('cade-sync-key') || '';
   const fbUrl = store.get('cade-firebase-url') || '';
   if (!baseKey || !fbUrl || !navigator.onLine) { _filePendingAdd(hash); return false; }
+  let xfer = null;
+  const name = opts.name || _filePayloadName(payload);
   try {
     const db = initFirebase(fbUrl);
     const fp = _imgKeyFp || (_imgKeyFp = await _computeKeyFingerprint(baseKey));
@@ -8721,17 +8826,26 @@ async function uploadFile(hash, payload) {
     const marker = await ref.child('_chunks').once('value');
     if (marker.val()) { _filePendingRemove(hash); return true; }
     const enc = await encryptText(payload, baseKey);
-    if (enc.length <= FB_CHUNK_SIZE) {
-      // Small payloads are stored as a plain string — a full read is small
-      // here by definition. unpackRoomText(null/partial) is null, so an
-      // aborted earlier upload is correctly treated as "not there".
+    if (enc.length <= FILE_PART_SIZE) {
+      // Payloads stored as one plain string as one plain string. unpackRoomText
+      // (null/partial) is null, so an aborted earlier upload is correctly
+      // treated as "not there".
       const existing = await ref.once('value');
       if (unpackRoomText(existing.val())) { _filePendingRemove(hash); return true; }
     }
-    await _fbSetLargePayload(ref, enc);
+    if (enc.length > 256 * 1024) {
+      xfer = StreamXfer.begin({ room: activeRoom, dir: 'up', total: enc.length, done: 0, label: '↑ Uploading ' + name });
+    }
+    await _fbSetLargePayload(ref, enc, done => { if (xfer) xfer.progress(done, enc.length); });
     _filePendingRemove(hash);
     return true;
-  } catch { _filePendingAdd(hash); return false; }
+  } catch {
+    _filePendingAdd(hash);
+    if (xfer) showToast('Upload of ' + name + ' was interrupted — it will resume when the connection is back', 'error', 4500);
+    return false;
+  } finally {
+    if (xfer) xfer.end();
+  }
 }
 async function flushPendingFileUploads() {
   const q = _filePendingGet();
@@ -8787,7 +8901,7 @@ async function _storeAttachment(file, nameOverride, vol) {
   _fileDelPendingRemove(hash); // re-attached content must not be reaped by a stale queued delete
   _gcHold(hash);               // the caller may place its token a moment later
   try { _lastDocFileHashes.add(hash); } catch {} // …and a quick delete of it still counts as a removal
-  uploadFile(hash, payload); // fire-and-forget (queues if offline)
+  uploadFile(hash, payload, { name }); // fire-and-forget (queues if offline)
   return { token: '![file:' + name + '#' + hash + '|s' + raw.length + ']', hash, name, size: raw.length, encoded: rec.data.length };
 }
 
@@ -15371,6 +15485,8 @@ const StreamXfer = (() => {
     fillEl = pill.querySelector('.xfer-fill');
     btnEl = pill.querySelector('.xfer-btn');
     btnEl.addEventListener('click', () => {
+      const x = pick();
+      if (x && x.onCancel && !(pv && pv.room === x.room)) { x.onCancel(); return; }
       if (!pv) return;
       pv.hidden = !pv.hidden;
       pv.el.hidden = pv.hidden;
@@ -15400,16 +15516,17 @@ const StreamXfer = (() => {
     const pct = x.total > 0 ? Math.min(100, Math.floor(x.done / x.total * 100)) : 0;
     labelEl.textContent = x.label || ((x.dir === 'up' ? '↑ Sending' : '↓ Receiving') + ' “' + x.room + '”');
     // Unknown total (a file download that isn't chunked): bytes so far, sliding bar.
-    pill.classList.toggle('xfer-indet', !(x.total > 0));
-    let meta = x.total > 0 ? pct + '% · ' + _fmtBytes(x.done) + ' of ' + _fmtBytes(x.total) : _fmtBytes(x.done) + ' so far';
+    pill.classList.toggle('xfer-indet', !(x.total > 0) || x.meta != null);
+    let meta = x.meta != null ? x.meta : x.total > 0 ? pct + '% · ' + _fmtBytes(x.done) + ' of ' + _fmtBytes(x.total) : _fmtBytes(x.done) + ' so far';
     const secs = (Date.now() - x.t0) / 1000, moved = x.done - x.d0;
-    if (secs > 3 && moved > 0 && x.done < x.total) meta += ' · ~' + fmtSecs((x.total - x.done) / (moved / secs)) + ' left';
+    if (x.meta == null && secs > 3 && moved > 0 && x.done < x.total) meta += ' · ~' + fmtSecs((x.total - x.done) / (moved / secs)) + ' left';
     if (xfers.size > 1) meta += ' · +' + (xfers.size - 1) + ' more';
     metaEl.textContent = meta;
     fillEl.style.width = x.total > 0 ? pct + '%' : '';
     const showBtn = !!(pv && pv.room === x.room);
-    btnEl.hidden = !showBtn;
+    btnEl.hidden = !showBtn && !x.onCancel;
     if (showBtn) btnEl.textContent = pv.hidden ? 'Show preview' : 'Hide preview';
+    else if (x.onCancel) btnEl.textContent = 'Cancel';
   }
   function schedule() { if (!renderTimer) renderTimer = setTimeout(render, 120); }
 
@@ -15456,16 +15573,24 @@ const StreamXfer = (() => {
     schedule();
   }
 
-  // o: { room, dir: 'up' | 'down', total, done, preview, label } — label
-  // replaces the "Receiving “room”" line (file downloads); total 0 = unknown.
+  // o: { room, dir: 'up' | 'down', total, done, preview, label, onCancel } —
+  // label replaces the "Receiving “room”" line (file downloads); total 0 =
+  // unknown; onCancel puts a Cancel button on the pill; meta replaces the
+  // bytes/percent line (e.g. while waiting, before any bytes move).
   function begin(o) {
-    const x = { id: ++seq, room: o.room, dir: o.dir, total: o.total || 0, done: o.done || 0, d0: o.done || 0, t0: Date.now(), preview: false, fed: 0, label: o.label || '' };
+    const x = { id: ++seq, room: o.room, dir: o.dir, total: o.total || 0, done: o.done || 0, d0: o.done || 0, t0: Date.now(), preview: false, fed: 0, label: o.label || '', onCancel: o.onCancel || null, meta: o.meta == null ? null : o.meta };
     xfers.set(x.id, x);
     if (o.preview && o.dir === 'down' && o.room === activeRoom) x.preview = openPreview(o.room);
     schedule();
     return {
-      progress(done, total) { x.done = done; if (total != null) x.total = total; schedule(); },
+      progress(done, total) {
+        // A new phase (waiting → downloading): restart the time-left estimate.
+        if (total != null && total !== x.total) { x.total = total; x.d0 = done; x.t0 = Date.now(); }
+        x.done = done; schedule();
+      },
       setLabel(label) { x.label = label; schedule(); },
+      // Text in place of the bytes/percent line (null: back to the numbers).
+      setMeta(meta) { x.meta = meta; schedule(); },
       append(text) {
         if (!x.preview || !pv || pv.room !== x.room) return;
         // Two transfers of one document can feed one preview (the live upload,
@@ -16868,6 +16993,8 @@ window.addEventListener('beforeunload', (e) => {
   try {
     let unsent = false;
     for (const r of _roomPushQ.keys()) if (roomIsSyncOnly(r)) { unsent = true; break; }
+    // An attached file mid-upload: other devices can't open it until it lands.
+    if (_fileUpInflight.size) unsent = true;
     if (!unsent && activeRoom && roomIsSyncOnly(activeRoom) && localHasUnsyncedEdits(activeRoom)) unsent = true;
     if (unsent) { e.preventDefault(); e.returnValue = ''; }
   } catch {}
