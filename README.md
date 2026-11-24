@@ -11,6 +11,13 @@ copies of text files, and publishes it. Merge requests run the same copy as
 Links inside the site are relative, so it works at the root of a domain or
 under a project sub-path.
 
+Changes are made on GitHub (`cadezawacki/cadezawacki.github.io`).
+`.github/workflows/mirror-to-gitlab.yml` pushes every branch and tag to the
+GitLab project (`cadezawacki/cadezawacki-github-io`) and deletes them there
+when they're deleted here. It needs the `GITLAB_TOKEN` Actions secret: a GitLab
+personal access token with the `write_repository` scope. Don't commit on GitLab
+directly; the mirror is one-way.
+
 - Site URL and domains: **Deploy → Pages**
 - Who can see the site: **Settings → General → Visibility, project features,
   permissions → Pages** (choose **Everyone** for a public site)
