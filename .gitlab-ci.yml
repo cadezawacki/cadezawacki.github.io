@@ -11,8 +11,7 @@
 #   fit-push    The Wire's manual sender (was .github/workflows/fit-push.yml).
 #               Build > Pipelines > Run pipeline, then press play on fit-push.
 #               Needs the VAPID_PRIVATE_KEY CI/CD variable (Settings > CI/CD >
-#               Variables); without it the pass runs as a dry run. The live
-#               sender is still the Cloudflare Worker in wire/.
+#               Variables); without it the pass runs as a dry run.
 
 stages:
   - check
