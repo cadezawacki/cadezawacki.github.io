@@ -1,4326 +1,2173 @@
 /* ============================================================================
- * DEEPDELVE — Dungeon Crawler  (Cade.txt widget, id: "crawler")
+ * DEEPDELVE — Dungeon Crawler (Cade.txt widget, id "crawler", panel #crawler-panel)
  * ----------------------------------------------------------------------------
- * A puzzle-action-adventure roguelite with an *enduring* character.
+ * A story-driven roguelite: six classes (Warrior, Rogue, Mage, Ranger, Cleric,
+ * Necromancer) each with their own resource, five abilities and a talent tree;
+ * five acts of descent beneath Lanternfall (crypts → fungal hollows → drowned
+ * archive → cinder forge → the abyss), multi-phase bosses, telegraphed attacks,
+ * elite affixes, traps and hazards, puzzle rooms, shrines and strangers, a
+ * town of recurring characters, bounties, side quests, lore, loot with rarity,
+ * affixes, uniques and sets, a smith, a shared stash, New Game+, the Endless
+ * Descent and a daily seeded challenge.
  *
- *   • Persistent hero — level, stats, gold, inventory, equipment, abilities —
- *     saved to the Firebase room `_dungeon` (path rooms/_dungeon) so the same
- *     character follows you across devices and sessions. Falls back to a local
- *     cache when Firebase isn't configured, and works fully offline.
- *   • Turn-based grid combat with smooth animation, status effects (poison,
- *     burn, stun), criticals, and varied enemy AI (chasers, archers, bombers,
- *     thieves, summoners) plus a boss every 5 floors.
- *   • Puzzles: lever-gates & locked doors that seal the stairs (always
- *     solvable, proven by flood-fill), pushable boulders, pressure plates,
- *     telegraphed spike traps, and paired teleporters.
- *   • A town hub to heal, shop and upgrade. Death is not the end — you wake in
- *     town, lighter of pocket but wiser, and descend again.
- *   • Mobile-first: on-screen D-pad + ability buttons, swipe, and tap-to-travel
- *     pathfinding. Full keyboard support on desktop.
+ * Files (all in this folder):
+ *   crawler-data.js    content tables (pure data)       → window.__cadeCrawlerData
+ *   crawler-engine.js  the pure, node-testable engine  → window.__cadeCrawlerEngine
+ *   crawler.js         this file: loader, persistence, canvas renderer, UI, input
+ *   crawler.test.js    node tests for the engine
  *
- * Engineering notes:
- *   • Everything lives inside one IIFE. No globals leak.
- *   • The rAF loop self-cancels the instant the canvas leaves the DOM, every
- *     document listener is removed and the Firebase listener detached on close,
- *     and all heavy state is nulled — zero footprint while the widget is shut.
- *   • Nothing is loaded until the widget is opened (lazy); the service worker
- *     precaches this file + css for offline once it's been seen.
+ * Persistence: a roster of up to four heroes (+ shared stash + daily records)
+ * in Cade.store (cade-crawler-roster) mirrored to Firebase at
+ * rooms/__cade_dungeon/roster (merged per hero, most-progressed copy wins).
+ * The old single hero (rooms/__cade_dungeon/hero, cade-dungeon-save) migrates
+ * into the roster as a veteran on first open. A delve in progress is saved
+ * locally (cade-crawler-run-<hero>) and resumes where you left it.
  * ========================================================================== */
 (function () {
   'use strict';
-  if (typeof window.Cade === 'undefined') return;
+  if (typeof window === 'undefined' || !window.Cade) return;
   var Cade = window.Cade;
   Cade.loadCSS('crawler.css');
+  var DATA_URL = Cade.asset('crawler-data.js'), ENGINE_URL = Cade.asset('crawler-engine.js');
+  var PANEL_ID = 'crawler-panel';
+  var E = null, D = null;          // engine + data, once loaded
+  var S = null;                    // everything that lives while the panel is open
 
-  // ---- geometry --------------------------------------------------------------
-  var MW = 42, MH = 34;            // map size in tiles
-  var VW = 15, VH = 11;            // viewport size in tiles
-  var TILE = 26;                   // logical px per tile
-  var CW = VW * TILE, CH = VH * TILE;
-  var LIGHT = 6;                   // torch radius
-  var PRICE_MULT = 1.5;            // shops charge above base; you sell back at 0.4× base
-  var DIFFS = {
-    relaxed:   { name: 'Relaxed',   hp: 0.7, atk: 0.7, rew: 0.85, elite: 0.6 },
-    normal:    { name: 'Normal',    hp: 1.0, atk: 1.0, rew: 1.0,  elite: 1.0 },
-    hard:      { name: 'Hard',      hp: 1.45, atk: 1.35, rew: 1.35, elite: 1.5 },
-    nightmare: { name: 'Nightmare', hp: 2.0, atk: 1.7, rew: 1.8,  elite: 2.2 }
-  };
-  var DIFF_ORDER = ['relaxed', 'normal', 'hard', 'nightmare'];
-  function diff() { return DIFFS[hero && hero.difficulty] || DIFFS.normal; }
+  // ---- storage keys -------------------------------------------------------------
+  var K_ROSTER = 'cade-crawler-roster', K_SET = 'cade-crawler-settings', K_RUN = 'cade-crawler-run-', K_CLIENT = 'cade-dungeon-client';
+  var K_LEGACY = 'cade-dungeon-save';
+  var FB_ROSTER = 'rooms/__cade_dungeon/roster', FB_LEGACY = 'rooms/__cade_dungeon/hero', FB_LEGACY_OLD = 'rooms/_dungeon/hero';
 
-  // ---- tile codes ------------------------------------------------------------
-  var T_WALL = 0, T_FLOOR = 1, T_CRACK = 2; // crack = bombable wall
-
-  // ---- persistence keys ------------------------------------------------------
-  var LKEY = 'cade-dungeon-save';      // local mirror of the hero
-  var CKEY = 'cade-dungeon-client';    // this device's id
-  // Stored under rooms/ so existing Firebase rules apply, but with a __ prefix
-  // so it's hidden from the Explore Rooms list (txt.html filters __* keys) and
-  // can never collide with or be opened as a real room.
-  var FB_PATH = 'rooms/__cade_dungeon/hero';
-  var FB_PATH_OLD = 'rooms/_dungeon/hero'; // migrate away from the visible path
-  var migrateOld = false;
-
-  // ---- live (non-persistent) state ------------------------------------------
-  var world = null;   // current floor: map, objects, monsters, items, fx, …
-  var hero = null;    // THE persistent character
-  var ui = null;      // dom refs + animation loop handle
-  var raf = 0;
-  var saveTimer = 0, fbDirty = false;
-  var fbRef = null, fbCb = null, clientId = '';
-  var merchStock = null;           // merchant's rolled wares for the current town visit
-  var houseSel = null;             // currently-selected furniture piece in the furnish editor
-
-  // =========================================================================
-  //  small utilities
-  // =========================================================================
-  function ri(n) { return (Math.random() * n) | 0; }                 // 0..n-1
-  function rr(a, b) { return a + ri(b - a + 1); }                    // a..b inclusive
-  function chance(p) { return Math.random() < p; }
-  function pick(a) { return a[ri(a.length)]; }
-  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+  function sget(k) { try { return Cade.store.get(k); } catch (e) { return null; } }
+  function sset(k, v) { try { Cade.store.set(k, v); } catch (e) {} }
+  function sdel(k) { try { if (Cade.store.remove) Cade.store.remove(k); else Cade.store.set(k, ''); } catch (e) {} }
+  function jget(k) { try { var s = sget(k); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function now() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
-  function cheb(ax, ay, bx, by) { return Math.max(Math.abs(ax - bx), Math.abs(ay - by)); }
-  function sgn(n) { return n < 0 ? -1 : n > 0 ? 1 : 0; }
-  function key(x, y) { return y * MW + x; }
-
-  // =========================================================================
-  //  content tables
-  // =========================================================================
-  // Effect fields: crit, stun, freeze, poison, burn (chance to apply on hit) ·
-  // cleave/chain (fraction of hit dealt to extra foes) · lifesteal (heal frac of
-  // damage) · spell (+% spell damage) · mp/hp (+max) · dodge/thorns/resist/regen/
-  // greed (defensive & utility). This is what makes each weapon *play* different.
-  var WEAPONS = {
-    fist:       { id: 'fist',       name: 'Bare Fists',      atk: 0,  icon: '👊', slot: 'weapon', tier: 0 },
-    dagger:     { id: 'dagger',     name: 'Rusty Dagger',    atk: 2,  icon: '🗡️', slot: 'weapon', tier: 1, price: 30 },
-    shortsword: { id: 'shortsword', name: 'Iron Sword',      atk: 4,  icon: '⚔️', slot: 'weapon', tier: 2, price: 90 },
-    rapier:     { id: 'rapier',     name: 'Rapier',          atk: 5,  icon: '🤺', slot: 'weapon', tier: 2, price: 170, crit: 0.15 },
-    mace:       { id: 'mace',       name: 'Spiked Mace',     atk: 6,  icon: '🔨', slot: 'weapon', tier: 3, price: 210, stun: 0.20 },
-    venomfang:  { id: 'venomfang',  name: 'Venom Fang',      atk: 5,  icon: '🐍', slot: 'weapon', tier: 3, price: 250, poison: 0.5 },
-    staff:      { id: 'staff',      name: 'Arcane Staff',    atk: 5,  icon: '🪄', slot: 'weapon', tier: 3, price: 270, mp: 10, spell: 0.20 },
-    battleaxe:  { id: 'battleaxe',  name: 'Great Axe',       atk: 9,  icon: '🪓', slot: 'weapon', tier: 4, price: 430, cleave: 0.5 },
-    warhammer:  { id: 'warhammer',  name: 'Warhammer',       atk: 8,  icon: '🔨', slot: 'weapon', tier: 4, price: 450, stun: 0.30 },
-    frostbrand: { id: 'frostbrand', name: 'Frostbrand',      atk: 8,  icon: '❄️', slot: 'weapon', tier: 4, price: 490, freeze: 0.30 },
-    flameberge: { id: 'flameberge', name: 'Flameberge',      atk: 9,  icon: '🔥', slot: 'weapon', tier: 4, price: 510, burn: 0.5 },
-    runeblade:  { id: 'runeblade',  name: 'Runeblade',       atk: 12, icon: '⚔️', slot: 'weapon', tier: 5, price: 900, crit: 0.18, lifesteal: 0.15 },
-    vampscythe: { id: 'vampscythe', name: 'Vampiric Scythe', atk: 11, icon: '🌑', slot: 'weapon', tier: 5, price: 960, lifesteal: 0.35 },
-    thundermaul:{ id: 'thundermaul',name: 'Thunder Maul',    atk: 13, icon: '⚡', slot: 'weapon', tier: 5, price: 1050, chain: 0.6, stun: 0.2 },
-    archstaff:  { id: 'archstaff',  name: 'Archmage Staff',  atk: 7,  icon: '🔮', slot: 'weapon', tier: 5, price: 990, mp: 25, spell: 0.5 },
-    godsbane:   { id: 'godsbane',   name: 'Godsbane',        atk: 18, icon: '🩸', slot: 'weapon', tier: 6, price: 2800, crit: 0.2, lifesteal: 0.2, cleave: 0.4 }
-  };
-  var ARMORS = {
-    rags:        { id: 'rags',        name: 'Tattered Rags',  def: 0,  icon: '🧥', slot: 'armor', tier: 0 },
-    leather:     { id: 'leather',     name: 'Leather Armor',  def: 2,  icon: '🦺', slot: 'armor', tier: 1, price: 40 },
-    chain:       { id: 'chain',       name: 'Chain Mail',     def: 4,  icon: '⛓️', slot: 'armor', tier: 2, price: 120 },
-    scale:       { id: 'scale',       name: 'Scale Armor',    def: 6,  icon: '🐊', slot: 'armor', tier: 3, price: 280, dodge: 0.08 },
-    plate:       { id: 'plate',       name: 'Plate Armor',    def: 7,  icon: '🛡️', slot: 'armor', tier: 3, price: 300, hp: 10 },
-    magerobe:    { id: 'magerobe',    name: 'Mage Robe',      def: 4,  icon: '👘', slot: 'armor', tier: 3, price: 330, mp: 20, spell: 0.25 },
-    spiked:      { id: 'spiked',      name: 'Spiked Mail',    def: 8,  icon: '🦔', slot: 'armor', tier: 4, price: 490, thorns: 0.30 },
-    shadowcloak: { id: 'shadowcloak', name: 'Shadow Cloak',   def: 6,  icon: '🥷', slot: 'armor', tier: 4, price: 540, dodge: 0.20 },
-    dragonscale: { id: 'dragonscale', name: 'Dragonscale',    def: 11, icon: '🐉', slot: 'armor', tier: 5, price: 900, hp: 25, resist: 0.15 },
-    aegis:       { id: 'aegis',       name: 'Aegis Plate',    def: 12, icon: '🛡️', slot: 'armor', tier: 5, price: 960, hp: 25 },
-    titanplate:  { id: 'titanplate',  name: 'Titan Plate',    def: 16, icon: '🏰', slot: 'armor', tier: 6, price: 2400, hp: 50, thorns: 0.2 }
-  };
-  var TRINKETS = {
-    none:      { id: 'none',      name: '— none —',        icon: '·',  slot: 'trinket', tier: 0 },
-    ringreg:   { id: 'ringreg',   name: 'Ring of Regen',   icon: '💍', slot: 'trinket', tier: 2, price: 150, regen: 1 },
-    ampmana:   { id: 'ampmana',   name: 'Mana Amulet',     icon: '📿', slot: 'trinket', tier: 2, price: 150, mp: 20 },
-    bandpow:   { id: 'bandpow',   name: 'Power Band',       icon: '⭕', slot: 'trinket', tier: 3, price: 240, atk: 3 },
-    wardchm:   { id: 'wardchm',   name: 'Warding Charm',    icon: '🔱', slot: 'trinket', tier: 3, price: 240, def: 3 },
-    greed:     { id: 'greed',     name: 'Greed Coin',       icon: '🪙', slot: 'trinket', tier: 3, price: 300, greed: 0.5 },
-    swiftboots:{ id: 'swiftboots',name: 'Swift Boots',      icon: '👢', slot: 'trinket', tier: 4, price: 450, dodge: 0.12 },
-    vampring:  { id: 'vampring',  name: 'Vampire Ring',     icon: '🧛', slot: 'trinket', tier: 4, price: 520, lifesteal: 0.15 },
-    archring:  { id: 'archring',  name: 'Archmage Ring',    icon: '💠', slot: 'trinket', tier: 4, price: 620, spell: 0.35, mp: 15 },
-    berserker: { id: 'berserker', name: 'Berserker Idol',   icon: '😤', slot: 'trinket', tier: 4, price: 660, atk: 6, def: -2 },
-    phoenix:   { id: 'phoenix',   name: 'Phoenix Feather',  icon: '🪶', slot: 'trinket', tier: 5, price: 900, hp: 20, regen: 2 },
-    kingscrown:{ id: 'kingscrown',name: "King's Signet",    icon: '💍', slot: 'trinket', tier: 6, price: 3000, atk: 5, def: 5, hp: 30, greed: 0.5 },
-    lucky:     { id: 'lucky',     name: 'Lucky Clover',     icon: '🍀', slot: 'trinket', tier: 4, crit: 0.08, greed: 0.3 } // easter-egg only (no price)
-  };
-  function gear(id) { return WEAPONS[id] || ARMORS[id] || TRINKETS[id] || null; }
-
-  // consumables — kept as { id, qty } stacks in hero.bag
-  var CONS = {
-    potion:   { id: 'potion',   name: 'Health Potion',   icon: '🧪', price: 25, desc: 'Restore 45 HP' },
-    hpotion:  { id: 'hpotion',  name: 'Greater Potion',  icon: '🍷', price: 70, desc: 'Restore 110 HP' },
-    elixir:   { id: 'elixir',   name: 'Mana Elixir',     icon: '⚗️', price: 25, desc: 'Restore 30 MP' },
-    eelixir:  { id: 'eelixir',  name: 'Greater Elixir',  icon: '🧉', price: 70, desc: 'Restore 70 MP' },
-    bomb:     { id: 'bomb',     name: 'Bomb',            icon: '💣', price: 40, desc: 'Blast 1-tile radius (dmg + cracks walls)' },
-    scroll:   { id: 'scroll',   name: 'Blink Scroll',    icon: '📜', price: 35, desc: 'Teleport to a random explored tile' },
-    antidote: { id: 'antidote', name: 'Antidote',        icon: '🧴', price: 30, desc: 'Cure poison & burn' },
-    key:      { id: 'key',      name: 'Skeleton Key',    icon: '🗝️', price: 60, desc: 'Opens one locked door' },
-    lure:     { id: 'lure',     name: 'Beast Lure',      icon: '🍖', price: 70, desc: 'Calms a wild beast — far easier to tame' }
-  };
-
-  // ---- crafting materials (gathered in the wild, dropped by foes) -----------
-  var MATS = {
-    herb:    { name: 'Herb',      icon: '🌿' },
-    ember:   { name: 'Emberdust', icon: '🔥' },
-    brine:   { name: 'Brine Salt', icon: '🧂' },
-    crystal: { name: 'Crystal',   icon: '🔮' },
-    ore:     { name: 'Iron Ore',  icon: '⛏️' },
-    essence: { name: 'Essence',   icon: '✨' }
-  };
-  var MAT_ORDER = ['herb', 'ember', 'brine', 'crystal', 'ore', 'essence'];
-  // Alchemy: turn materials into consumables (some you can't simply buy).
-  var RECIPES = [
-    { out: 'potion',   mats: { herb: 1 } },
-    { out: 'hpotion',  mats: { herb: 2, crystal: 1 } },
-    { out: 'elixir',   mats: { crystal: 1 } },
-    { out: 'eelixir',  mats: { crystal: 2, essence: 1 } },
-    { out: 'antidote', mats: { herb: 1, brine: 1 } },
-    { out: 'bomb',     mats: { ember: 1, ore: 1 } },
-    { out: 'lure',     mats: { herb: 1, essence: 1 } },
-    { out: 'key',      mats: { ore: 2 } }
-  ];
-
-  // Cosmetics — pure visual flair for your adventurer, bought at the Tailor.
-  var COSMETIC = {
-    color: {
-      cyan:    { name: 'Azure',   body: '#5ec8e6', line: '#10333f', price: 0 },
-      gold:    { name: 'Gilded',  body: '#e6c24a', line: '#4a3a10', price: 250 },
-      crimson: { name: 'Crimson', body: '#e05d5d', line: '#3a1010', price: 250 },
-      violet:  { name: 'Violet',  body: '#b07fe0', line: '#2a1040', price: 250 },
-      emerald: { name: 'Emerald', body: '#5fd08a', line: '#103a22', price: 250 },
-      rose:    { name: 'Rose',    body: '#e88ab8', line: '#401028', price: 350 },
-      slate:   { name: 'Slate',   body: '#9aa6b4', line: '#1a2230', price: 350 },
-      ember:   { name: 'Ember',   body: '#ff8a4a', line: '#401a08', price: 500 },
-      void:    { name: 'Void',    body: '#6a5ad0', line: '#140a30', price: 800 }
-    },
-    hat: {
-      none:   { name: '(no hat)',  price: 0 },
-      wizard: { name: 'Wizard Hat', price: 300 },
-      horns:  { name: 'Horns',     price: 350 },
-      top:    { name: 'Top Hat',   price: 450 },
-      halo:   { name: 'Halo',      price: 600 },
-      crown:  { name: 'Crown',     price: 1200 }
-    },
-    cape: {
-      none:   { name: '(no cape)',  price: 0 },
-      red:    { name: 'Red Cape',   color: '#c0392b', price: 250 },
-      blue:   { name: 'Blue Cape',  color: '#2e6da4', price: 250 },
-      gold:   { name: 'Gold Cape',  color: '#d4a017', price: 400 },
-      emerald:{ name: 'Emerald Cape', color: '#2f9e6a', price: 400 },
-      shadow: { name: 'Shadow Cape',color: '#2a2440', price: 550 },
-      royal:  { name: 'Royal Cape', color: '#6a3fb0', price: 700 }
-    },
-    eyes: {
-      default: { name: 'Eyes',    price: 0 },
-      cute:    { name: 'Cute',    price: 150 },
-      angry:   { name: 'Fierce',  price: 150 },
-      sleepy:  { name: 'Sleepy',  price: 150 },
-      glow:    { name: 'Glowing', price: 400 },
-      visor:   { name: 'Visor',   price: 500 }
-    },
-    pattern: {
-      none:  { name: '(plain)',  price: 0 },
-      belly: { name: 'Belly',    price: 150 },
-      spots: { name: 'Spots',    price: 200 },
-      stripe:{ name: 'Stripes',  price: 200 },
-      rune:  { name: 'Runes',    price: 450 }
-    },
-    belt: {
-      none:  { name: '(no belt)', price: 0 },
-      brown: { name: 'Belt',      color: '#6b4a2a', price: 120 },
-      gold:  { name: 'Gold Belt', color: '#d4a017', price: 280 },
-      sash:  { name: 'Red Sash',  color: '#b03030', price: 280 }
-    },
-    pet: {
-      none:  { name: '(no pet)',   price: 0 },
-      cat:   { name: 'Cat',        price: 400, col: '#d0a060' },
-      pup:   { name: 'Pup',        price: 400, col: '#b8956a' },
-      slime: { name: 'Slimeling',  price: 500, col: '#6fd09a' },
-      wisp:  { name: 'Wisp',       price: 700, col: '#bfe0ff' },
-      drake: { name: 'Drakeling',  price: 1200, col: '#7fae5b' }
-    }
-  };
-  var COS_SLOTS = ['color', 'eyes', 'pattern', 'belt', 'hat', 'cape', 'pet'];
-  function cosKey(slot, id) { return slot + ':' + id; }
-
-  // =========================================================================
-  //  ITEM INSTANCES — base type + rarity + rolled affixes (multi-dimensional)
-  // =========================================================================
-  // Every dropped/bought piece is a unique instance with its own rolled stats,
-  // so variety is effectively endless. The curated bases above supply the
-  // "interesting" innate effects; affixes layer extra dimensions on top.
-  var STAT_FIELDS = ['atk', 'def', 'hp', 'mp', 'crit', 'lifesteal', 'cleave', 'chain', 'spell', 'stun', 'freeze', 'poison', 'burn', 'dodge', 'thorns', 'resist', 'regen', 'greed'];
-  var RARITY = {
-    common:    { name: 'Common',    color: '#c8cdd6', n: 0 },
-    magic:     { name: 'Magic',     color: '#6fb6ff', n: 1 },
-    rare:      { name: 'Rare',      color: '#ffd24a', n: 2 },
-    epic:      { name: 'Epic',      color: '#c77dff', n: 3 },
-    legendary: { name: 'Legendary', color: '#ff8a3d', n: 0 }
-  };
-  var AFFIX_PRE = [
-    { id: 'sharp',   name: 'Sharp',    field: 'atk',       flat: [1, 3] },
-    { id: 'cruel',   name: 'Cruel',    field: 'atk',       flat: [3, 7] },
-    { id: 'vicious', name: 'Vicious',  field: 'crit',      pct: [0.04, 0.10] },
-    { id: 'vamp',    name: 'Vampiric', field: 'lifesteal', pct: [0.05, 0.12] },
-    { id: 'arcane',  name: 'Arcane',   field: 'spell',     pct: [0.08, 0.20] },
-    { id: 'flaming', name: 'Flaming',  field: 'burn',      pct: [0.20, 0.45] },
-    { id: 'toxic',   name: 'Venomous', field: 'poison',    pct: [0.20, 0.45] },
-    { id: 'glacial', name: 'Glacial',  field: 'freeze',    pct: [0.15, 0.30] },
-    { id: 'brutal',  name: 'Brutal',   field: 'stun',      pct: [0.12, 0.28] }
-  ];
-  var AFFIX_SUF = [
-    { id: 'bear',   name: 'of the Bear',   field: 'hp',     flat: [8, 20] },
-    { id: 'owl',    name: 'of the Owl',    field: 'mp',     flat: [8, 20] },
-    { id: 'turtle', name: 'of the Turtle', field: 'def',    flat: [1, 4] },
-    { id: 'cat',    name: 'of the Cat',    field: 'dodge',  pct: [0.04, 0.10] },
-    { id: 'troll',  name: 'of the Troll',  field: 'regen',  flat: [1, 2] },
-    { id: 'magpie', name: 'of Greed',      field: 'greed',  pct: [0.10, 0.30] },
-    { id: 'golem',  name: 'of Warding',    field: 'resist', pct: [0.05, 0.12] },
-    { id: 'giant',  name: 'of the Giant',  field: 'atk',    flat: [2, 5] }
-  ];
-  var LEGENDARY = {
-    gravewhisper:  { base: 'runeblade',  name: 'Gravewhisper, the Last Lament', lore: 'It remembers every life it has taken.', stats: { atk: 16, crit: 0.20, lifesteal: 0.25 } },
-    sunderbrand:   { base: 'battleaxe',  name: 'Sunderbrand',                   lore: 'No shield has ever turned it.',         stats: { atk: 20, cleave: 0.6, stun: 0.25 } },
-    stormcaller:   { base: 'thundermaul',name: 'Stormcaller',                   lore: 'The sky answers when it swings.',       stats: { atk: 17, chain: 0.8, stun: 0.30 } },
-    emberheart:    { base: 'archstaff',  name: 'Emberheart',                    lore: 'A caged sun, furious to be free.',      stats: { atk: 10, spell: 0.70, burn: 0.6, mp: 30 } },
-    lastdawn:      { base: 'aegis',      name: 'Aegis of the Last Dawn',        lore: 'It outlasted the kingdom that forged it.', stats: { def: 16, hp: 40, resist: 0.20 } },
-    whisperstep:   { base: 'shadowcloak',name: 'Whisperstep',                   lore: 'You will not hear them coming.',        stats: { def: 8, dodge: 0.30, crit: 0.10 } },
-    mountainheart: { base: 'kingscrown', name: 'Heart of the Mountain',         lore: 'Patient. Immovable. Eternal.',          stats: { hp: 40, def: 8, thorns: 0.30 } },
-    covetous:      { base: 'greed',      name: 'The Covetous Eye',              lore: 'It wants. It always wants more.',       stats: { greed: 0.80, crit: 0.12, lifesteal: 0.12, def: -3 } }
-  };
-
-  var _uidc = 0;
-  function uid() { return 'i' + Date.now().toString(36) + (_uidc++).toString(36); }
-  function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = ri(i + 1), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
-  // seeded PRNG (mulberry32) — used to generate a STABLE overworld per character
-  function mulberry32(a) { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-  function rarityOf(it) { return RARITY[it && it.rarity] || RARITY.common; }
-  function makeBaseInstance(baseId, rarity, ilvl) {
-    var b = gear(baseId); if (!b) return null;
-    var inst = { uid: uid(), base: baseId, slot: b.slot, icon: b.icon, tier: b.tier, rarity: rarity || 'common', ilvl: ilvl || 1, stats: {} };
-    for (var i = 0; i < STAT_FIELDS.length; i++) { var f = STAT_FIELDS[i]; if (b[f]) inst.stats[f] = b[f]; }
-    inst.name = instanceName(inst);
-    return inst;
-  }
-  function rollAffix(a, ilvl) {
-    if (a.flat) return { field: a.field, name: a.name, val: rr(a.flat[0], a.flat[1]) + Math.floor((ilvl || 1) / 4) };
-    var v = a.pct[0] + Math.random() * (a.pct[1] - a.pct[0]);
-    return { field: a.field, name: a.name, val: Math.round(v * 100) / 100 };
-  }
-  function applyAffixes(inst, n, ilvl) {
-    inst.affixes = [];
-    var pres = shuffle(AFFIX_PRE.slice()), sufs = shuffle(AFFIX_SUF.slice()), pi = 0, si = 0;
-    for (var k = 0; k < n; k++) {
-      var usePre = (k % 2 === 0), a = usePre ? pres[pi++] : sufs[si++];
-      if (!a) { a = pres[pi++] || sufs[si++]; usePre = true; }
-      if (!a) break;
-      var r = rollAffix(a, ilvl);
-      inst.stats[r.field] = Math.round(((inst.stats[r.field] || 0) + r.val) * 100) / 100;
-      inst.affixes.push(r);
-      if (usePre && !inst.pre) inst.pre = a.name; else if (!usePre && !inst.suf) inst.suf = a.name;
-    }
-  }
-  function instanceName(inst) {
-    if (inst.legend) return inst.name;
-    var bn = (gear(inst.base) || {}).name || 'Relic';
-    if (inst.rarity === 'common') return bn;
-    return (inst.pre ? inst.pre + ' ' : '') + bn + (inst.suf ? ' ' + inst.suf : '');
-  }
-  function makeLegendary(legId, ilvl) {
-    var L = LEGENDARY[legId]; if (!L) return null;
-    var b = gear(L.base) || {};
-    var inst = { uid: uid(), base: L.base, slot: b.slot, icon: b.icon, tier: 6, rarity: 'legendary', ilvl: ilvl || 10, legend: legId, name: L.name, lore: L.lore, stats: {} };
-    for (var f in L.stats) inst.stats[f] = L.stats[f];
-    return inst;
-  }
-  function rollRarity(luck, ilvl) {
-    luck = luck || 0;
-    var r = Math.random() * 100;
-    // Legendaries are EARNED: only "lucky" sources (bosses, vault chests pass
-    // luck >= 1) can roll them, and only once you're deep enough. Even then the
-    // odds are slim, so a legendary is a genuine event.
-    var leg = (luck >= 1 && (ilvl || 1) >= 7) ? (0.4 + luck * 0.35) : 0;
-    var epic = 2 + luck * 1.3, rare = 12, magic = 30;
-    if (r < leg) return 'legendary';
-    if (r < leg + epic) return 'epic';
-    if (r < leg + epic + rare) return 'rare';
-    if (r < leg + epic + rare + magic) return 'magic';
-    return 'common';
-  }
-  function baseForSlot(slot, ilvl) {
-    var tbl = slot === 'weapon' ? WEAPONS : slot === 'armor' ? ARMORS : TRINKETS;
-    var maxTier = 1 + Math.ceil(ilvl / 2), pool = [];
-    for (var id in tbl) { var g = tbl[id]; if (g.tier > 0 && g.price && g.tier <= maxTier) pool.push(id); }
-    return pool.length ? pick(pool) : (slot === 'weapon' ? 'dagger' : slot === 'armor' ? 'leather' : 'ringreg');
-  }
-  function generateItem(slot, ilvl, luck) {
-    slot = slot || pick(['weapon', 'armor', 'trinket']);
-    var rarity = rollRarity(luck, ilvl);
-    if (rarity === 'legendary') {
-      var legs = []; for (var k in LEGENDARY) if ((gear(LEGENDARY[k].base) || {}).slot === slot) legs.push(k);
-      if (legs.length) return makeLegendary(pick(legs), ilvl);
-      rarity = 'epic';
-    }
-    var inst = makeBaseInstance(baseForSlot(slot, ilvl), rarity, ilvl);
-    applyAffixes(inst, RARITY[rarity].n, ilvl);
-    inst.name = instanceName(inst);
-    return inst;
-  }
-  // per-town wares: which slots/affixes a themed merchant favours, plus the
-  // consumables it stocks. (Greenhollow has an Alchemist instead of a merchant.)
-  var WARE_THEME = {
-    ember:  { slots: ['weapon', 'weapon', 'trinket'], stat: ['burn', 'atk', 'crit'], cons: ['bomb', 'hpotion', 'potion', 'scroll'], luck: 0 },
-    desert: { slots: ['trinket', 'trinket', 'weapon'], stat: ['greed', 'crit', 'spell'], cons: ['lure', 'scroll', 'antidote', 'potion'], luck: 0.6 },
-    coast:  { slots: ['armor', 'armor', 'trinket'], stat: ['resist', 'dodge', 'freeze'], cons: ['antidote', 'eelixir', 'elixir', 'potion'], luck: 0 },
-    wood:   { slots: ['trinket', 'armor', 'weapon'], stat: ['poison', 'regen', 'lifesteal'], cons: ['antidote', 'potion', 'elixir', 'lure'], luck: 0 }
-  };
-  // generate an item biased toward a theme's signature affixes
-  function generateThemed(slot, ilvl, wantStats, luck) {
-    if (!wantStats || !wantStats.length) return generateItem(slot, ilvl, luck);
-    for (var t = 0; t < 6; t++) {
-      var it = generateItem(slot, ilvl, luck);
-      for (var w = 0; w < wantStats.length; w++) if (it.stats[wantStats[w]]) return it;
-    }
-    return generateItem(slot, ilvl, luck);
-  }
-  // Heal an item instance that arrived malformed (e.g. synced from an older
-  // build): ensure it has the fields the UI/combat read, derived from its base.
-  function repairItem(it) {
-    if (!it) return it;
-    var b = gear(it.base) || {};
-    if (it.slot == null) it.slot = b.slot;
-    if (it.icon == null) it.icon = b.icon;
-    if (it.tier == null) it.tier = b.tier || 1;
-    if (it.rarity == null || !RARITY[it.rarity]) it.rarity = 'common';
-    if (it.ilvl == null) it.ilvl = Math.max(1, (b.tier || 1) * 2);
-    if (!it.stats || typeof it.stats !== 'object') { it.stats = {}; for (var i = 0; i < STAT_FIELDS.length; i++) { var f = STAT_FIELDS[i]; if (b[f]) it.stats[f] = b[f]; } }
-    if (it.name == null) it.name = instanceName(it);
-    return it;
-  }
-  function itemScore(it) {
-    if (!it) return -1; var s = it.stats || {};
-    return (s.atk || 0) * 3 + (s.def || 0) * 3 + (s.hp || 0) * 0.4 + (s.mp || 0) * 0.3 + (s.crit || 0) * 40 +
-      (s.lifesteal || 0) * 40 + (s.spell || 0) * 25 + (s.dodge || 0) * 45 + (s.resist || 0) * 35 + (s.thorns || 0) * 20 +
-      (s.regen || 0) * 5 + (s.greed || 0) * 8 + (s.cleave || 0) * 12 + (s.chain || 0) * 12 + (it.rarity === 'legendary' ? 25 : 0);
-  }
-  function itemPrice(it) {
-    var b = gear(it.base) || {}, mult = { common: 1, magic: 1.9, rare: 3.2, epic: 5.5, legendary: 12 }[it.rarity] || 1;
-    return Math.max(8, Math.round((b.price || 25) * mult + (it.ilvl || 1) * 4));
-  }
-  function itemSell(it) { return Math.max(1, Math.floor(itemPrice(it) * 0.4)); }
-  // ---- crafting: materials, reforge, salvage --------------------------------
-  var REGION_MAT = { catacombs: 'ore', wood: 'herb', caves: 'crystal', desert: 'ore', ember: 'ember', coast: 'brine', abyss: 'crystal' };
-  function regionMat(depth) { return REGION_MAT[regionAt(depth).key] || 'ore'; }
-  function addMat(id, n) { if (!MATS[id]) return; hero.mats = hero.mats || {}; hero.mats[id] = (hero.mats[id] || 0) + (n || 1); }
-  function hasMats(cost) { if (!cost) return true; var m = hero.mats || {}; for (var k in cost) if ((m[k] || 0) < cost[k]) return false; return true; }
-  function spendMats(cost) { hero.mats = hero.mats || {}; for (var k in cost) hero.mats[k] = (hero.mats[k] || 0) - cost[k]; }
-  function matStr(cost) { var out = []; for (var k in cost) out.push((MATS[k] ? MATS[k].icon : k) + cost[k]); return out.join(' '); }
-  // reroll an item's affixes in place, keeping its base / rarity / ilvl / uid
-  function reforgeItem(it) {
-    if (!it || it.legend || it.rarity === 'common') return null;
-    var fresh = makeBaseInstance(it.base, it.rarity, it.ilvl);
-    applyAffixes(fresh, RARITY[it.rarity].n, it.ilvl);
-    fresh.uid = it.uid; fresh.name = instanceName(fresh);
-    var ix = hero.owned.indexOf(it); if (ix >= 0) hero.owned[ix] = fresh;
-    return fresh;
-  }
-  function reforgeCost(it) {
-    var n = RARITY[it.rarity].n;
-    var cost = { crystal: 1 + n };
-    if (n >= 2) cost.essence = n - 1;
-    return { gold: 40 + (it.ilvl || 1) * 6 + n * 40, mats: cost };
-  }
-  function salvageYield(it) {
-    var n = RARITY[it.rarity].n, tier = it.tier || 1, y = { ore: 1 + Math.floor(tier / 2) + n };
-    if (n >= 2) y.essence = 1; if (n >= 3 || it.legend) y.essence = (y.essence || 0) + 1;
-    return y;
-  }
-  function itemByUid(u) { if (!u || !hero.owned) return null; for (var i = 0; i < hero.owned.length; i++) if (hero.owned[i].uid === u) return hero.owned[i]; return null; }
-  function equippedItem(slot) { return itemByUid(hero.equip[slot]); }
-  function instanceStatStr(it) {
-    var s = (it && it.stats) || {}, out = [];
-    function add(f, label, pct) { if (s[f]) out.push((s[f] > 0 && f !== 'def' && f !== 'atk' ? '+' : (s[f] > 0 ? '+' : '')) + (pct ? Math.round(s[f] * 100) + '%' : s[f]) + ' ' + label); }
-    add('atk', 'atk'); add('def', 'def'); add('hp', 'hp'); add('mp', 'mp');
-    add('crit', 'crit', 1); add('lifesteal', 'lifesteal', 1); add('spell', 'spell', 1);
-    if (s.cleave) out.push('cleave'); if (s.chain) out.push('chain');
-    if (s.stun) out.push('stun ' + Math.round(s.stun * 100) + '%'); if (s.freeze) out.push('freeze ' + Math.round(s.freeze * 100) + '%');
-    if (s.poison) out.push('poison'); if (s.burn) out.push('burn');
-    add('dodge', 'dodge', 1); if (s.thorns) out.push('thorns ' + Math.round(s.thorns * 100) + '%'); add('resist', 'resist', 1);
-    if (s.regen) out.push('regen ' + s.regen); add('greed', 'gold', 1);
-    return out.join(' · ');
-  }
-  function rarityTag(it) { var c = rarityOf(it); return '<span style="color:' + c.color + '">' + (it.rarity === 'common' ? '' : c.name + ' ') + '</span>'; }
-
-  // Spells — cost MP, have cooldowns. learn:'auto' is taught on reaching its
-  // level; learn:'tome' is bought from a town's spell-teacher, who only deals
-  // in that town's SCHOOL. You can DOCK up to DOCK_MAX onto the action bar.
-  var DOCK_MAX = 4;
-  var SCHOOLS = {
-    arcane: { name: 'Arcane',  teacher: 'Arcanist',   icon: '🔮', col: '#c79bff', cos: { color: 'violet', eyes: 'glow', hat: 'wizard' } },
-    fire:   { name: 'Pyromancy', teacher: 'Pyromancer', icon: '🔥', col: '#ff8a4a', cos: { color: 'ember', eyes: 'glow', hat: 'wizard', cape: 'red' } },
-    frost:  { name: 'Hydromancy', teacher: 'Tidecaller', icon: '❄️', col: '#5fd0e0', cos: { color: 'cyan', eyes: 'glow', hat: 'wizard', cape: 'blue' } },
-    nature: { name: 'Druidry',  teacher: 'Druid',      icon: '🌿', col: '#8fd06f', cos: { color: 'emerald', eyes: 'glow', hat: 'wizard', cape: 'emerald' } },
-    mystic: { name: 'Sandlore', teacher: 'Sandseer',   icon: '🌙', col: '#e0c060', cos: { color: 'gold', eyes: 'glow', hat: 'wizard', cape: 'gold' } }
-  };
-  var ABIL = {
-    // ---- universal basics (auto-learned on level) ----
-    strike: { id: 'strike', name: 'Power Strike', icon: '💥', lvl: 1, mp: 4,  cd: 1, kind: 'melee', learn: 'auto', school: 'arcane', desc: 'Heavy adjacent hit (×2.2 ATK), may stun.' },
-    bolt:   { id: 'bolt',   name: 'Firebolt',     icon: '🔥', lvl: 3, mp: 6,  cd: 2, kind: 'ray',   range: 6, mult: 1.5, burn: true, learn: 'auto', school: 'fire', desc: 'Bolt along your facing; burns the first foe hit.' },
-    mend:   { id: 'mend',   name: 'Mend',         icon: '✨', lvl: 4, mp: 8,  cd: 4, kind: 'self',  heal: 0.35, learn: 'auto', school: 'nature', desc: 'Heal 35% of max HP.' },
-    blink:  { id: 'blink',  name: 'Blink',        icon: '🌀', lvl: 6, mp: 5,  cd: 3, kind: 'move',  range: 4, learn: 'auto', school: 'arcane', desc: 'Dash up to 4 tiles ahead, slipping past danger.' },
-    quake:  { id: 'quake',  name: 'Quake',        icon: '🌋', lvl: 8, mp: 12, cd: 5, kind: 'aoe',   range: 2, mult: 1.2, stun: true, learn: 'auto', school: 'arcane', desc: 'Damage + stun every foe around you.' },
-
-    // ---- FIRE — Pyromancer (Cinderforge) ----
-    fireball: { id: 'fireball', name: 'Fireball', icon: '🔴', lvl: 5, mp: 9,  cd: 3, kind: 'aoe', range: 1, mult: 1.7, burn: true, learn: 'tome', school: 'fire', price: 260, desc: 'Burst of flame around you; sets foes alight.' },
-    flamewave:{ id: 'flamewave', name: 'Flame Wave', icon: '🌊', lvl: 6, mp: 10, cd: 3, kind: 'wave', range: 4, mult: 1.4, burn: true, learn: 'tome', school: 'fire', price: 380, desc: 'A sweeping wall of fire surges ahead, burning all it touches.' },
-    scorch:   { id: 'scorch', name: 'Scorch',     icon: '☀️', lvl: 7, mp: 9,  cd: 2, kind: 'ray', range: 6, mult: 2.2, burn: true, learn: 'tome', school: 'fire', price: 440, desc: 'A searing lance — huge single-target fire damage.' },
-    meteor:   { id: 'meteor', name: 'Meteor',     icon: '☄️', lvl: 9, mp: 16, cd: 6, kind: 'aoe', range: 2, big: true, mult: 2.2, burn: true, learn: 'tome', school: 'fire', price: 760, desc: 'A massive blast + burn around you.' },
-    inferno:  { id: 'inferno', name: 'Inferno',   icon: '🔥', lvl: 12, mp: 20, cd: 7, kind: 'aoe', range: 3, mult: 2.0, burn: true, learn: 'tome', school: 'fire', price: 1100, desc: 'Engulf a wide ring in roaring flame.' },
-
-    // ---- FROST — Tidecaller (Saltmere) ----
-    frost:    { id: 'frost', name: 'Frost Lance', icon: '❄️', lvl: 3, mp: 7,  cd: 2, kind: 'ray', range: 6, mult: 1.5, freeze: true, learn: 'tome', school: 'frost', price: 220, desc: 'Pierces your facing; freezes the foe hit.' },
-    icearmor: { id: 'icearmor', name: 'Ice Armor', icon: '🧊', lvl: 5, mp: 6, cd: 6, kind: 'buff', buff: 'ward', turns: 6, learn: 'tome', school: 'frost', price: 300, desc: 'A rime of ice cuts incoming damage by 40% for 6 turns.' },
-    blizzard: { id: 'blizzard', name: 'Blizzard', icon: '🌨️', lvl: 7, mp: 12, cd: 4, kind: 'aoe', range: 2, mult: 1.2, freeze: true, learn: 'tome', school: 'frost', price: 460, desc: 'Freezing storm — damages & freezes everything near.' },
-    tide:     { id: 'tide', name: 'Riptide',      icon: '🌊', lvl: 8, mp: 12, cd: 4, kind: 'wave', range: 5, mult: 1.3, freeze: true, learn: 'tome', school: 'frost', price: 560, desc: 'A long crashing wave that freezes the foes it sweeps.' },
-    absolute: { id: 'absolute', name: 'Absolute Zero', icon: '💠', lvl: 12, mp: 20, cd: 7, kind: 'aoe', range: 3, mult: 1.7, freeze: true, learn: 'tome', school: 'frost', price: 1100, desc: 'Flash-freeze a wide ring solid.' },
-
-    // ---- NATURE — Druid (Greenhollow) ----
-    regrowth: { id: 'regrowth', name: 'Regrowth', icon: '🍃', lvl: 4, mp: 7, cd: 6, kind: 'buff', buff: 'regen', turns: 8, learn: 'tome', school: 'nature', price: 240, desc: 'Heal a little each turn for 8 turns.' },
-    thornskin:{ id: 'thornskin', name: 'Thornskin', icon: '🌵', lvl: 5, mp: 6, cd: 6, kind: 'buff', buff: 'thorns', turns: 6, learn: 'tome', school: 'nature', price: 300, desc: 'Attackers take damage back for 6 turns.' },
-    entangle: { id: 'entangle', name: 'Entangle', icon: '🌱', lvl: 5, mp: 6, cd: 3, kind: 'ray', range: 6, mult: 1.0, stun: true, learn: 'tome', school: 'nature', price: 280, desc: 'Vines snare the first foe ahead, rooting it.' },
-    venom:    { id: 'venom', name: 'Venom Nova',  icon: '☠️', lvl: 6, mp: 10, cd: 4, kind: 'aoe', range: 2, mult: 0.9, poison: true, learn: 'tome', school: 'nature', price: 400, desc: 'Poison every foe around you.' },
-    wildgrow: { id: 'wildgrow', name: 'Wild Growth', icon: '🌳', lvl: 8, mp: 12, cd: 6, kind: 'self', heal: 0.55, cure: true, learn: 'tome', school: 'nature', price: 520, desc: 'Heal 55% of max HP and cure poison & burn.' },
-    swarm:    { id: 'swarm', name: 'Locust Swarm', icon: '🦗', lvl: 9, mp: 12, cd: 4, kind: 'aoe', range: 2, mult: 1.2, poison: true, learn: 'tome', school: 'nature', price: 600, desc: 'A devouring swarm poisons all around you.' },
-
-    // ---- ARCANE — Arcanist (Hearthhold) ----
-    shield:   { id: 'shield', name: 'Aegis',      icon: '🛡️', lvl: 4, mp: 6, cd: 6, kind: 'buff', buff: 'shield', turns: 6, learn: 'tome', school: 'arcane', price: 260, desc: 'Halve incoming damage for 6 turns.' },
-    arcbolt:  { id: 'arcbolt', name: 'Arcane Bolt', icon: '🔷', lvl: 5, mp: 7, cd: 2, kind: 'ray', range: 6, mult: 1.9, learn: 'tome', school: 'arcane', price: 300, desc: 'Pure arcane force — heavy, statusless damage.' },
-    warcry:   { id: 'warcry', name: 'War Cry',    icon: '📣', lvl: 5, mp: 6, cd: 6, kind: 'buff', buff: 'power', turns: 6, learn: 'tome', school: 'arcane', price: 300, desc: 'Greatly raise ATK for 6 turns.' },
-    farstep:  { id: 'farstep', name: 'Translocate', icon: '🌀', lvl: 6, mp: 7, cd: 4, kind: 'move', range: 7, learn: 'tome', school: 'arcane', price: 340, desc: 'Blink a long 7 tiles ahead.' },
-    chain:    { id: 'chain', name: 'Chain Lightning', icon: '⚡', lvl: 7, mp: 10, cd: 3, kind: 'chainspell', range: 6, learn: 'tome', school: 'arcane', price: 460, desc: 'Strikes a foe, then arcs to others nearby.' },
-    singular: { id: 'singular', name: 'Singularity', icon: '🌑', lvl: 12, mp: 20, cd: 7, kind: 'aoe', range: 2, mult: 2.0, stun: true, learn: 'tome', school: 'arcane', price: 1100, desc: 'Collapse space around you — heavy damage + stun.' },
-
-    // ---- MYSTIC — Sandseer (Dustmarket) ----
-    drain:    { id: 'drain', name: 'Life Drain', icon: '🩸', lvl: 5, mp: 7, cd: 2, kind: 'ray', range: 5, mult: 1.5, drain: true, learn: 'tome', school: 'mystic', price: 320, desc: 'Ray that heals you for the damage dealt.' },
-    curse:    { id: 'curse', name: 'Curse',      icon: '👁️', lvl: 5, mp: 6, cd: 3, kind: 'ray', range: 6, mult: 1.2, weaken: true, learn: 'tome', school: 'mystic', price: 300, desc: 'Hex the first foe ahead, sapping its strength.' },
-    hex:      { id: 'hex', name: 'Withering Hex', icon: '🟣', lvl: 6, mp: 8, cd: 3, kind: 'ray', range: 6, mult: 1.4, poison: true, learn: 'tome', school: 'mystic', price: 380, desc: 'A rotting bolt that poisons what it strikes.' },
-    sandstorm:{ id: 'sandstorm', name: 'Sandstorm', icon: '🟤', lvl: 7, mp: 11, cd: 4, kind: 'aoe', range: 2, mult: 1.0, stun: true, learn: 'tome', school: 'mystic', price: 460, desc: 'Blinding sand stuns all around you.' },
-    soulrend: { id: 'soulrend', name: 'Soul Rend', icon: '💜', lvl: 10, mp: 14, cd: 5, kind: 'aoe', range: 2, mult: 1.5, drain: true, learn: 'tome', school: 'mystic', price: 700, desc: 'Tear life from every foe near and drink it in.' }
-  };
-  var ABIL_ORDER = ['strike', 'bolt', 'mend', 'blink', 'quake',
-    'fireball', 'flamewave', 'scorch', 'meteor', 'inferno',
-    'frost', 'icearmor', 'blizzard', 'tide', 'absolute',
-    'regrowth', 'thornskin', 'entangle', 'venom', 'wildgrow', 'swarm',
-    'shield', 'arcbolt', 'warcry', 'farstep', 'chain', 'singular',
-    'drain', 'curse', 'hex', 'sandstorm', 'soulrend'];
-  function dockedSpells() { return (hero.docked || []).filter(function (id) { return ABIL[id] && hero.spells && hero.spells.indexOf(id) >= 0; }); }
-  function knowsSpell(id) { return hero.spells && hero.spells.indexOf(id) >= 0; }
-  function learnSpell(id) {
-    if (!ABIL[id]) return false;
-    hero.spells = hero.spells || [];
-    if (hero.spells.indexOf(id) >= 0) return false;
-    hero.spells.push(id);
-    hero.docked = hero.docked || [];
-    if (hero.docked.length < DOCK_MAX) hero.docked.push(id);
-    return true;
-  }
-
-  // enemies. behavior: chase | archer | bomber | thief | summon. minD = first floor it appears.
-  var MOBS = {
-    rat:    { ch: 'r', name: 'rat',          col: '#c98b6b', hp: 5,  atk: 2,  def: 0, xp: 3,  minD: 1, behavior: 'chase' },
-    bat:    { ch: 'b', name: 'cave bat',     col: '#9a86c0', hp: 6,  atk: 2,  def: 0, xp: 4,  minD: 1, behavior: 'chase', erratic: 0.4 },
-    kobold: { ch: 'k', name: 'kobold',       col: '#d0b45a', hp: 9,  atk: 3,  def: 0, xp: 6,  minD: 1, behavior: 'chase' },
-    archer: { ch: 'a', name: 'skeleton archer', col: '#cdd3da', hp: 8, atk: 4, def: 0, xp: 9, minD: 3, behavior: 'archer', range: 5 },
-    goblin: { ch: 'g', name: 'goblin',       col: '#7fae5b', hp: 14, atk: 4,  def: 1, xp: 10, minD: 2, behavior: 'chase' },
-    slime:  { ch: 's', name: 'bloat slime',  col: '#5fc08e', hp: 12, atk: 3,  def: 0, xp: 11, minD: 3, behavior: 'bomber', boom: 8 },
-    thief:  { ch: 't', name: 'cutpurse',     col: '#d98cc0', hp: 11, atk: 3,  def: 0, xp: 12, minD: 4, behavior: 'thief' },
-    orc:    { ch: 'o', name: 'orc',          col: '#9b7fd8', hp: 22, atk: 6,  def: 2, xp: 16, minD: 5, behavior: 'chase' },
-    mage:   { ch: 'm', name: 'dark cultist', col: '#e07fb0', hp: 16, atk: 5,  def: 0, xp: 18, minD: 6, behavior: 'archer', range: 6, burn: true },
-    troll:  { ch: 'T', name: 'troll',        col: '#e85d5d', hp: 36, atk: 9,  def: 3, xp: 28, minD: 7, behavior: 'chase', regen: 2 },
-    wraith: { ch: 'w', name: 'wraith',       col: '#9fd8e0', hp: 30, atk: 8,  def: 2, xp: 30, minD: 9, behavior: 'chase', erratic: 0.2 },
-    mimic:  { ch: 'M', name: 'mimic',        col: '#caa24a', hp: 26, atk: 7,  def: 2, xp: 26, minD: 99, behavior: 'chase' }, // spawned only from trapped chests
-    // ---- region-themed foes ----
-    wolf:    { ch: 'f', name: 'dire wolf',   col: '#b8a890', hp: 12, atk: 4, def: 0, xp: 9,  minD: 6,  behavior: 'chase', erratic: 0.15 },
-    spider:  { ch: 'x', name: 'cave spider', col: '#a07fd0', hp: 10, atk: 3, def: 0, xp: 10, minD: 6,  behavior: 'chase', poison: true },
-    scorpion:{ ch: 'z', name: 'scorpion',    col: '#e0b060', hp: 16, atk: 4, def: 1, xp: 13, minD: 16, behavior: 'chase', poison: true },
-    sandshade:{ ch: 'h', name: 'sand shade', col: '#e8d28a', hp: 12, atk: 5, def: 0, xp: 15, minD: 16, behavior: 'archer', range: 5 },
-    imp:     { ch: 'i', name: 'cinder imp',  col: '#ff8a50', hp: 12, atk: 5, def: 0, xp: 14, minD: 21, behavior: 'chase', erratic: 0.1, burn: true },
-    magmite: { ch: 'q', name: 'magmite',     col: '#e85d3d', hp: 14, atk: 3, def: 1, xp: 13, minD: 21, behavior: 'bomber', boom: 12 },
-    crab:    { ch: 'c', name: 'shell crab',  col: '#5fd0c0', hp: 30, atk: 5, def: 5, xp: 18, minD: 26, behavior: 'chase' },
-    siren:   { ch: 'y', name: 'siren',       col: '#7fd0e0', hp: 18, atk: 6, def: 1, xp: 22, minD: 26, behavior: 'archer', range: 6 }
-  };
-
-  // =========================================================================
-  //  WORLD — ordered regions (a travel map of themed acts), each a 5-floor band
-  // =========================================================================
-  var REGIONS = [
-    { key: 'catacombs', name: 'The Catacombs', icon: '💀', blurb: 'Where the delve begins — bone and dust.',
-      pal: { floor: '#23201c', floor2: '#2a261f', wall: '#4a4038', wallTop: '#5a4e44', accent: '#c9a86b' },
-      mobs: ['rat', 'bat', 'kobold', 'goblin', 'archer', 'slime', 'thief'],
-      boss: { ch: 'K', name: 'The Bone King', col: '#f0e6c0', hp: 90, atk: 9, def: 3, xp: 120, behavior: 'summon', summons: 'archer' } },
-    { key: 'wood', name: 'The Whispering Wood', icon: '🌲', blurb: 'Roots that remember; eyes in the canopy.',
-      pal: { floor: '#1c241a', floor2: '#22301f', wall: '#2f4a2c', wallTop: '#3c5e38', accent: '#8fd06f' },
-      mobs: ['wolf', 'spider', 'goblin', 'bat', 'archer', 'thief'], hazard: 'bramble',
-      boss: { ch: 'Y', name: 'The Elder Treant', col: '#9fd060', hp: 170, atk: 12, def: 5, xp: 230, behavior: 'summon', summons: 'spider' } },
-    { key: 'caves', name: 'The Sunless Caves', icon: '🕯️', blurb: 'A cold dark that drinks your torchlight.',
-      pal: { floor: '#1a2226', floor2: '#1f2a30', wall: '#33474d', wallTop: '#3f5860', accent: '#5fc0d0' },
-      mobs: ['bat', 'spider', 'slime', 'troll', 'kobold', 'archer'],
-      boss: { ch: 'V', name: 'The Venom Matriarch', col: '#7fe0a0', hp: 240, atk: 15, def: 5, xp: 360, behavior: 'archer', range: 7, poison: true } },
-    { key: 'desert', name: 'The Scorched Desert', icon: '🏜️', blurb: 'Endless dunes over a buried, hungry city.',
-      pal: { floor: '#2c2614', floor2: '#332c18', wall: '#5a4a28', wallTop: '#6e5a30', accent: '#e0c060' },
-      mobs: ['scorpion', 'sandshade', 'kobold', 'orc', 'thief', 'mage'], hazard: 'quicksand',
-      boss: { ch: 'P', name: 'The Dune Pharaoh', col: '#e8d060', hp: 300, atk: 16, def: 6, xp: 480, behavior: 'archer', range: 7, poison: true } },
-    { key: 'ember', name: 'The Emberforge', icon: '🌋', blurb: 'Stone runs like water; the air is fire.',
-      pal: { floor: '#241410', floor2: '#2c1a14', wall: '#4a2a20', wallTop: '#5e3422', accent: '#e86040' },
-      mobs: ['imp', 'magmite', 'orc', 'troll', 'mage'], hazard: 'lava',
-      boss: { ch: 'M', name: 'The Magma Tyrant', col: '#ff7040', hp: 380, atk: 19, def: 7, xp: 640, behavior: 'chase', boom: 0 } },
-    { key: 'coast', name: 'The Drowned Coast', icon: '🌊', blurb: 'Tides that never recede; songs that pull you under.',
-      pal: { floor: '#122428', floor2: '#163036', wall: '#234a52', wallTop: '#2f5e66', accent: '#4fd0c0' },
-      mobs: ['crab', 'siren', 'slime', 'wraith', 'mage'], hazard: 'brine',
-      boss: { ch: 'T', name: 'The Tidemother', col: '#5fd0e0', hp: 440, atk: 21, def: 8, xp: 820, behavior: 'archer', range: 8, poison: true } },
-    { key: 'abyss', name: 'The Abyss', icon: '🌀', blurb: 'The bottom of everything. It looks back.',
-      pal: { floor: '#1c182a', floor2: '#231d33', wall: '#352c50', wallTop: '#443862', accent: '#a87fe0' },
-      mobs: ['wraith', 'mage', 'orc', 'troll', 'slime', 'archer'], hazard: 'voidfire',
-      boss: { ch: 'Ω', name: 'The Deep One', col: '#c08fe0', hp: 520, atk: 24, def: 9, xp: 1100, behavior: 'summon', summons: 'wraith' } }
-  ];
-  var REGION_SPAN = 5;
-  function regionIndexAt(depth) { return clamp(Math.floor((depth - 1) / REGION_SPAN), 0, REGIONS.length - 1); }
-  function regionAt(depth) { return REGIONS[regionIndexAt(depth)]; }
-  function regionStart(idx) { return idx * REGION_SPAN + 1; }
-  function regionEnd(idx) { return (idx + 1) * REGION_SPAN; }
-  // Each delve is its own self-contained dungeon; you unlock the next by
-  // defeating the previous region's boss (a trophy), not by raw depth.
-  function regionUnlocked(idx) { return idx === 0 || (hero && hero.trophies && hero.trophies.indexOf(REGIONS[idx - 1].key) >= 0); }
-  function biomeFor(depth) {
-    if (depth <= 0) return { name: 'Hearthhold (Town)', floor: '#262a22', floor2: '#2c3027', wall: '#3a4030', wallTop: '#48503c', accent: '#8fbf6f' };
-    var r = regionAt(depth), p = r.pal;
-    return { name: r.name, floor: p.floor, floor2: p.floor2, wall: p.wall, wallTop: p.wallTop, accent: p.accent };
-  }
-  // hazard styling per region
-  var HAZARDS = {
-    bramble:  { ch: '✶', col: '#7fae5b', dmg: 3, status: 'poison', name: 'brambles' },
-    quicksand:{ ch: '∴', col: '#cbb068', dmg: 2, status: null,     name: 'quicksand' },
-    lava:     { ch: '≈', col: '#ff6a30', dmg: 9, status: 'burn',   name: 'lava' },
-    brine:    { ch: '≈', col: '#4fd0c0', dmg: 3, status: null,     name: 'brine' },
-    voidfire: { ch: '✷', col: '#b07fe0', dmg: 7, status: 'burn',   name: 'void-fire' }
-  };
-
-  // =========================================================================
-  //  THE HOUSE — a portable home you furnish; trophies from bosses live here
-  // =========================================================================
-  var HW = 11, HH = 7;             // interior size in tiles
-  var HOUSE_PAL = { name: 'Home', floor: '#2a241c', floor2: '#322a20', wall: '#4a3a2a', wallTop: '#5e4a34', accent: '#e0b060' };
-  var FURNITURE = {
-    bed:       { name: 'Bed',          icon: '🛏️', price: 300,  desc: 'Sleep to fully restore HP & MP.', effect: 'rest' },
-    stash:     { name: 'Stash Chest',  icon: '🧰', price: 400,  desc: 'Store gear beyond your pack.', effect: 'stash' },
-    planter:   { name: 'Herb Planter', icon: '🪴', price: 350,  desc: 'Grows a potion between visits home.', effect: 'garden' },
-    rug:       { name: 'Rug',          icon: '🟥', price: 80,   desc: 'Cosy underfoot.' },
-    plant:     { name: 'Potted Fern',  icon: '🌿', price: 90,   desc: 'A touch of green.' },
-    torch:     { name: 'Wall Torch',   icon: '🔥', price: 110,  desc: 'Warm light.' },
-    bookshelf: { name: 'Bookshelf',    icon: '📚', price: 220,  desc: 'Looks scholarly.' },
-    banner:    { name: 'Banner',       icon: '🚩', price: 160,  desc: 'Fly your colours.' },
-    statue:    { name: 'Statue',       icon: '🗿', price: 600,  desc: 'Imposing.' },
-    throne:    { name: 'Throne',       icon: '🪑', price: 1800, desc: 'Sit as the delver-monarch you are.' }
-  };
-  function trophyBonus() { return (hero && hero.trophies ? hero.trophies.length : 0) * 3; } // +3 max HP per boss trophy
-
-  // =========================================================================
-  //  STORY — the tale of the Deepdelve, told in chapters by the Oracle.
-  //  Chapter 0 is the prologue (always unlocked). Each region's boss-fall
-  //  unlocks the next chapter, so hero.story is the highest chapter reached.
-  //  Indexes 1..7 line up with REGIONS[0..6]; chapter 8 is the epilogue.
-  // =========================================================================
-  var STORY = [
-    { ch: 0, title: 'The Calling', icon: '✦', region: null,
-      lines: [
-        'Hearthhold clings to the lip of a wound in the world — the Deepdelve, a shaft that falls past root and stone into a dark that has no floor anyone has returned to name.',
-        'Once the Lightkeepers sealed something at the bottom and built a town on the lid. The seal is old now. It weeps monsters. The wells taste of iron and the children dream in a voice that is not theirs.',
-        'You came for gold, or glory, or because the dark called you by name. The Oracle only smiles. "Down, then," she says. "The Delve remembers everyone. Make sure it remembers you well."'
-      ] },
-    { ch: 1, title: 'The First Seal', icon: '💀', region: 'catacombs',
-      lines: [
-        'The Bone King wore a crown of keys — one for every door the Lightkeepers locked behind them. He has worn it a long time.',
-        'As he falls to dust the crown rolls to your feet, and you understand: the seals were never walls. They were wardens. Seven of them, set to keep the Deep One sleeping. One down.',
-        '"He was a friend of mine," the Oracle says when you return, turning the crown in her hands. "Before. They all were. Keep going. Some of them will thank you."'
-      ] },
-    { ch: 2, title: 'Roots of Memory', icon: '🌲', region: 'wood',
-      lines: [
-        'The Whispering Wood grew over the second warden until warden and wood were one. The Elder Treant did not fight you so much as remember fighting, again and again, a thousand springs of grief.',
-        'In its heartwood you find a seed of pure light — the last the Lightkeepers planted. It is warm. It is afraid.',
-        'The Oracle plants it in your house garden without asking. "It will grow as you do," is all she will say.'
-      ] },
-    { ch: 3, title: 'The Sunless Truth', icon: '🕯️', region: 'caves',
-      lines: [
-        'Deep in the caves the Venom Matriarch had spun the third seal into her web, feeding on the light it leaked. She had grown vast and patient and almost kind, in the way of things that have forgotten the sun.',
-        'Her last words are a map, etched in venom on the cave wall: the Delve is not a pit. It is a throat. And something at the bottom is finally, slowly, swallowing.',
-        '"I hoped that part wasn\'t true," the Oracle admits. For the first time, she looks afraid.'
-      ] },
-    { ch: 4, title: 'The Buried King', icon: '🏜️', region: 'desert',
-      lines: [
-        'Beneath the Scorched Desert lies a city that chose to be buried rather than face what rose. The Dune Pharaoh ruled its sand-choked halls, the fourth warden, mummified in his own duty.',
-        'He tests you and, finding you worthy, simply stops — relieved. The desert exhales. Somewhere far below, something notices the fourth seal go quiet.',
-        '"Four," the Oracle counts. "Halfway. The Deep One knows your name now, Delver. It has started saying it back."'
-      ] },
-    { ch: 5, title: 'Heart of Fire', icon: '🌋', region: 'ember',
-      lines: [
-        'The Emberforge is where the Lightkeepers forged the seals, and the Magma Tyrant is what one of them became after too long at the anvil — all purpose, no person, a fifth warden burning to ash and back forever.',
-        'You break the cycle. In the cooling slag you find the Lightkeepers\' last tool: a hammer that can mend a seal or shatter it. The choice, it seems, will be yours.',
-        'The seed in your garden has flowered. The Oracle weeps when she sees it, and won\'t say why.'
-      ] },
-    { ch: 6, title: 'The Drowned Song', icon: '🌊', region: 'coast',
-      lines: [
-        'The Tidemother sang the sixth seal to sleep beneath the Drowned Coast, and her song is so beautiful that men walk into the tide smiling. You stop your ears with the Oracle\'s wax and end the music.',
-        'In the sudden silence you hear it for the first time, rising from below: a single, vast, patient breath. In. Out. The Deep One is awake. It has been awake for a while.',
-        '"One seal left," the Oracle whispers. "And then a door. Bring the hammer. Bring everything. Bring yourself home, if you can."'
-      ] },
-    { ch: 7, title: 'The Bottom of Everything', icon: '🌀', region: 'abyss',
-      lines: [
-        'There is no floor at the bottom of the Abyss. There is only the Deep One, and it is not a monster — it is the dark the wardens were built to hold, given a shape soft enough for you to hate.',
-        'It knows your name. It says it kindly. It offers you the depths, the whole patient dark, if you will only set the hammer down.',
-        'Whatever you choose down there, you climb back into Hearthhold\'s light a different delver than the one who fell. The Oracle is waiting at the rim, and the seed-flower turns to follow you like a face. "Welcome back," she says. "Now — the Delve goes deeper than this, you know. It always does."'
-      ] }
-  ];
-  function storyForRegion(idx) { return STORY[idx + 1] || null; } // region idx -> its boss chapter
-  // Short bestiary flavour, keyed by the creature's base name.
-  var BESTIARY_LORE = {
-    'rat': 'Bred fat on what the dark discards. Where there is one, there is a nation.',
-    'cave bat': 'It does not see you. It hears your heartbeat and finds that enough.',
-    'kobold': 'Small, spiteful, and convinced the Delve belongs to it. It may be right.',
-    'skeleton archer': 'Death did not improve its aim, but it did improve its patience.',
-    'goblin': 'Cowardly alone, brave in numbers, doomed in either case.',
-    'bloat slime': 'Do not strike the swollen ones in a tight room. You will learn this once.',
-    'cutpurse': 'It wants your gold, not your life — but will take the second to get the first.',
-    'orc': 'Wardens of nothing, soldiers of no one, angry at everything.',
-    'dark cultist': 'They came down to worship the Deep One. It barely knows they exist.',
-    'troll': 'Cut it and it knits. The only wound a troll respects is a finished one.',
-    'wraith': 'A delver who set down their lantern to rest, and never picked it back up.',
-    'mimic': 'The cruelest trap is the one shaped like a reward.',
-    'dire wolf': 'The Wood remembers wolves from before it was haunted. They remember it too.',
-    'cave spider': 'Its venom is patient. So is it.',
-    'scorpion': 'The desert\'s punctuation: a small thing that ends the sentence.',
-    'sand shade': 'A thirst with the shape of a person, drawn long across the dunes.',
-    'cinder imp': 'A spark with opinions, mostly about setting you on fire.',
-    'magmite': 'It does not chase. It does not need to. It simply gets very, very close.',
-    'shell crab': 'All armour, no hurry. Outlasts most who try to outlast it.',
-    'siren': 'Her song is the brine\'s, and the brine has been lonely a long time.',
-    'The Bone King': 'First warden. Keeper of the first door. He held the line longest of all.',
-    'The Elder Treant': 'Second warden, rooted in grief, guarding a seed of light it had forgotten it carried.',
-    'The Venom Matriarch': 'Third warden, who learned the Delve\'s terrible secret and spun it into silk.',
-    'The Dune Pharaoh': 'Fourth warden, who chose burial over witness, and duty over rest.',
-    'The Magma Tyrant': 'Fifth warden, forged at the anvil until nothing of the smith remained.',
-    'The Tidemother': 'Sixth warden, whose lullaby kept a seal — and many sailors — asleep.',
-    'The Deep One': 'The dark the seven were built to hold. Not evil. Only hungry, and very old.'
-  };
-  function bestiaryKnown() { return hero && hero.bestiary ? Object.keys(hero.bestiary).length : 0; }
-  function recordKill(m) {
-    if (!hero || !m || !m.bname) return;
-    hero.bestiary = hero.bestiary || {};
-    hero.bestiary[m.bname] = (hero.bestiary[m.bname] || 0) + 1;
-  }
-
-  // =========================================================================
-  //  THE OVERWORLD — a walkable Pokémon-style map that connects the realm:
-  //  towns you enter, dungeon delves you descend, and roaming life. The
-  //  vertical floor-by-floor descent still lives inside each delve.
-  // =========================================================================
-  var OW = -2;                       // sentinel "depth" for the overworld
-  var OW_PAL = { name: 'The Overworld', floor: '#2c3d24', floor2: '#33472a', wall: '#234a26', wallTop: '#2f6232', accent: '#9fd06f', hedge: true };
-  // Towns dotted across the realm. `hearth` is the original full hub; the rest
-  // are themed and host a thematic mix of folk. `ox/oy` is their overworld tile.
-  var TOWNS = {
-    hearth:      { name: 'Hearthhold', icon: '🏰', ox: 8,  oy: 17, full: true, school: 'arcane',
-                   pal: { name: 'Hearthhold', floor: '#262a22', floor2: '#2c3027', wall: '#3a4030', wallTop: '#48503c', accent: '#8fbf6f' } },
-    greenhollow: { name: 'Greenhollow', icon: '🌲', ox: 15, oy: 7, theme: 'wood', school: 'nature', req: 'catacombs',
-                   roster: ['alchemist', 'arcanist', 'tamer'],
-                   pal: { name: 'Greenhollow', floor: '#1f2a1a', floor2: '#243420', wall: '#2f4a2c', wallTop: '#3c5e38', accent: '#8fd06f' } },
-    cinderforge: { name: 'Cinderforge', icon: '🌋', ox: 34, oy: 8, theme: 'ember', school: 'fire', req: 'wood',
-                   roster: ['smith', 'arcanist', 'merchant'],
-                   pal: { name: 'Cinderforge', floor: '#2a1812', floor2: '#321c14', wall: '#4a2a20', wallTop: '#5e3422', accent: '#e86040' } },
-    dustmarket:  { name: 'Dustmarket', icon: '🏜️', ox: 35, oy: 25, theme: 'desert', school: 'mystic', req: 'caves',
-                   roster: ['merchant', 'arcanist', 'tailor'],
-                   pal: { name: 'Dustmarket', floor: '#2c2614', floor2: '#332c18', wall: '#5a4a28', wallTop: '#6e5a30', accent: '#e0c060' } },
-    saltmere:    { name: 'Saltmere', icon: '⚓', ox: 9, oy: 27, theme: 'coast', school: 'frost', req: 'desert',
-                   roster: ['tamer', 'arcanist', 'healer', 'merchant'],
-                   pal: { name: 'Saltmere', floor: '#142428', floor2: '#173036', wall: '#234a52', wallTop: '#2f5e66', accent: '#4fd0c0' } }
-  };
-  // NPC presets (icon/colour/outfit) reused when laying out a themed town.
-  var NPC_PRESET = {
-    healer:   { icon: '⛑️', col: '#ff8a8a', name: 'Healer',   cos: { color: 'rose', eyes: 'cute', belt: 'brown' } },
-    merchant: { icon: '🛒', col: '#ffd76a', name: 'Merchant', cos: { color: 'gold', eyes: 'default', hat: 'top' } },
-    smith:    { icon: '⚒️', col: '#a0c0ff', name: 'Smith',    cos: { color: 'slate', eyes: 'angry', belt: 'brown', pattern: 'belly' } },
-    arcanist: { icon: '🔮', col: '#c79bff', name: 'Arcanist', cos: { color: 'violet', eyes: 'glow', hat: 'wizard' } },
-    quest:    { icon: '📜', col: '#e0c060', name: 'Bounties', cos: { color: 'ember', eyes: 'default', cape: 'red' } },
-    tailor:   { icon: '🎩', col: '#9fe0c0', name: 'Tailor',   cos: { color: 'emerald', eyes: 'default', hat: 'top', belt: 'gold' } },
-    tamer:    { icon: '🐾', col: '#8fe0a0', name: 'Beast Tamer', cos: { color: 'emerald', eyes: 'cute', pet: 'pup' } },
-    alchemist:{ icon: '⚗️', col: '#9fe0a0', name: 'Alchemist', cos: { color: 'emerald', eyes: 'glow', hat: 'wizard', pattern: 'rune' } }
-  };
-  // Dungeon delves on the overworld — one per region, at the given tile.
-  var DELVES = [
-    { region: 0, ox: 12, oy: 21 }, { region: 1, ox: 21, oy: 9 }, { region: 2, ox: 24, oy: 17 },
-    { region: 3, ox: 31, oy: 27 }, { region: 4, ox: 37, oy: 13 }, { region: 5, ox: 15, oy: 31 },
-    { region: 6, ox: 27, oy: 31 }
-  ];
-  // Exotic animals that roam the wild — befriend one to unlock it as a pet.
-  // Each maps to an existing pet cosmetic kind.
-  var WILD = [
-    { kind: 'cat',   name: 'a wild cat' },
-    { kind: 'pup',   name: 'a forest pup' },
-    { kind: 'slime', name: 'a curious slimeling' },
-    { kind: 'wisp',  name: 'a drifting wisp' },
-    { kind: 'drake', name: 'a young drake' }
-  ];
-  var WANDER_LINES = [
-    'A trader: "Cinderforge sells the meanest steel, if you can stand the heat."',
-    'A pilgrim: "Saltmere\'s tamer can teach a beast to walk beside you."',
-    'A child: "I saw a drake near the eastern delve! Honest!"',
-    'An old delver: "Every door down there was somebody\'s job once."',
-    'A bard: "The Oracle knows the whole tale — if you\'ve earned the telling."',
-    'A farmer: "Greenhollow\'s herbs can mend most anything. Most."'
-  ];
-  function townIdAt(x, y) { for (var k in TOWNS) if (TOWNS[k].ox === x && TOWNS[k].oy === y) return k; return null; }
-  function regionByKey(rk) { for (var i = 0; i < REGIONS.length; i++) if (REGIONS[i].key === rk) return REGIONS[i]; return null; }
-  function townUnlocked(tk) { var T = TOWNS[tk]; if (!T || !T.req) return true; return (hero && hero.trophies && hero.trophies.indexOf(T.req) >= 0); }
-  function townReqText(tk) { var T = TOWNS[tk]; if (!T || !T.req) return ''; var r = regionByKey(T.req); return r ? ('defeat ' + r.boss.name + ' in ' + r.name) : 'progress deeper'; }
-  // Flavour for each town's notice board.
-  var TOWN_LORE = {
-    hearth:      'Notice Board: "By order of the Council — descend at your own risk. The Oracle keeps the tally of those who don\'t return. Mind the wells."',
-    greenhollow: 'Carved post: "Greenhollow grew over the second seal. Tread softly; the roots are listening, and they hold a grudge."',
-    cinderforge: 'Iron plaque: "The forge never cools. We hammer because the smith who became the Tyrant could not stop. We remember him by not stopping either."',
-    dustmarket:  'Sun-bleached board: "All sales final. The desert reclaims what it lends. Water is dearer than gold here — barter accordingly."',
-    saltmere:    'Driftwood sign: "Stop your ears at the tideline. The Tidemother is dead, but the sea still hums her lullaby on quiet nights."'
-  };
-  // Discoverable lore landmarks scattered across the overworld.
-  var LANDMARKS = [
-    { key: 'obelisk', icon: '🗿', name: 'The Counting Obelisk', lore: 'Names spiral up the black stone — every delver who descended. Most have a second, smaller mark beside them: the date they did not climb back out.' },
-    { key: 'arch', icon: '🏛️', name: 'The Lightkeepers\' Arch', lore: 'A broken arch of white stone, humming faintly. Here the seven wardens were chosen. Six are spent. The arch waits to see if there will be a seventh story worth carving.' },
-    { key: 'grave', icon: '⚰️', name: 'The Unmarked Cairn', lore: 'A heap of stones with no name. Someone left a lantern, long burned out, and a single fresh flower. The Delve takes everyone eventually — but it does not always take the grieving.' },
-    { key: 'menhir', icon: '🪨', name: 'The Weeping Menhir', lore: 'Water beads on the standing stone though no rain falls. Old folk say it cries for the Drowned Coast, and that the day it runs dry, the sea will rise to answer.' },
-    { key: 'shrine', icon: '⛩️', name: 'Roadside Shrine', lore: 'A tiny shrine to no god in particular — a delver\'s superstition. Coins, teeth, a child\'s drawing of a drake. Offerings for a safe return that the Delve rarely honours.' },
-    { key: 'ruin', icon: '🏚️', name: 'The Sunken Watchpost', lore: 'A guard tower half-swallowed by earth. From its tilted window you can see all seven delve-mouths at once, breathing in the dark like a sleeping thing with many throats.' }
-  ];
-
-  // =========================================================================
-  //  the hero (persistent character)
-  // =========================================================================
-  function freshHero() {
-    var d = makeBaseInstance('dagger', 'common', 2), r = makeBaseInstance('rags', 'common', 1);
-    return {
-      v: 4,
-      name: 'Delver',
-      level: 1, xp: 0,
-      maxHp: 30, hp: 30, maxMp: 12, mp: 12,
-      atk: 4, def: 0, crit: 0.05,
-      gold: 0,
-      depth: 0, maxDepth: 0,        // current location depth (0 = town), and deepest reached
-      equip: { weapon: d.uid, armor: r.uid, trinket: null },
-      bag: { potion: 2, elixir: 1, bomb: 0, scroll: 0, key: 0 },
-      owned: [d, r],               // item instances; equip references their uids
-      spells: ['strike'], docked: ['strike'],
-      cosmetics: { color: 'cyan', eyes: 'default', pattern: 'none', belt: 'none', hat: 'none', cape: 'none', pet: 'none' },
-      ownedCos: [],
-      quests: [], questsDone: 0,
-      difficulty: 'normal',
-      house: { furniture: [] }, furniture: {}, trophies: [], stash: [],
-      story: 0, lore: [], bestiary: {},
-      ow: null, townsSeen: ['hearth'], mats: {},
-      buffs: {},
-      stats: { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 },
-      createdAt: Date.now(), updatedAt: Date.now(), rev: 1, client: clientId
-    };
-  }
-  function xpForLevel(l) { return 16 + (l - 1) * (l - 1) * 9 + (l - 1) * 14; }
-
-  // derived stats from base + equipment
-  function eqVal(slot, field) { var it = equippedItem(slot); return it ? (it.stats[field] || 0) : 0; }
-  function powerBonus() { return 3 + Math.ceil(hero.level / 2); }
-  function atkOf() { var a = hero.atk + eqVal('weapon', 'atk') + eqVal('trinket', 'atk'); if (hero.buffs && hero.buffs.power > 0) a += powerBonus(); return a; }
-  function defOf() { return hero.def + eqVal('armor', 'def') + eqVal('trinket', 'def'); }
-  function critOf() { return clamp(hero.crit + eqVal('weapon', 'crit') + eqVal('trinket', 'crit'), 0, 0.75); }
-  function maxHpOf() { return hero.maxHp + eqVal('armor', 'hp') + eqVal('trinket', 'hp') + trophyBonus(); }
-  function maxMpOf() { return hero.maxMp + eqVal('weapon', 'mp') + eqVal('armor', 'mp') + eqVal('trinket', 'mp'); }
-  function regenOf() { return eqVal('trinket', 'regen'); }
-  function greedOf() { return 1 + eqVal('trinket', 'greed'); }
-  function lifestealOf() { return eqVal('weapon', 'lifesteal') + eqVal('trinket', 'lifesteal'); }
-  function spellPowerOf() { return 1 + eqVal('weapon', 'spell') + eqVal('armor', 'spell') + eqVal('trinket', 'spell'); }
-  function dodgeOf() { return clamp(eqVal('armor', 'dodge') + eqVal('trinket', 'dodge'), 0, 0.6); }
-  function thornsOf() { return eqVal('armor', 'thorns'); }
-  function resistOf() { return clamp(eqVal('armor', 'resist'), 0, 0.6); }
-
-  function gainXp(n) {
-    hero.xp += n;
-    while (hero.xp >= xpForLevel(hero.level)) {
-      hero.xp -= xpForLevel(hero.level);
-      hero.level++;
-      hero.maxHp += 7; hero.maxMp += 3; hero.atk += 2;
-      if (hero.level % 3 === 0) { hero.def += 1; }
-      if (hero.level % 4 === 0) { hero.crit = clamp(hero.crit + 0.02, 0, 0.4); }
-      hero.hp = maxHpOf(); hero.mp = maxMpOf();
-      logMsg('up', 'Level ' + hero.level + '! You feel stronger.');
-      var newly = ABIL_ORDER.filter(function (id) { return ABIL[id].learn === 'auto' && ABIL[id].lvl === hero.level; });
-      newly.forEach(function (id) { if (learnSpell(id)) logMsg('up', 'Learned ' + ABIL[id].name + '!'); });
-      if (newly.length) buildAbilityBar();
-      fxBurst(world && world.player ? world.player.x : 0, world && world.player ? world.player.y : 0, '#ffe28a');
-    }
-    markDirty();
-  }
-
-  // =========================================================================
-  //  message log
-  // =========================================================================
-  function logMsg(kind, text) {
-    if (!world) return;
-    world.log.push({ t: text, k: kind || '' });
-    if (world.log.length > 30) world.log.shift();
-    // Show it as a transient line that fades out on its own (not a sticky toast).
-    if (ui && ui.log) {
-      var line = document.createElement('div');
-      line.className = 'cr-line cr-' + (kind || '');
-      line.textContent = text;
-      ui.log.appendChild(line);
-      while (ui.log.children.length > 3) ui.log.removeChild(ui.log.firstChild);
-      setTimeout(function () { if (line.parentNode) line.parentNode.removeChild(line); }, 4200);
-    }
-  }
-
-  // =========================================================================
-  //  floating combat text / particles / shake
-  // =========================================================================
-  function fxText(x, y, text, color) {
-    if (!world) return;
-    world.fx.push({ kind: 'text', x: x, y: y, text: text, color: color || '#fff', life: 1, vy: -0.9, born: now() });
-  }
-  function fxBurst(x, y, color) {
-    if (!world) return;
-    for (var i = 0; i < 8; i++) {
-      var a = (Math.PI * 2 * i) / 8 + Math.random();
-      world.fx.push({ kind: 'spark', x: x + 0.5, y: y + 0.5, vx: Math.cos(a) * 2.4, vy: Math.sin(a) * 2.4, color: color, life: 1, born: now() });
-    }
-  }
-  function fxRay(x0, y0, x1, y1, color) {
-    if (!world) return;
-    world.fx.push({ kind: 'ray', x0: x0, y0: y0, x1: x1, y1: y1, color: color, life: 1, born: now() });
-  }
-  function shake(amt) { if (world) world.shake = Math.max(world.shake || 0, amt); }
-
-  // =========================================================================
-  //  dungeon generation
-  // =========================================================================
-  function blankMap() {
-    var m = new Array(MH);
-    for (var y = 0; y < MH; y++) { m[y] = new Array(MW).fill(T_WALL); }
-    return m;
-  }
-  function carve(m, x, y) { if (x > 0 && x < MW - 1 && y > 0 && y < MH - 1) m[y][x] = T_FLOOR; }
-  function carveRoom(m, r) { for (var y = r.y; y < r.y + r.h; y++) for (var x = r.x; x < r.x + r.w; x++) carve(m, x, y); }
-  function center(r) { return { x: r.x + (r.w >> 1), y: r.y + (r.h >> 1) }; }
-  function corridor(m, a, b) {
-    var x = a.x, y = a.y;
-    if (ri(2)) { while (x !== b.x) { carve(m, x, y); x += sgn(b.x - x); } while (y !== b.y) { carve(m, x, y); y += sgn(b.y - y); } }
-    else { while (y !== b.y) { carve(m, x, y); y += sgn(b.y - y); } while (x !== b.x) { carve(m, x, y); x += sgn(b.x - x); } }
-    carve(m, b.x, b.y);
-  }
-
-  function genRooms(m) {
-    var rooms = [], tries = 0;
-    while (rooms.length < 9 && tries++ < 160) {
-      var w = rr(5, 9), h = rr(4, 7);
-      var x = rr(1, MW - w - 2), y = rr(1, MH - h - 2);
-      var nr = { x: x, y: y, w: w, h: h }, ok = true;
-      for (var i = 0; i < rooms.length; i++) {
-        var o = rooms[i];
-        if (x - 1 < o.x + o.w && x + w + 1 > o.x && y - 1 < o.y + o.h && y + h + 1 > o.y) { ok = false; break; }
-      }
-      if (ok) { carveRoom(m, nr); rooms.push(nr); }
-    }
-    // connect sequentially (guarantees full connectivity) + a couple of loops
-    for (var k = 1; k < rooms.length; k++) corridor(m, center(rooms[k - 1]), center(rooms[k]));
-    for (var l = 0; l < 2 && rooms.length > 3; l++) corridor(m, center(pick(rooms)), center(pick(rooms)));
-    return rooms;
-  }
-
-  // flood fill of reachable floor from (sx,sy), treating `block` cell as wall.
-  function flood(m, sx, sy, blockX, blockY) {
-    var seen = {}, stack = [[sx, sy]], reach = [];
-    seen[key(sx, sy)] = 1;
-    while (stack.length) {
-      var c = stack.pop(), cx = c[0], cy = c[1];
-      reach.push(c);
-      var nb = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
-      for (var i = 0; i < 4; i++) {
-        var nx = nb[i][0], ny = nb[i][1];
-        if (nx < 0 || ny < 0 || nx >= MW || ny >= MH) continue;
-        if (nx === blockX && ny === blockY) continue;
-        if (m[ny][nx] !== T_FLOOR) continue;
-        var kk = key(nx, ny);
-        if (seen[kk]) continue;
-        seen[kk] = 1; stack.push([nx, ny]);
-      }
-    }
-    return { seen: seen, reach: reach };
-  }
-
-  // find a 1-wide corridor cell whose removal disconnects the stairs from the
-  // player (a cut vertex) — used to place a solvable gate/door before the stairs.
-  function findSeparator(m, px, py, sx, sy) {
-    var cands = [];
-    for (var y = 1; y < MH - 1; y++) for (var x = 1; x < MW - 1; x++) {
-      if (m[y][x] !== T_FLOOR) continue;
-      if (x === px && y === py) continue; if (x === sx && y === sy) continue;
-      var horiz = m[y][x - 1] === T_FLOOR && m[y][x + 1] === T_FLOOR && m[y - 1][x] !== T_FLOOR && m[y + 1][x] !== T_FLOOR;
-      var vert = m[y - 1][x] === T_FLOOR && m[y + 1][x] === T_FLOOR && m[y][x - 1] !== T_FLOOR && m[y][x + 1] !== T_FLOOR;
-      if (horiz || vert) cands.push([x, y]);
-    }
-    // shuffle and test
-    for (var i = cands.length - 1; i > 0; i--) { var j = ri(i + 1); var t = cands[i]; cands[i] = cands[j]; cands[j] = t; }
-    for (var c = 0; c < cands.length; c++) {
-      var cx = cands[c][0], cy = cands[c][1];
-      var f = flood(m, px, py, cx, cy);
-      if (!f.seen[key(sx, sy)]) return { gx: cx, gy: cy, near: f.reach }; // player-side cells
-    }
-    return null;
-  }
-
-  function freeFloorIn(m, taken, region) {
-    for (var t = 0; t < 60; t++) {
-      var c = region ? pick(region) : [rr(1, MW - 2), rr(1, MH - 2)];
-      var x = c[0], y = c[1];
-      if (m[y] && m[y][x] === T_FLOOR && !taken(x, y)) return { x: x, y: y };
-    }
-    return null;
-  }
-
-  function genFloor(depth) {
-    var m = blankMap();
-    var rooms = genRooms(m);
-    if (rooms.length < 2) { return genFloor(depth); } // pathological; retry
-    var biome = biomeFor(depth);
-    var objects = [], monsters = [], items = [];
-
-    // Spawn & stairs first, so the placement predicate can reserve them and
-    // nothing (monster/trap/chest/item) lands on the player or on the stairs.
-    var start = center(rooms[0]);
-    var stairsRoom = rooms[rooms.length - 1];
-    var st = center(stairsRoom);
-    var stairs = { x: st.x, y: st.y, up: false };
-
-    var isBoss = depth > 0 && depth % 5 === 0;
-
-    var occupied = function (x, y) {
-      if (x === start.x && y === start.y) return true;
-      if (!isBoss && x === stairs.x && y === stairs.y) return true; // boss spawns ON the stairs deliberately
-      for (var i = 0; i < monsters.length; i++) if (monsters[i].x === x && monsters[i].y === y) return true;
-      for (var j = 0; j < items.length; j++) if (items[j].x === x && items[j].y === y) return true;
-      for (var o = 0; o < objects.length; o++) if (objects[o].x === x && objects[o].y === y) return true;
-      return false;
-    };
-
-    // ---- optional reward vaults (carve corridors; do this BEFORE the
-    //      separator search so the stair gate is a true cut of the final map) --
-    if (!isBoss && chance(0.4)) placeBoulderVault(m, start, objects, occupied);
-    if (!isBoss && depth >= 3 && chance(0.24)) placeIceVault(m, start, objects, occupied);
-    if (!isBoss && depth >= 2 && chance(0.24)) placePortalVault(m, start, objects, occupied);
-
-    // ---- puzzle gate before the stairs (lever / timed lever / key / runes) ---
-    var puzzle = null;
-    if (!isBoss && depth >= 2 && chance(0.62)) {
-      var sep = findSeparator(m, start.x, start.y, stairs.x, stairs.y);
-      if (sep) {
-        var roll = ri(4);                       // 0,1 lever  2 key  3 sequence
-        if (roll === 3 && depth < 3) roll = 0;  // runes only a little deeper
-        if (roll === 3) {
-          if (placeSequence(m, sep, stairs, objects, occupied)) puzzle = { kind: 'sequence' };
-          else roll = 0;                         // fall through to a lever if it didn't fit
-        }
-        if (roll <= 1) {
-          // lever gate — sometimes a *timed* one that slams shut behind you
-          objects.push({ type: 'gate', x: sep.gx, y: sep.gy, link: 1, open: false });
-          var lp = freeFloorIn(m, occupied, sep.near);
-          if (lp) {
-            var lev = { type: 'lever', x: lp.x, y: lp.y, link: 1, on: false };
-            if (depth >= 4 && chance(0.5)) { lev.timed = timedGateTurns(m, lp, stairs); puzzle = { kind: 'timed' }; }
-            else puzzle = { kind: 'lever' };
-            objects.push(lev);
-          }
-        } else if (roll === 2) {
-          // locked door + key
-          objects.push({ type: 'door', x: sep.gx, y: sep.gy, locked: true });
-          var kp = freeFloorIn(m, occupied, sep.near);
-          if (kp) { items.push({ type: 'cons', id: 'key', x: kp.x, y: kp.y }); puzzle = { kind: 'key' }; }
-        }
-      }
-    }
-
-    // ---- spike traps --------------------------------------------------------
-    var trapN = isBoss ? 0 : ri(3 + Math.floor(depth / 3));
-    for (var tr = 0; tr < trapN; tr++) {
-      var tp = freeFloorIn(m, occupied);
-      if (tp) objects.push({ type: 'trap', x: tp.x, y: tp.y, phase: ri(4), armed: true });
-    }
-
-    // ---- teleporter pair ----------------------------------------------------
-    if (!isBoss && chance(0.3)) {
-      var pa = freeFloorIn(m, occupied), pb = freeFloorIn(m, occupied);
-      if (pa && pb && (pa.x !== pb.x || pa.y !== pb.y)) {
-        objects.push({ type: 'tele', x: pa.x, y: pa.y, tox: pb.x, toy: pb.y });
-        objects.push({ type: 'tele', x: pb.x, y: pb.y, tox: pa.x, toy: pa.y });
-      }
-    }
-
-    // ---- chests (some are mimics that bite back) ----------------------------
-    var chestN = isBoss ? 1 : 1 + ri(2);
-    for (var ch = 0; ch < chestN; ch++) {
-      var cp = freeFloorIn(m, occupied);
-      if (cp) objects.push({ type: 'chest', x: cp.x, y: cp.y, opened: false, mimic: (depth >= 2 && chance(0.16)) });
-    }
-
-    // ---- shrine (one-time blessing) -----------------------------------------
-    if (!isBoss && depth >= 2 && chance(0.5)) {
-      var shp = freeFloorIn(m, occupied);
-      if (shp) objects.push({ type: 'shrine', x: shp.x, y: shp.y, used: false });
-    }
-
-    // ---- monsters (roster comes from the region) ----------------------------
-    var region = regionAt(depth);
-    if (isBoss) {
-      var ridx = regionIndexAt(depth);
-      var loops = Math.floor(depth / (REGION_SPAN * REGIONS.length)); // deeper laps scale the boss up
-      var scale = 1 + ridx * 0.18 + loops * 1.2;
-      monsters.push(makeMob(region.boss, st.x, st.y, true, scale, depth));
-      var guard = region.mobs[region.mobs.length - 1];
-      for (var bg = 0; bg < 2; bg++) { var gp = freeFloorIn(m, occupied, null); if (gp) monsters.push(makeMob(MOBS[guard], gp.x, gp.y, false, 1 + depth * 0.06, depth)); }
-    } else {
-      var avail = region.mobs;
-      var mcount = 4 + Math.floor(depth * 1.3);
-      for (var mi = 0; mi < mcount; mi++) {
-        var sp = freeFloorIn(m, occupied);
-        if (!sp) continue;
-        var idp = avail[clamp(ri(avail.length) + (chance(0.3) ? 1 : 0), 0, avail.length - 1)];
-        var mob = makeMob(MOBS[idp], sp.x, sp.y, false, 1 + depth * 0.05, depth);
-        if (depth >= 2 && chance((0.08 + depth * 0.008) * diff().elite)) eliteify(mob);
-        monsters.push(mob);
-      }
-    }
-    // ---- region hazard patches ----------------------------------------------
-    if (!isBoss && region.hazard) {
-      var hazN = 3 + ri(5 + Math.floor(depth / 4));
-      for (var hz = 0; hz < hazN; hz++) { var hp2 = freeFloorIn(m, occupied); if (hp2) objects.push({ type: 'hazard', kind: region.hazard, x: hp2.x, y: hp2.y }); }
-    }
-
-    // ---- loot items ---------------------------------------------------------
-    var potN = 2 + ri(2);
-    for (var pi = 0; pi < potN; pi++) { var s1 = freeFloorIn(m, occupied); if (s1) items.push({ type: 'cons', id: chance(0.7) ? 'potion' : 'elixir', x: s1.x, y: s1.y }); }
-    var goldN = 2 + ri(3);
-    for (var gi = 0; gi < goldN; gi++) { var s2 = freeFloorIn(m, occupied); if (s2) items.push({ type: 'gold', x: s2.x, y: s2.y, amt: (3 + ri(5)) * Math.max(1, Math.ceil(depth * 0.6)) }); }
-    if (chance(0.45)) { var s3 = freeFloorIn(m, occupied); if (s3) items.push({ type: 'gem', x: s3.x, y: s3.y }); }
-    // occasional gear drop on the floor
-    if (chance(0.35)) { var s4 = freeFloorIn(m, occupied); if (s4) items.push({ type: 'gear', item: generateItem(null, depth), x: s4.x, y: s4.y }); }
-
-    // a few cracked walls (bombable → secret loot pockets)
-    var crackN = ri(4);
-    for (var cwi = 0; cwi < crackN; cwi++) { var wx = rr(2, MW - 3), wy = rr(2, MH - 3); if (m[wy][wx] === T_WALL) m[wy][wx] = T_CRACK; }
-
-    return {
-      depth: depth, biome: biome, isBoss: isBoss, puzzle: puzzle,
-      map: m, rooms: rooms, objects: objects, monsters: monsters, items: items,
-      stairs: stairs, start: start,
-      explored: mkBoolGrid(), visible: mkBoolGrid(),
-      fx: [], proj: [], log: [], shake: 0, steps: 0, mode: 'dungeon',
-      player: null, path: null, pathT: 0, _logDirty: true
-    };
-  }
-
-  function mkBoolGrid() { var g = new Array(MH); for (var y = 0; y < MH; y++) g[y] = new Array(MW).fill(false); return g; }
-
-  function makeMob(def, x, y, boss, scale, depth) {
-    scale = scale || 1;
-    var dm = diff(), hp = Math.round(def.hp * scale * dm.hp);
-    return {
-      x: x, y: y, rx: x, ry: y, ch: def.ch, name: def.name, bname: def.name, col: def.col,
-      hp: hp, maxHp: hp,
-      atk: Math.max(1, Math.round(def.atk * (boss ? scale : Math.min(scale, 1 + depth * 0.04)) * dm.atk)), def: def.def || 0,
-      xp: Math.round(def.xp * (boss ? 1 : scale)), behavior: def.behavior, range: def.range || 1,
-      erratic: def.erratic || 0, boom: def.boom || 0, regen: def.regen || 0,
-      summons: def.summons || null, burn: !!def.burn, poison: !!def.poison,
-      boss: !!boss, status: {}, awake: false, hit: 0, bump: 0
-    };
-  }
-  // ---- elite monsters: random affixes, tougher, better loot -----------------
-  var ELITE_AFFIX = [
-    { id: 'tough',     name: 'Tough',     fn: function (m) { m.maxHp = Math.round(m.maxHp * 1.8); m.hp = m.maxHp; } },
-    { id: 'fierce',    name: 'Fierce',    fn: function (m) { m.atk = Math.round(m.atk * 1.5); } },
-    { id: 'swift',     name: 'Swift',     fn: function (m) { m.swift = true; } },
-    { id: 'venomous',  name: 'Venomous',  fn: function (m) { m.poison = true; } },
-    { id: 'fiery',     name: 'Fiery',     fn: function (m) { m.burn = true; } },
-    { id: 'vampiric',  name: 'Vampiric',  fn: function (m) { m.vamp = true; } },
-    { id: 'explosive', name: 'Explosive', fn: function (m) { m.boom = Math.max(m.boom || 0, 10); } },
-    { id: 'warded',    name: 'Warded',    fn: function (m) { m.ward = 0.4; } }
-  ];
-  function eliteify(m) {
-    m.elite = true; m.eliteAffix = [];
-    var pool = shuffle(ELITE_AFFIX.slice()), n = 1 + (chance(0.4) ? 1 : 0);
-    for (var i = 0; i < n && i < pool.length; i++) { pool[i].fn(m); m.eliteAffix.push(pool[i].name); }
-    m.name = m.eliteAffix.join(' ') + ' ' + m.name;
-    m.xp = Math.round(m.xp * 2.2);
-  }
-
-  // A hand-laid, guaranteed-solvable boulder vault carved into solid rock and
-  // wired back to the dungeon with a corridor. Layout (relative to x,y):
-  //   row0:  . . . G C      open area = cols0-2 rows0-3 (all floor)
-  //   row1:  . B . # #      B boulder@(1,1)  P plate@(2,2)
-  //   row2:  . . P # #      G gate@(3,0) seals chest C@(4,0)
-  //   row3:  . . . # #
-  // Solution: push B right then down onto P → plate holds gate open →
-  // walk row0 to the chest. The boulder on P never blocks that row.
-  function placeBoulderVault(m, start, objects, occupied) {
-    for (var attempt = 0; attempt < 50; attempt++) {
-      var x = rr(2, MW - 7), y = rr(2, MH - 6);
-      // require the whole footprint to currently be solid rock (a true secret)
-      var solid = true;
-      for (var r = 0; r <= 3 && solid; r++) for (var c = 0; c <= 4; c++) {
-        if (r > 0 && c >= 3) continue;            // those cells stay as wall
-        if (m[y + r][x + c] !== T_WALL) { solid = false; break; }
-      }
-      if (!solid) continue;
-      // carve the open area (cols0-2, rows0-3) + gate cell + chest cell
-      for (var rr2 = 0; rr2 <= 3; rr2++) for (var cc = 0; cc <= 2; cc++) carve(m, x + cc, y + rr2);
-      carve(m, x + 3, y); carve(m, x + 4, y);
-      // connect the far (bottom-left) corner back to the dungeon
-      corridor(m, { x: x, y: y + 3 }, start);
-      if (occupied(x + 1, y + 1) || occupied(x + 2, y + 2) || occupied(x + 3, y) || occupied(x + 4, y)) continue;
-      objects.push({ type: 'boulder', x: x + 1, y: y + 1 });
-      objects.push({ type: 'plate', x: x + 2, y: y + 2, link: 99, pressed: false });
-      objects.push({ type: 'gate', x: x + 3, y: y, link: 99, open: false });
-      objects.push({ type: 'chest', x: x + 4, y: y, opened: false, lush: true });
-      return true;
-    }
-    return false;
-  }
-
-  // ---- puzzle helpers: distance, sequence-code, ice-slide, portal vault -----
-  var SEQ_LINK = 7;
-  var SEQ_RUNES = ['🔥', '❄', '⚡', '☘', '☀', '🌙'];
-  // BFS step distance over floor tiles (objects ignored — used to size timers).
-  function mapDist(m, ax, ay, bx, by) {
-    var q = [[ax, ay, 0]], seen = {}; seen[key(ax, ay)] = 1;
-    while (q.length) { var c = q.shift(); if (c[0] === bx && c[1] === by) return c[2];
-      var nb = [[c[0] + 1, c[1]], [c[0] - 1, c[1]], [c[0], c[1] + 1], [c[0], c[1] - 1]];
-      for (var i = 0; i < 4; i++) { var nx = nb[i][0], ny = nb[i][1];
-        if (nx < 0 || ny < 0 || nx >= MW || ny >= MH || m[ny][nx] !== T_FLOOR) continue;
-        var kk = key(nx, ny); if (seen[kk]) continue; seen[kk] = 1; q.push([nx, ny, c[2] + 1]); } }
-    return -1;
-  }
-  function timedGateTurns(m, lever, stairs) {
-    var d = mapDist(m, lever.x, lever.y, stairs.x, stairs.y);
-    return Math.max(22, (d < 0 ? 30 : d) + 12);   // generous: pull, run, descend
-  }
-  // A rune-sequence lock: read the tablet, then step the plates in that order.
-  function placeSequence(m, sep, stairs, objects, occupied) {
-    var plates = [], runes = shuffle(SEQ_RUNES.slice()).slice(0, 3);
-    for (var i = 0; i < 3; i++) { var pp = freeFloorIn(m, occupied, sep.near); if (!pp) return false; plates.push(pp); }
-    var tb = freeFloorIn(m, occupied, sep.near); if (!tb) return false;
-    var ords = shuffle([0, 1, 2]);
-    objects.push({ type: 'gate', x: sep.gx, y: sep.gy, link: SEQ_LINK, open: false });
-    for (var j = 0; j < 3; j++) objects.push({ type: 'seqplate', x: plates[j].x, y: plates[j].y, rune: runes[j], ord: ords[j], lit: false, link: SEQ_LINK });
-    // tablet shows the runes in the required order
-    var order = [null, null, null]; for (var k = 0; k < 3; k++) order[ords[k]] = runes[k];
-    objects.push({ type: 'tablet', x: tb.x, y: tb.y, order: order });
-    return true;
-  }
-  // Where a slide starting at (x,y) heading (dx,dy) over ice tiles ends.
-  function slideLanding(iceSet, wallAt, x, y, dx, dy) {
-    var cx = x, cy = y;
-    while (true) {
-      var nx = cx + dx, ny = cy + dy;
-      if (wallAt(nx, ny)) break;            // wall / edge stops you
-      cx = nx; cy = ny;
-      if (!iceSet[key(cx, cy)]) break;       // slid onto solid ground — stop
-    }
-    return [cx, cy];
-  }
-  // An ice-slide vault: a frozen room where you slide until you hit a wall.
-  // Rock stoppers are randomised; we keep a layout only if a slide path lands
-  // beside the chest (verified by BFS over slide-landings).
-  function placeIceVault(m, start, objects, occupied) {
-    for (var attempt = 0; attempt < 60; attempt++) {
-      var w = 8, h = 6, x = rr(2, MW - w - 2), y = rr(2, MH - h - 2);
-      var solidOk = true;
-      for (var r = 0; r < h && solidOk; r++) for (var c = 0; c < w; c++) if (m[y + r][x + c] !== T_WALL) { solidOk = false; break; }
-      if (!solidOk) continue;
-      // interior floor cells (1..w-2, 1..h-2); border stays wall
-      var cells = [];
-      for (var iy = 1; iy < h - 1; iy++) for (var ix = 1; ix < w - 1; ix++) cells.push([x + ix, y + iy]);
-      // entry on the left edge, mid height
-      var entry = [x + 1, y + (h >> 1)];
-      // choose a handful of interior stoppers (not on the entry)
-      var stoppers = {}, sc = 2 + ri(3);
-      var pool = shuffle(cells.filter(function (c) { return !(c[0] === entry[0] && c[1] === entry[1]); }));
-      for (var s = 0; s < sc && s < pool.length; s++) stoppers[key(pool[s][0], pool[s][1])] = true;
-      // ice = interior cells that aren't stoppers
-      var iceSet = {}, iceList = [];
-      cells.forEach(function (c) { var kk = key(c[0], c[1]); if (!stoppers[kk]) { iceSet[kk] = true; iceList.push(c); } });
-      if (!iceSet[key(entry[0], entry[1])]) continue;
-      // chest on an ice cell away from entry
-      var far = shuffle(iceList.filter(function (c) { return Math.abs(c[0] - entry[0]) + Math.abs(c[1] - entry[1]) >= 4; }));
-      if (!far.length) continue;
-      var chest = far[0];
-      // a slide stops at the room border or any rock stopper (the chest sits on ice)
-      function isWall(ax, ay) { if (ax <= x || ay <= y || ax >= x + w - 1 || ay >= y + h - 1) return true; return !!stoppers[key(ax, ay)]; }
-      // BFS over slide-landings from the entry tile
-      var seen = {}, q = [[entry[0], entry[1]]]; seen[key(entry[0], entry[1])] = 1; var solved = false;
-      while (q.length) {
-        var cur = q.shift();
-        if (Math.abs(cur[0] - chest[0]) + Math.abs(cur[1] - chest[1]) === 1) { solved = true; break; }
-        var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-        for (var di = 0; di < 4; di++) {
-          var land = slideLanding(iceSet, isWall, cur[0], cur[1], dirs[di][0], dirs[di][1]);
-          var lk = key(land[0], land[1]); if (seen[lk]) continue; seen[lk] = 1; q.push(land);
-        }
-      }
-      if (!solved) continue;
-      // commit: carve interior ice cells, connect entry to the dungeon, drop ice + chest
-      iceList.forEach(function (c) { carve(m, c[0], c[1]); });
-      carve(m, chest[0], chest[1]);
-      carve(m, entry[0] - 1, entry[1]);                       // open the west wall at the entry row
-      corridor(m, { x: entry[0] - 1, y: entry[1] }, start);   // wire it back to the dungeon
-      if (occupied(chest[0], chest[1])) continue;
-      iceList.forEach(function (c) { if (!(c[0] === chest[0] && c[1] === chest[1])) objects.push({ type: 'ice', x: c[0], y: c[1] }); });
-      objects.push({ type: 'ice', x: chest[0], y: chest[1] });
-      objects.push({ type: 'chest', x: chest[0], y: chest[1], opened: false, lush: true });
-      return true;
-    }
-    return false;
-  }
-  // A portal vault: an isolated pocket of loot reachable only via a portal pair.
-  function placePortalVault(m, start, objects, occupied) {
-    for (var attempt = 0; attempt < 50; attempt++) {
-      var w = 4, h = 3, x = rr(2, MW - w - 2), y = rr(2, MH - h - 2);
-      var solidOk = true;
-      for (var r = 0; r < h && solidOk; r++) for (var c = 0; c < w; c++) if (m[y + r][x + c] !== T_WALL) { solidOk = false; break; }
-      if (!solidOk) continue;
-      // carve the pocket (NOT connected to the dungeon — only the portal reaches it)
-      for (var iy = 0; iy < h; iy++) for (var ix = 0; ix < w; ix++) carve(m, x + ix, y + iy);
-      var pbx = x + 1, pby = y + 1, cbx = x + 2, cby = y + 1;
-      if (occupied(pbx, pby) || occupied(cbx, cby)) continue;
-      // entry portal must sit in the open map, never inside its own pocket
-      var pa = null;
-      for (var pt = 0; pt < 40; pt++) { var cand = freeFloorIn(m, occupied); if (!cand) break; if (cand.x < x || cand.x >= x + w || cand.y < y || cand.y >= y + h) { pa = cand; break; } }
-      if (!pa) continue;
-      objects.push({ type: 'tele', x: pa.x, y: pa.y, tox: pbx, toy: pby, vault: true });
-      objects.push({ type: 'tele', x: pbx, y: pby, tox: pa.x, toy: pa.y, vault: true });
-      objects.push({ type: 'chest', x: cbx, y: cby, opened: false, lush: true });
-      return true;
-    }
-    return false;
-  }
-
-  // =========================================================================
-  //  town hub
-  // =========================================================================
-  function npcObj(role, x, y, overrides) {
-    var preset = NPC_PRESET[role] || { icon: '❓', col: '#fff', name: role, cos: {} };
-    var o = { type: 'npc', role: role, x: x, y: y, icon: preset.icon, col: preset.col, name: preset.name, cos: preset.cos };
-    if (overrides) for (var k in overrides) o[k] = overrides[k];
-    return o;
-  }
-  // Dress a town: cobbled paths between everything, a fountain, lamps, props,
-  // banners and a lore notice board — so it reads as a place, not a void.
-  function decorateTown(objects, room, start, townId) {
-    var reserved = {}, path = {};
-    objects.forEach(function (o) { reserved[key(o.x, o.y)] = true; });
-    reserved[key(start.x, start.y)] = true;
-    function onMap(x, y) { return x > room.x && y > room.y && x < room.x + room.w - 1 && y < room.y + room.h - 1; }
-    function stampPath(ax, ay, bx, by) {
-      var x = ax, y = ay;
-      function put() { var k = key(x, y); if (!reserved[k] && !path[k]) { path[k] = true; objects.push({ type: 'deco', kind: 'cobble', x: x, y: y }); } else path[k] = path[k] || false; }
-      put(); while (x !== bx) { x += x < bx ? 1 : -1; put(); } while (y !== by) { y += y < by ? 1 : -1; put(); }
-    }
-    var anchors = objects.filter(function (o) { return o.type === 'npc' || o.type === 'home' || o.type === 'owgate' || o.type === 'stairs'; });
-    anchors.forEach(function (a) { stampPath(start.x, start.y, a.x, a.y); });
-    function free(x, y) { var k = key(x, y); return onMap(x, y) && !reserved[k] && !path[k] && !objects.some(function (o) { return o.x === x && o.y === y; }); }
-    // fountain centrepiece (solid; the open room stays traversable around it)
-    var fx2 = room.x + (room.w >> 1), fy2 = room.y + 2;
-    if (free(fx2, fy2)) { objects.push({ type: 'deco', kind: 'fountain', x: fx2, y: fy2, solid: true }); reserved[key(fx2, fy2)] = true; }
-    // lamps at the inner corners + a couple along the way
-    [[room.x + 1, room.y + 1], [room.x + room.w - 2, room.y + 1], [room.x + 1, room.y + room.h - 2], [room.x + room.w - 2, room.y + room.h - 2]].forEach(function (c) { if (free(c[0], c[1])) objects.push({ type: 'deco', kind: 'lamp', x: c[0], y: c[1] }); });
-    // banners hung on the top wall
-    for (var bx = room.x + 3; bx < room.x + room.w - 2; bx += 6) objects.push({ type: 'deco', kind: 'banner', x: bx, y: room.y, hue: (bx * 47) % 360 });
-    // scatter props (non-solid) — crates, barrels, bushes, flowerbeds, plants
-    var props = ['crate', 'barrel', 'bush', 'flowerbed', 'plant', 'crate', 'bush'];
-    var want = Math.round(room.w * room.h * 0.07), tries = 0;
-    while (want > 0 && tries++ < 400) {
-      var x = rr(room.x + 1, room.x + room.w - 2), y = rr(room.y + 1, room.y + room.h - 2);
-      // hug the walls a little so the centre stays walkable & readable
-      var edgey = (x <= room.x + 2 || x >= room.x + room.w - 3 || y <= room.y + 2 || y >= room.y + room.h - 3);
-      if (!edgey && chance(0.6)) continue;
-      if (!free(x, y)) continue;
-      objects.push({ type: 'deco', kind: pick(props), x: x, y: y }); reserved[key(x, y)] = true; want--;
-    }
-    // a lore notice board near the entrance (cobble underfoot is fine)
-    function nbFree(x, y) { return onMap(x, y) && !reserved[key(x, y)] && !objects.some(function (o) { return o.x === x && o.y === y && (o.solid || o.type !== 'deco'); }); }
-    var placedNB = false;
-    for (var ring = 1; ring <= 3 && !placedNB; ring++) {
-      for (var dy = -ring; dy <= ring && !placedNB; dy++) for (var dx = -ring; dx <= ring && !placedNB; dx++) {
-        if (Math.abs(dx) !== ring && Math.abs(dy) !== ring) continue;
-        var nx = start.x + dx, ny = start.y + dy;
-        if (nbFree(nx, ny)) { objects.push({ type: 'noticeboard', x: nx, y: ny, lore: TOWN_LORE[townId] || TOWN_LORE.hearth, name: (TOWNS[townId] || {}).name + ' Notice Board' }); reserved[key(nx, ny)] = true; placedNB = true; }
-      }
-    }
-  }
-
-  function genTown(townId) {
-    townId = TOWNS[townId] ? townId : 'hearth';
-    var T = TOWNS[townId];
-    if (townId === 'hearth') {
-      var m = blankMap();
-      var room = { x: 6, y: 8, w: 30, h: 18 };
-      carveRoom(m, room);
-      var objects = [], monsters = [], items = [];
-      objects.push(npcObj('healer',   10, 12));
-      objects.push(npcObj('merchant', 16, 12));
-      objects.push(npcObj('smith',    24, 12));
-      objects.push(npcObj('arcanist', 30, 12));
-      objects.push(npcObj('quest',    13, 19));
-      objects.push(npcObj('tailor',   27, 19));
-      objects.push({ type: 'npc', role: 'oracle', x: 20, y: 11, icon: '🔮', col: '#cdb4ff', name: 'Oracle', cos: { color: 'void', eyes: 'glow', hat: 'wizard', cape: 'shadow' } });
-      objects.push({ type: 'home', x: 33, y: 19 });
-      objects.push({ type: 'owgate', x: 7, y: 16 });          // path out to the overworld
-      objects.push({ type: 'stairs', x: 20, y: 23, down: true });
-      decorateTown(objects, room, { x: 20, y: 16 }, 'hearth');
-      return {
-        depth: 0, townId: 'hearth', biome: T.pal, isBoss: false, puzzle: null,
-        map: m, rooms: [room], objects: objects, monsters: monsters, items: items,
-        stairs: { x: 20, y: 23, up: false }, start: { x: 20, y: 16 },
-        explored: mkBoolGrid(), visible: mkBoolGrid(),
-        fx: [], proj: [], log: [], shake: 0, steps: 0, mode: 'town',
-        player: null, path: null, pathT: 0, _logDirty: true
-      };
-    }
-    // themed town: a tidy room with its roster laid in a row and a way out west
-    var m2 = blankMap();
-    var room2 = { x: 12, y: 11, w: 18, h: 11 };
-    carveRoom(m2, room2);
-    var objs = [], roster = T.roster || ['merchant'];
-    var cy = room2.y + (room2.h >> 1) - 1;
-    var startX = room2.x + 3, gap = Math.max(3, Math.floor((room2.w - 6) / Math.max(1, roster.length)));
-    roster.forEach(function (role, i) {
-      var o = npcObj(role, startX + i * gap, cy);
-      if (role === 'arcanist' && T.school && SCHOOLS[T.school]) { var S = SCHOOLS[T.school]; o.name = S.teacher; o.icon = S.icon; o.col = S.col; o.cos = S.cos; o.school = T.school; }
-      objs.push(o);
-    });
-    objs.push({ type: 'owgate', x: room2.x, y: cy + 2 });
-    decorateTown(objs, room2, { x: room2.x + 1, y: cy + 2 }, townId);
-    return {
-      depth: 0, townId: townId, biome: T.pal, theme: T.theme || null, isBoss: false, puzzle: null,
-      map: m2, rooms: [room2], objects: objs, monsters: [], items: [],
-      stairs: { x: room2.x, y: cy + 2, up: true }, start: { x: room2.x + 1, y: cy + 2 },
-      explored: mkBoolGrid(), visible: mkBoolGrid(),
-      fx: [], proj: [], log: [], shake: 0, steps: 0, mode: 'town',
-      player: null, path: null, pathT: 0, _logDirty: true
-    };
-  }
-
-  function genHouse() {
-    var m = blankMap();
-    var ROX = Math.floor((MW - HW) / 2), ROY = Math.floor((MH - HH) / 2);
-    carveRoom(m, { x: ROX, y: ROY, w: HW, h: HH });
-    var objects = [];
-    var ex = ROX + (HW >> 1), ey = ROY + HH - 1;
-    objects.push({ type: 'exit', x: ex, y: ey });
-    objects.push({ type: 'workbench', x: ROX + 1, y: ROY + 1 });
-    (hero.trophies || []).forEach(function (tk, i) { if (i < HW - 2) objects.push({ type: 'trophyicon', key: tk, x: ROX + 1 + i, y: ROY }); });
-    (hero.house && hero.house.furniture || []).forEach(function (f) { objects.push({ type: 'furn', kind: f.kind, x: ROX + f.x, y: ROY + f.y }); });
-    return {
-      depth: -1, biome: HOUSE_PAL, isBoss: false, puzzle: null,
-      map: m, rooms: [{ x: ROX, y: ROY, w: HW, h: HH }], objects: objects, monsters: [], items: [],
-      stairs: { x: ex, y: ey, up: true }, start: { x: ex, y: ey - 1 }, ROX: ROX, ROY: ROY,
-      explored: mkBoolGrid(), visible: mkBoolGrid(),
-      fx: [], proj: [], log: [], shake: 0, steps: 0, mode: 'house',
-      player: null, path: null, pathT: 0, _logDirty: true
-    };
-  }
-  // rebuild the live house's furniture/trophy objects from hero data (after edits)
-  function syncHouseFurniture() {
-    if (!world || world.mode !== 'house') return;
-    world.objects = world.objects.filter(function (o) { return o.type !== 'furn' && o.type !== 'trophyicon'; });
-    (hero.trophies || []).forEach(function (tk, i) { if (i < HW - 2) world.objects.push({ type: 'trophyicon', key: tk, x: world.ROX + 1 + i, y: world.ROY }); });
-    (hero.house.furniture || []).forEach(function (f) { world.objects.push({ type: 'furn', kind: f.kind, x: world.ROX + f.x, y: world.ROY + f.y }); });
-  }
-
-  // ---- the overworld: a STABLE (seeded) maze you learn to navigate ----------
-  //  Towns sit at the ends of isolated dead-end pockets, sealed shut until you
-  //  beat the boss they require — so new towns must be earned, and reaching
-  //  even an open one is a journey through winding corridors.
-  function genOverworld() {
-    var m = blankMap();                                   // all walls to start
-    var R = mulberry32(((hero && hero.createdAt) || 1) >>> 0 || 1);
-    function rri(n) { return (R() * n) | 0; }
-    function rpick(a) { return a[(R() * a.length) | 0]; }
-    function rchance(p) { return R() < p; }
-    function rshuf(a) { for (var i = a.length - 1; i > 0; i--) { var j = (R() * (i + 1)) | 0, t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
-    function K(x, y) { return x + ',' + y; }
-    function inI(x, y) { return x > 0 && y > 0 && x < MW - 1 && y < MH - 1; }
-    function floorAt(x, y) { return inI(x, y) && m[y][x] === T_FLOOR; }
-
-    // ---- recursive-backtracker maze over the odd-cell lattice ----
-    var visited = {}, stackm = [[1, 1]]; visited['1,1'] = 1; carve(m, 1, 1);
-    while (stackm.length) {
-      var cur = stackm[stackm.length - 1], nbs = [];
-      [[2, 0], [-2, 0], [0, 2], [0, -2]].forEach(function (d) { var nx = cur[0] + d[0], ny = cur[1] + d[1]; if (nx >= 1 && ny >= 1 && nx <= MW - 2 && ny <= MH - 2 && !visited[K(nx, ny)]) nbs.push(d); });
-      if (nbs.length) { var d2 = rpick(nbs); carve(m, cur[0] + d2[0] / 2, cur[1] + d2[1] / 2); carve(m, cur[0] + d2[0], cur[1] + d2[1]); visited[K(cur[0] + d2[0], cur[1] + d2[1])] = 1; stackm.push([cur[0] + d2[0], cur[1] + d2[1]]); }
-      else stackm.pop();
-    }
-    // light braiding — open ~12% of walls beside corridors to add loops/shortcuts
-    for (var by = 1; by <= MH - 2; by += 2) for (var bx = 1; bx <= MW - 2; bx += 2) {
-      if (!rchance(0.12)) continue;
-      var opts = []; [[2, 0], [-2, 0], [0, 2], [0, -2]].forEach(function (d) { var wx = bx + d[0] / 2, wy = by + d[1] / 2, nx = bx + d[0], ny = by + d[1]; if (nx >= 1 && ny >= 1 && nx <= MW - 2 && ny <= MH - 2 && m[wy][wx] !== T_FLOOR && m[ny][nx] === T_FLOOR) opts.push([wx, wy]); });
-      if (opts.length) { var o = rpick(opts); carve(m, o[0], o[1]); }
-    }
-
-    var objects = [], solid = {}; hero._owPos = {};
-    var used = {};
-    function claim(x, y) { used[K(x, y)] = true; }
-    function carveChamber(cx, cy) { carve(m, cx, cy); [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { if (inI(cx + d[0], cy + d[1])) carve(m, cx + d[0], cy + d[1]); }); }
-
-    // distance from the start cell over carved floor
-    var dist = {}; (function () { var q = [[1, 1, 0]]; dist['1,1'] = 0; while (q.length) { var c = q.shift(); [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { var nx = c[0] + d[0], ny = c[1] + d[1], k = K(nx, ny); if (dist[k] === undefined && floorAt(nx, ny)) { dist[k] = c[2] + 1; q.push([nx, ny, c[2] + 1]); } }); } })();
-    var cells = []; for (var k in dist) { var p = k.split(','); cells.push([+p[0], +p[1], dist[k]]); }
-    cells.sort(function (a, b) { return a[2] - b[2]; });
-    var maxD = cells.length ? cells[cells.length - 1][2] : 1;
-    function cellFree(c) { return !used[K(c[0], c[1])]; }
-    function pickByDist(frac, sep) {
-      var target = maxD * frac, best = null, bestErr = 1e9;
-      for (var i = 0; i < cells.length; i++) { var c = cells[i]; if (!cellFree(c)) continue;
-        if (sep) { var bad = false; for (var u in used) { var up = u.split(','); if (Math.abs(c[0] - up[0]) + Math.abs(c[1] - up[1]) < sep) { bad = true; break; } } if (bad) continue; }
-        var err = Math.abs(c[2] - target); if (err < bestErr) { bestErr = err; best = c; } }
-      return best;
-    }
-
-    // ---- Hearthhold at the start (always open) ----
-    carveChamber(1, 1);
-    objects.push({ type: 'town', town: 'hearth', x: 1, y: 1 }); claim(1, 1); hero._owPos['town:hearth'] = { x: 1, y: 1 };
-    var hstart = null; [[1, 0], [0, 1], [-1, 0], [0, -1]].forEach(function (d) { if (!hstart && floorAt(1 + d[0], 1 + d[1])) hstart = { x: 1 + d[0], y: 1 + d[1] }; });
-    if (!hstart) hstart = { x: 1, y: 1 };
-    // resume where we left off, but only if it still connects to Hearthhold
-    var start = (hero.ow && floorAt(hero.ow.x, hero.ow.y)) ? { x: hero.ow.x, y: hero.ow.y } : hstart;
-
-    // ---- delves spread by distance (region 0 nearest … region 6 farthest) ----
-    DELVES.forEach(function (d, idx) {
-      var frac = 0.25 + (idx / Math.max(1, DELVES.length - 1)) * 0.7;
-      var c = pickByDist(frac, 4) || pickByDist(frac, 0); if (!c) return;
-      carveChamber(c[0], c[1]); claim(c[0], c[1]);
-      objects.push({ type: 'delve', region: d.region, x: c[0], y: c[1] }); hero._owPos['delve:' + d.region] = { x: c[0], y: c[1] };
-    });
-
-    // ---- towns: dead-end tips, each sealed at its single junction ----
-    // A dead-end corridor cell D connects to the maze through exactly one gap
-    // tile g (itself degree-2). Sealing g isolates D entirely — so the town at
-    // D is unreachable until you've beaten the boss that opens the seal.
-    function gapNeighbors(cx, cy) { var g = []; [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { var nx = cx + d[0], ny = cy + d[1]; if (inI(nx, ny) && m[ny][nx] === T_FLOOR) g.push([nx, ny]); }); return g; }
-    var tips = [];
-    cells.forEach(function (c) { if (!cellFree(c)) return; var gs = gapNeighbors(c[0], c[1]); if (gs.length !== 1) return; var g = gs[0]; if (used[K(g[0], g[1])]) return; if (gapNeighbors(g[0], g[1]).length !== 2) return; tips.push({ x: c[0], y: c[1], gx: g[0], gy: g[1], dist: c[2] }); });
-    Object.keys(TOWNS).filter(function (t) { return t !== 'hearth'; }).forEach(function (tk, ti) {
-      var frac = 0.4 + ti * 0.15, avail = tips.filter(function (t) { return !used[K(t.x, t.y)] && !used[K(t.gx, t.gy)]; });
-      avail.sort(function (a, b) { return Math.abs(a.dist - maxD * frac) - Math.abs(b.dist - maxD * frac); });
-      var t = avail[0];
-      if (t) {
-        claim(t.x, t.y); claim(t.gx, t.gy);
-        var locked = !townUnlocked(tk);
-        objects.push({ type: 'seal', town: tk, req: TOWNS[tk].req, locked: locked, solid: locked, x: t.gx, y: t.gy });
-        if (locked) solid[K(t.gx, t.gy)] = true;
-        objects.push({ type: 'town', town: tk, x: t.x, y: t.y }); hero._owPos['town:' + tk] = { x: t.x, y: t.y };
-      } else {
-        var c = pickByDist(frac, 3) || pickByDist(frac, 0); if (c) { claim(c[0], c[1]); objects.push({ type: 'town', town: tk, x: c[0], y: c[1] }); hero._owPos['town:' + tk] = { x: c[0], y: c[1] }; }
-      }
-    });
-
-    // reachable floor (locked seals block) — everything below spawns only here
-    function reachFrom(sx, sy) { var seen = {}, q = [[sx, sy]]; seen[K(sx, sy)] = true; while (q.length) { var c = q.shift(); [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { var nx = c[0] + d[0], ny = c[1] + d[1], kk = K(nx, ny); if (!seen[kk] && floorAt(nx, ny) && !solid[kk]) { seen[kk] = true; q.push([nx, ny]); } }); } return seen; }
-    var reach = reachFrom(start.x, start.y);
-    // never strand the player in a sealed pocket — fall back to Hearthhold
-    if (!reach[K(hstart.x, hstart.y)]) { start = hstart; reach = reachFrom(start.x, start.y); }
-    function freeReach(avoidNode) {
-      for (var a = 0; a < 80; a++) { var rx = rri(MW - 2) + 1, ry = rri(MH - 2) + 1, rk = K(rx, ry);
-        if (reach[rk] && !used[rk] && !objAtList(objects, rx, ry, null, true) && !(rx === start.x && ry === start.y)) { used[rk] = true; return { x: rx, y: ry }; } }
-      return null;
-    }
-    // discoverable lore landmarks
-    var lm = rshuf(LANDMARKS.slice());
-    for (var li = 0; li < lm.length && li < 6; li++) { var lp = freeReach(); if (lp) objects.push({ type: 'landmark', key: lm[li].key, icon: lm[li].icon, name: lm[li].name, lore: lm[li].lore, x: lp.x, y: lp.y }); }
-    // gatherable material nodes
-    var gmats = ['herb', 'ore', 'crystal', 'brine', 'ember', 'herb', 'ore', 'crystal'];
-    for (var gi = 0; gi < gmats.length; gi++) { var gp = freeReach(); if (gp) objects.push({ type: 'gather', mat: gmats[gi], x: gp.x, y: gp.y }); }
-    // sparse flora for flavour (non-blocking — corridors stay 1 wide)
-    var flora = ['tree', 'pine', 'flower', 'grass', 'bush', 'rock'];
-    for (var f = 0; f < 26; f++) { var fp = freeReach(); if (fp) objects.push({ type: 'deco', kind: rpick(flora), x: fp.x, y: fp.y }); }
-    // roaming exotic animals (corner & tame -> pet) and wandering folk
-    for (var w = 0; w < 6; w++) { var ap = freeReach(); if (!ap) break; var wd = WILD[w % WILD.length]; objects.push({ type: 'animal', kind: wd.kind, aname: wd.name, sense: 5, wary: 0, x: ap.x, y: ap.y, rx: ap.x, ry: ap.y, mobile: true }); }
-    for (var n3 = 0; n3 < 3; n3++) { var wp = freeReach(); if (!wp) break; objects.push({ type: 'wanderer', line: WANDER_LINES[(n3 + rri(WANDER_LINES.length)) % WANDER_LINES.length], x: wp.x, y: wp.y, rx: wp.x, ry: wp.y, mobile: true, cos: { color: rpick(['crimson', 'slate', 'emerald', 'gold', 'rose']), eyes: 'default' } }); }
-    return {
-      depth: OW, biome: OW_PAL, isBoss: false, puzzle: null, owSolid: solid,
-      map: m, rooms: [], objects: objects, monsters: [], items: [],
-      stairs: { x: start.x, y: start.y, up: false }, start: start,
-      explored: mkBoolGrid(), visible: mkBoolGrid(),
-      fx: [], proj: [], log: [], shake: 0, steps: 0, mode: 'overworld',
-      player: null, path: null, pathT: 0, _logDirty: true
-    };
-  }
-  function nodeAt(x, y) { if (townIdAt(x, y)) return true; for (var i = 0; i < DELVES.length; i++) if (DELVES[i].ox === x && DELVES[i].oy === y) return true; return false; }
-  function objAtList(list, x, y, kind, nonDecoOnly) {
-    for (var i = 0; i < list.length; i++) { var o = list[i]; if (o.x === x && o.y === y) { if (kind) { if (o.kind === kind) return true; } else if (nonDecoOnly) { if (o.type !== 'deco') return true; } else return true; } }
-    return false;
-  }
-  function walkOW(x, y, solid) { return x > 0 && y > 0 && x < MW - 1 && y < MH - 1 && !solid[key(x, y)]; }
-  function floodOW(sx, sy, solid) {
-    var seen = {}, q = [[sx, sy]]; seen[key(sx, sy)] = true;
-    while (q.length) { var c = q.shift(), nb = [[c[0] + 1, c[1]], [c[0] - 1, c[1]], [c[0], c[1] + 1], [c[0], c[1] - 1]];
-      for (var i = 0; i < 4; i++) { var nx = nb[i][0], ny = nb[i][1], kk = key(nx, ny); if (seen[kk] || !walkOW(nx, ny, solid)) continue; seen[kk] = true; q.push([nx, ny]); } }
-    return seen;
-  }
-  function carveCorridorOW(x0, y0, x1, y1, solid, objects) {
-    function clearAt(x, y) { var kk = key(x, y); if (!solid[kk]) return; delete solid[kk]; for (var i = objects.length - 1; i >= 0; i--) { var o = objects[i]; if (o.type === 'deco' && o.solid && o.x === x && o.y === y) objects.splice(i, 1); } }
-    var x = x0, y = y0;
-    while (x !== x1) { x += x < x1 ? 1 : -1; clearAt(x, y); }
-    while (y !== y1) { y += y < y1 ? 1 : -1; clearAt(x, y); }
-  }
-  // Roaming life: wild animals FLEE when you draw near (you have to corner
-  // them); wanderers just amble. Cheap — only a handful of entities.
-  function overworldTick() {
-    var p = world.player;
-    function freeStep(o, nx, ny) { return walkable(nx, ny) && !(nx === p.x && ny === p.y) && !objAt(nx, ny); }
-    for (var i = 0; i < world.objects.length; i++) {
-      var o = world.objects[i];
-      if (!o.mobile) continue;
-      var dirs = shuffle([[1, 0], [-1, 0], [0, 1], [0, -1]]);
-      if (o.type === 'animal') {
-        var d0 = cheb(o.x, o.y, p.x, p.y);
-        if (d0 <= (o.sense || 5)) {
-          if (!chance(0.9)) continue;                 // skittish — bolts most turns
-          var best = null, bestD = d0;
-          for (var f = 0; f < dirs.length; f++) { var fx = o.x + dirs[f][0], fy = o.y + dirs[f][1]; if (!freeStep(o, fx, fy)) continue; var nd = cheb(fx, fy, p.x, p.y); if (nd > bestD) { bestD = nd; best = [fx, fy]; } }
-          if (best) { o.x = best[0]; o.y = best[1]; }
-          continue;
-        }
-        if (!chance(0.4)) continue;
-      } else if (!chance(0.5)) continue;
-      for (var dd = 0; dd < dirs.length; dd++) { var nx = o.x + dirs[dd][0], ny = o.y + dirs[dd][1]; if (freeStep(o, nx, ny)) { o.x = nx; o.y = ny; break; } }
-    }
-  }
-  // Taming is a challenge: corner the beast (cut its escape routes) then ✋/bump
-  // it. Each open escape tile drops your odds; a Beast Lure 🍖 helps a lot.
-  function tameAttempt(o) {
-    var ck = cosKey('pet', o.kind), have = (hero.ownedCos || []).indexOf(ck) >= 0;
-    var nm = (COSMETIC.pet[o.kind] || {}).name || 'creature';
-    if (have) { Cade.showToast('The ' + nm + ' already trusts you.', 'info', 1500); return; }
-    var p = world.player, d0 = cheb(o.x, o.y, p.x, p.y), escapes = 0;
-    var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-    for (var i = 0; i < 4; i++) { var nx = o.x + dirs[i][0], ny = o.y + dirs[i][1];
-      if (walkable(nx, ny) && !objAt(nx, ny) && !(nx === p.x && ny === p.y) && cheb(nx, ny, p.x, p.y) > d0) escapes++; }
-    var lure = (hero.bag.lure || 0) > 0; if (lure) hero.bag.lure--;
-    var prob = clamp(0.82 - escapes * 0.24 + (lure ? 0.4 : 0) - (o.wary || 0) * 0.06, 0.05, 0.97);
-    fxText(o.x, o.y - 0.3, lure ? '🍖' : '…', '#fff');
-    if (Math.random() < prob) {
-      hero.ownedCos = hero.ownedCos || []; hero.ownedCos.push(ck);
-      var ix = world.objects.indexOf(o); if (ix >= 0) world.objects.splice(ix, 1);
-      fxBurst(o.x, o.y, (COSMETIC.pet[o.kind] || {}).col || '#9fe0a0');
-      logMsg('win', 'You tamed ' + o.aname + '! ' + nm + ' is now yours — wear it at the Tailor or Tamer.');
-      Cade.showToast('🐾 Tamed ' + nm + '!', 'success', 2200); Cade.haptic(14);
-    } else {
-      o.wary = (o.wary || 0) + 1;
-      for (var b = 0; b < 40; b++) { var bx = rr(2, MW - 3), by = rr(2, MH - 3); if (walkable(bx, by) && !objAt(bx, by) && cheb(bx, by, p.x, p.y) >= 5) { o.x = bx; o.y = by; o.rx = bx; o.ry = by; break; } }
-      logMsg('die', 'The ' + nm + ' slips away and bolts!'); Cade.showToast('It bolted! Corner it (or use a Lure 🍖).', 'error', 2200); Cade.haptic(8);
-    }
-    markDirty(); refreshAll();
-  }
-  function talkWanderer(o) { Cade.showToast(o.line, 'info', 3200); }
-  function harvestNode(o) {
-    var n = 1 + ri(2), M = MATS[o.mat] || { name: o.mat, icon: '◆' };
-    addMat(o.mat, n);
-    var ix = world.objects.indexOf(o); if (ix >= 0) world.objects.splice(ix, 1);
-    fxText(o.x, o.y - 0.3, '+' + n + ' ' + M.icon, '#bfe6b0'); fxBurst(o.x, o.y, '#9fd06f');
-    logMsg('win', 'Gathered ' + n + ' ' + M.name + '.'); Cade.haptic(6); markDirty(); refreshAll();
-  }
-  function readLore(o) {
-    Cade.showToast((o.icon ? o.icon + ' ' : '') + (o.name || 'Inscription') + ' — ' + o.lore, 'info', 4200);
-    logMsg('', (o.name || 'Inscription') + ': ' + o.lore);
-    if (o.key) { hero.lore = hero.lore || []; if (hero.lore.indexOf(o.key) < 0) { hero.lore.push(o.key); var rw = 15 + ri(20); hero.gold += rw; logMsg('win', 'New lore discovered (+' + rw + ' gold). The Codex remembers.'); fxText(o.x, o.y - 0.4, '+lore', '#cdb4ff'); markDirty(); } }
-  }
-
-  // =========================================================================
-  //  enter a floor / town
-  // =========================================================================
-  function enter(depth, townId) {
-    var w = depth === OW ? genOverworld() : depth === -1 ? genHouse() : depth <= 0 ? genTown(townId) : genFloor(depth);
-    var spawn = w.start;
-    w.player = { x: spawn.x, y: spawn.y, rx: spawn.x, ry: spawn.y, dir: { x: 0, y: 1 }, hit: 0, bump: 0 };
-    world = w;
-    hero.depth = depth;
-    hero.status = {}; hero.buffs = {};      // clear DoTs & buffs between areas
-    if (w.mode === 'town') merchStock = null;   // merchant restocks each town visit
-    if (depth > hero.maxDepth) { hero.maxDepth = depth; }
-    // wake in town with half vitals if we arrived dead
-    if (depth <= 0 && depth !== OW && hero.hp <= 0) { hero.hp = Math.ceil(maxHpOf() * 0.5); hero.mp = Math.ceil(maxMpOf() * 0.5); }
-    // ensure hp/mp within caps
-    hero.hp = clamp(hero.hp, 0, maxHpOf()); hero.mp = clamp(hero.mp, 0, maxMpOf());
-    computeFov();
-    if (depth === OW) {
-      logMsg('', 'The Overworld. Walk to a town (🏰) or a delve (icon) — 🗺 for the map.');
-    } else if (depth === -1) {
-      logMsg('', 'Home. ✋ the workbench (🛠) to furnish; rest in your bed; 🚪 to leave.');
-      // herb planter yields a potion between trips home
-      var hasPlanter = (hero.house.furniture || []).some(function (f) { return f.kind === 'planter'; });
-      if (hasPlanter && hero._gardenRun !== (hero.stats.runs || 0)) { hero._gardenRun = hero.stats.runs || 0; hero.bag.potion = (hero.bag.potion || 0) + 1; logMsg('win', 'Your planter bore a Health Potion.'); }
-    } else if (depth <= 0) {
-      var TT = TOWNS[w.townId] || TOWNS.hearth;
-      hero._lastTown = w.townId;   // remember where we are, to return here after a delve
-      hero.townsSeen = hero.townsSeen || ['hearth']; if (hero.townsSeen.indexOf(w.townId) < 0) hero.townsSeen.push(w.townId);
-      if (w.townId === 'hearth') {
-        logMsg('', 'Hearthhold. Rest, shop, then descend ▾ — or 🚪 west to the Overworld.');
-        // The Oracle tells the tale: the prologue on a delver's first visit, and
-        // each freshly-unlocked chapter when you return from felling a warden.
-        var toTell = -1;
-        if (!hero._prolog) { hero._prolog = true; toTell = 0; markDirty(); }
-        else if (hero._storyNew && hero._storyNew <= hero.story) { toTell = hero._storyNew; }
-        if (toTell >= 0) { (function (idx) { setTimeout(function () { if (world && world.mode === 'town') openStory(idx); }, 600); })(toTell); }
-      } else {
-        logMsg('', TT.icon + ' ' + TT.name + '. Trade with the locals; 🚪 to return to the Overworld.');
-      }
-    }
-    else {
-      hero.stats.floors++; questDepth(depth);
-      var rg = regionAt(depth);
-      if (depth === regionStart(regionIndexAt(depth))) logMsg('win', rg.icon + ' ' + rg.name + ' — ' + rg.blurb);
-      logMsg('', (w.isBoss ? '⚠ ' : '') + rg.name + ' · Floor ' + depth + (w.isBoss ? '. ' + rg.boss.name + ' awaits.' : '.'));
-      if (w.puzzle) {
-        var pk = w.puzzle.kind;
-        logMsg('', pk === 'lever' ? 'The stairs are barred. Find the lever.'
-          : pk === 'timed' ? 'A timed gate bars the stairs — pull the lever, then run.'
-          : pk === 'sequence' ? 'Runed plates seal the stairs. Read the tablet for the order.'
-          : 'A locked door blocks the way. Find the key.');
-      }
-    }
-    markDirty();
-    buildAbilityBar();   // keep the bar in sync with the hero's level (e.g. after a cross-device sync)
-    refreshAll();
-  }
-
-  function descend() {
-    // a delve is one region: clearing its boss takes you HOME, not deeper
-    if (world && world.isBoss) {
-      var town = (hero._delveTown && TOWNS[hero._delveTown]) ? hero._delveTown : 'hearth';
-      logMsg('win', 'Region cleared! You climb back to ' + (TOWNS[town] || TOWNS.hearth).name + ' with your spoils.');
-      enter(0, town); return;
-    }
-    var d = hero.depth + 1;
-    logMsg('', 'You descend…');
-    enter(d);
-  }
-
-  function startNewRun() {
-    // quick-dive from Hearthhold into the deepest region you've unlocked
-    hero.stats.runs = (hero.stats.runs || 0) + 1;
-    hero._delveTown = 'hearth';
-    var idx = 0; for (var i = 0; i < REGIONS.length; i++) if (regionUnlocked(i)) idx = i;
-    enter(regionStart(idx));
-  }
-  function recall() {
-    if (!hero || !world) return;
-    if (world.mode === 'town' && world.townId === 'hearth') { Cade.showToast('Already in Hearthhold', 'info', 1000); return; }
-    if (world.mode === 'dead') { enter(0); return; }
-    logMsg('', 'You slip away to Hearthhold.');
-    enter(0);
-  }
-
-  // =========================================================================
-  //  field of view (LOS-limited torch)
-  // =========================================================================
-  function opaqueObjAt(x, y) {
-    for (var i = 0; i < world.objects.length; i++) { var o = world.objects[i]; if (o.x === x && o.y === y) {
-      if (o.type === 'gate' && !o.open) return true;
-      if (o.type === 'door' && o.locked) return true;
-    } }
-    return false;
-  }
-  function blocksSight(x, y) { return !world.map[y] || world.map[y][x] !== T_FLOOR || opaqueObjAt(x, y); }
-  function losClear(x0, y0, x1, y1) {
-    // Bresenham; the endpoint may be a wall (visible) but anything past a wall is blocked
-    var dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
-    var sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx - dy;
-    var x = x0, y = y0;
-    while (true) {
-      if (x === x1 && y === y1) return true;
-      if (!(x === x0 && y === y0) && blocksSight(x, y)) return false;
-      var e2 = 2 * err;
-      if (e2 > -dy) { err -= dy; x += sx; }
-      if (e2 < dx) { err += dx; y += sy; }
-    }
-  }
-  function computeFov() {
-    var p = world.player, vis = world.visible, exp = world.explored;
-    for (var y = 0; y < MH; y++) for (var x = 0; x < MW; x++) vis[y][x] = false;
-    var lit = world.mode === 'town' || world.mode === 'house' || world.mode === 'overworld';
-    var R = lit ? 99 : LIGHT;
-    var x0 = Math.max(0, p.x - R), x1 = Math.min(MW - 1, p.x + R);
-    var y0 = Math.max(0, p.y - R), y1 = Math.min(MH - 1, p.y + R);
-    for (var yy = y0; yy <= y1; yy++) for (var xx = x0; xx <= x1; xx++) {
-      if (cheb(p.x, p.y, xx, yy) > R) continue;
-      if (lit || losClear(p.x, p.y, xx, yy)) { vis[yy][xx] = true; exp[yy][xx] = true; }
-    }
-  }
-
-  // =========================================================================
-  //  passability / object lookup
-  // =========================================================================
-  function objAt(x, y, type) {
-    for (var i = 0; i < world.objects.length; i++) { var o = world.objects[i]; if (o.x === x && o.y === y && (!type || o.type === type)) return o; }
-    return null;
-  }
-  function gateClosedAt(x, y) {
-    for (var i = 0; i < world.objects.length; i++) { var o = world.objects[i]; if (o.x === x && o.y === y) {
-      if (o.type === 'gate' && !o.open) return true;
-      if (o.type === 'door' && o.locked) return true;
-      if (o.type === 'boulder') return true;
-    } }
-    return false;
-  }
-  function mobAt(x, y) { for (var i = 0; i < world.monsters.length; i++) if (world.monsters[i].x === x && world.monsters[i].y === y) return world.monsters[i]; return null; }
-  function solidObjAt(x, y) { for (var i = 0; i < world.objects.length; i++) { var o = world.objects[i]; if (o.solid && o.x === x && o.y === y) return true; } return false; }
-  function walkable(x, y) {
-    if (x < 0 || y < 0 || x >= MW || y >= MH) return false;
-    if (world.map[y][x] !== T_FLOOR) return false;
-    if (gateClosedAt(x, y)) return false;
-    if ((world.mode === 'overworld' || world.mode === 'town') && solidObjAt(x, y)) return false;
-    return true;
-  }
-
-  // =========================================================================
-  //  combat
-  // =========================================================================
-  function applyStatus(target, kind, turns) {
-    target.status = target.status || {};
-    target.status[kind] = Math.max(target.status[kind] || 0, turns);
-  }
-  function damageMob(m, dmg, kind, color) {
-    if (m.ward) dmg = Math.max(1, Math.ceil(dmg * (1 - m.ward)));
-    m.hp -= dmg; m.hit = now();
-    fxText(m.x, m.y, '-' + dmg, color || '#ffd2d2');
-    if (m.hp <= 0) killMob(m, kind);
-  }
-  function killMob(m, kind) {
-    var idx = world.monsters.indexOf(m); if (idx < 0) return;
-    world.monsters.splice(idx, 1);
-    hero.stats.kills++; questProgress('kills', 1); recordKill(m);
-    fxBurst(m.x, m.y, m.col);
-    gainXp(Math.round(m.xp * diff().rew));
-    if (m.elite) { logMsg('win', 'Elite slain: ' + m.name + '!'); var ep = adjacentFree(m.x, m.y) || { x: m.x, y: m.y }; world.items.push({ type: 'gear', item: generateItem(null, world.depth + 2, 1.2), x: ep.x, y: ep.y }); world.items.push({ type: 'gold', x: m.x, y: m.y, amt: (6 + ri(8)) * Math.max(1, world.depth) }); addMat('essence', 1); addMat(regionMat(world.depth), 1); fxText(m.x, m.y, '✨', '#ffe28a'); }
-    if (m.boss) { questProgress('boss', 1); logMsg('win', 'The ' + m.name + ' falls! The way down opens.'); shake(10);
-      var rk = regionAt(world.depth).key; hero.trophies = hero.trophies || []; if (hero.trophies.indexOf(rk) < 0) { hero.trophies.push(rk); hero.hp = Math.min(maxHpOf(), hero.hp + 3); logMsg('win', '🏆 Trophy earned — ' + regionAt(world.depth).name + '! (displayed at home)'); }
-      // STORY: a warden has fallen — unlock the next chapter of the tale.
-      var rIdx = regionIndexAt(world.depth), beat = rIdx + 1;
-      if (beat > (hero.story || 0) && beat < STORY.length) { hero.story = beat; hero._storyNew = beat; logMsg('win', '✦ A new chapter awaits — visit the Oracle in town.'); }
-      // boss drops: gold + guaranteed gear + gem
-      world.items.push({ type: 'gold', x: m.x, y: m.y, amt: 40 + world.depth * 7 });
-      var gp = adjacentFree(m.x, m.y); if (gp) world.items.push({ type: 'gear', item: generateItem(null, world.depth + 3, 2.5), x: gp.x, y: gp.y });
-      hero.stats.gems++;
-      addMat('essence', 2); addMat('crystal', 2); addMat(regionMat(world.depth), 2); logMsg('win', 'The warden\'s remains yield rare crafting materials.');
-    } else {
-      // bomber explodes on death
-      if (m.boom) explodeAt(m.x, m.y, m.boom, '#5fc08e');
-      // a slain cutpurse drops whatever gold it pocketed
-      if (m._loot) world.items.push({ type: 'gold', x: m.x, y: m.y, amt: m._loot });
-      if (chance(0.18)) world.items.push({ type: 'cons', id: chance(0.6) ? 'potion' : 'elixir', x: m.x, y: m.y });
-      if (chance(0.35)) world.items.push({ type: 'gold', x: m.x, y: m.y, amt: (2 + ri(4)) * Math.max(1, Math.ceil(world.depth * 0.5)) });
-      if (chance(0.22)) { var rmat = regionMat(world.depth); addMat(rmat, 1); fxText(m.x, m.y, MATS[rmat].icon, '#cfe7d0'); }
-    }
-    markDirty();
-  }
-  function adjacentFree(x, y) {
-    var nb = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]];
-    for (var i = 0; i < nb.length; i++) if (walkable(nb[i][0], nb[i][1]) && !mobAt(nb[i][0], nb[i][1])) return { x: nb[i][0], y: nb[i][1] };
-    return null;
-  }
-  function lifestealHeal(dmg) {
-    var ls = lifestealOf(); if (!ls || dmg <= 0) return;
-    if (hero.hp >= maxHpOf()) return;
-    var h = Math.max(1, Math.floor(dmg * ls));
-    hero.hp = Math.min(maxHpOf(), hero.hp + h);
-    fxText(world.player.x, world.player.y, '+' + h, '#9fe0a0');
-  }
-  function cleaveAround(center, dmg) {
-    var snap = world.monsters.slice();
-    for (var i = 0; i < snap.length; i++) { var o = snap[i]; if (o === center || o.hp <= 0) continue; if (cheb(o.x, o.y, center.x, center.y) <= 1) damageMob(o, dmg, 'cleave', '#ffd2a0'); }
-  }
-  function chainBounce(from, dmg, hops, color) {
-    var cur = from, used = [from];
-    for (var h = 0; h < hops; h++) {
-      var best = null, bd = 99;
-      for (var i = 0; i < world.monsters.length; i++) { var m = world.monsters[i]; if (used.indexOf(m) >= 0 || m.hp <= 0) continue; var d = cheb(m.x, m.y, cur.x, cur.y); if (d <= 3 && d < bd) { bd = d; best = m; } }
-      if (!best) break;
-      fxRay(cur.x, cur.y, best.x, best.y, color || '#bfe0ff');
-      damageMob(best, dmg, 'chain', color || '#bfe0ff'); used.push(best); cur = best;
-    }
-  }
-  function heroAttack(m, mult, extraStun) {
-    var w = (equippedItem('weapon') || { stats: {} }).stats;   // on-hit effects from the rolled weapon
-    var base = Math.max(1, Math.round(atkOf() * (mult || 1)) - m.def + rr(-1, 2));
-    var crit = chance(critOf());
-    if (crit) base = Math.round(base * 1.8);
-    // SHATTER synergy: striking a frozen/stunned foe deals +60% and breaks it
-    var st0 = m.status || {};
-    if (st0.stun > 0) { base = Math.round(base * 1.6); fxText(m.x, m.y - 0.3, 'SHATTER!', '#9fd8ff'); st0.stun = 0; }
-    var dealt = Math.min(base, m.hp);
-    damageMob(m, base, 'melee', crit ? '#ffec80' : '#ffd2d2');
-    if (crit) fxText(m.x, m.y - 0.3, 'CRIT!', '#ffec80');
-    lifestealHeal(dealt);
-    var dead = m.hp <= 0;
-    if (!dead && w.poison && chance(w.poison)) { applyStatus(m, 'poison', 4); fxText(m.x, m.y, 'poison', '#7fe0a0'); }
-    if (!dead && w.burn && chance(w.burn)) {
-      // COMBUST synergy: igniting a poisoned foe detonates the venom
-      if (m.status && m.status.poison > 0) { damageMob(m, Math.round(atkOf() * 0.9), 'combust', '#ff9050'); fxText(m.x, m.y - 0.3, 'COMBUST!', '#ff9050'); dead = m.hp <= 0; }
-      if (!dead) { applyStatus(m, 'burn', 3); fxText(m.x, m.y, 'burn', '#ffb060'); }
-    }
-    var st = (w.stun || 0) + (w.freeze || 0) + (extraStun || 0);
-    if (!dead && st && chance(st)) { applyStatus(m, 'stun', 2); fxText(m.x, m.y, w.freeze ? 'frozen' : 'stun', '#9fd8ff'); }
-    if (w.cleave) cleaveAround(m, Math.max(1, Math.round(base * w.cleave)));
-    if (w.chain) chainBounce(m, Math.max(1, Math.round(base * w.chain)), 2, '#ffe28a');
-    shake(crit ? 5 : 2);
-  }
-  function hurtHero(dmg, srcName, srcMob) {
-    if (dodgeOf() && chance(dodgeOf())) { fxText(world.player.x, world.player.y, 'dodge', '#bfe0ff'); return; }
-    var rz = resistOf(); if (rz) dmg = Math.max(1, Math.round(dmg * (1 - rz)));
-    if (hero.buffs && hero.buffs.shield > 0) dmg = Math.max(1, Math.ceil(dmg * 0.4));
-    if (hero.buffs && hero.buffs.ward > 0) dmg = Math.max(1, Math.ceil(dmg * 0.6));   // Ice Armor
-    dmg = Math.max(1, dmg - Math.floor(defOf() * 0.6));
-    hero.hp -= dmg; world.player.hit = now();
-    fxText(world.player.x, world.player.y, '-' + dmg, '#ff9a9a');
-    shake(3);
-    // thorns — from gear and/or the Thornskin buff
-    var thorn = thornsOf() + (hero.buffs && hero.buffs.thorns > 0 ? 0.5 : 0);
-    if (srcMob && thorn && srcMob.hp > 0 && cheb(world.player.x, world.player.y, srcMob.x, srcMob.y) <= 1) {
-      damageMob(srcMob, Math.max(1, Math.round(dmg * thorn)), 'thorns', '#ffd0a0');
-    }
-    if (hero.hp <= 0) die();
-    markDirty();
-  }
-  function explodeAt(x, y, dmg, color) {
-    shake(7); fxBurst(x, y, color || '#ffb060');
-    for (var yy = y - 1; yy <= y + 1; yy++) for (var xx = x - 1; xx <= x + 1; xx++) {
-      if (xx < 0 || yy < 0 || xx >= MW || yy >= MH) continue;
-      fxBurst(xx, yy, color || '#ffb060');
-      // crack walls
-      if (world.map[yy][xx] === T_CRACK) { world.map[yy][xx] = T_FLOOR; logMsg('', 'The cracked wall crumbles!'); maybeSecretLoot(xx, yy); }
-      var mm = mobAt(xx, yy); if (mm) damageMob(mm, dmg, 'blast', '#ffd0a0');
-      if (world.player.x === xx && world.player.y === yy && !(xx === x && yy === y)) hurtHero(Math.floor(dmg * 0.6), 'blast');
-    }
-    computeFov();
-  }
-  function maybeSecretLoot(x, y) {
-    if (chance(0.5)) world.items.push({ type: 'gold', x: x, y: y, amt: (5 + ri(7)) * Math.max(1, Math.ceil(world.depth * 0.6)) });
-    else world.items.push({ type: 'cons', id: 'potion', x: x, y: y });
-  }
-
-  function die() {
-    hero.stats.deaths++;
-    var lost = Math.floor(hero.gold * 0.35);
-    hero.gold -= lost;
-    world.mode = 'dead';
-    world._deathLost = lost;
-    logMsg('die', 'You fall on floor ' + world.depth + '. You lose ' + lost + ' gold.');
-    saveNow();
-  }
-
-  // =========================================================================
-  //  player actions
-  // =========================================================================
-  function playerActive() { return world && world.mode !== 'dead' && !document.getElementById('cr-overlay'); }
-
-  function tryMove(dx, dy) {
-    if (!playerActive()) return false;
-    var p = world.player;
-    if (dx === 0 && dy === 0) { return rest(); }
-    p.dir = { x: dx, y: dy };
-    var nx = p.x + dx, ny = p.y + dy;
-    if (nx < 0 || ny < 0 || nx >= MW || ny >= MH) return false;
-    // attack monster?
-    var m = mobAt(nx, ny);
-    if (m) { p.bump = now(); p.bumpDir = { x: dx, y: dy }; heroAttack(m, 1, 0); endTurn(); return true; }
-    // wild animal — bumping it is a taming attempt (it won't let you walk through).
-    // Cancel any auto-travel so the next queued node can't jump past the animal.
-    if (world.mode === 'overworld') { var ani = objAt(nx, ny, 'animal'); if (ani) { world.path = null; p.bump = now(); p.bumpDir = { x: dx, y: dy }; tameAttempt(ani); endTurn(); return true; } }
-    // boss-seal blocking the way to a town
-    if (world.mode === 'overworld') { var sl = objAt(nx, ny, 'seal'); if (sl && sl.locked) { world.path = null; Cade.showToast('🔒 Sealed — ' + townReqText(sl.town) + ' to open the way to ' + (TOWNS[sl.town] || {}).name + '.', 'info', 2600); return false; } }
-    // push boulder?
-    var b = objAt(nx, ny, 'boulder');
-    if (b) { if (pushBoulder(b, dx, dy)) { p.x = nx; p.y = ny; afterStep(); endTurn(); return true; } else { return false; } }
-    // closed gate / locked door?
-    var door = objAt(nx, ny, 'door');
-    if (door && door.locked) { tryUnlock(door); return false; }
-    if (world.map[ny][nx] !== T_FLOOR) {
-      if (world.map[ny][nx] === T_CRACK) { logMsg('', 'A cracked wall. A bomb might breach it.'); }
-      return false;
-    }
-    if (gateClosedAt(nx, ny)) { logMsg('', 'A sealed gate blocks the way.'); return false; }
-    if (solidObjAt(nx, ny)) { return false; }   // water, mountains, fountains, fences…
-    p.x = nx; p.y = ny;
-    // ice: keep sliding the same direction until something stops you
-    if (objAt(p.x, p.y, 'ice')) {
-      var guard = 0;
-      while (objAt(p.x, p.y, 'ice') && guard++ < MW + MH) {
-        var sx = p.x + dx, sy = p.y + dy;
-        if (!walkable(sx, sy) || mobAt(sx, sy) || objAt(sx, sy, 'boulder')) break;
-        p.x = sx; p.y = sy;
-      }
-    }
-    afterStep();
-    endTurn();
-    return true;
-  }
-
-  function pushBoulder(b, dx, dy) {
-    var tx = b.x + dx, ty = b.y + dy;
-    if (!walkable(tx, ty) || mobAt(tx, ty) || objAt(tx, ty, 'boulder')) {
-      // pushing into a monster crushes it; into spikes disarms
-      var mm = mobAt(tx, ty);
-      if (mm && walkableIgnoreMob(tx, ty)) { damageMob(mm, 999, 'crush', '#cfc0a0'); logMsg('', 'The boulder crushes the ' + mm.name + '!'); b.x = tx; b.y = ty; updatePlates(); return true; }
-      return false;
-    }
-    b.x = tx; b.y = ty;
-    var tr = objAt(tx, ty, 'trap'); if (tr) { tr.armed = false; logMsg('', 'The boulder jams the spikes.'); }
-    updatePlates();
-    return true;
-  }
-  function walkableIgnoreMob(x, y) {
-    if (x < 0 || y < 0 || x >= MW || y >= MH) return false;
-    if (world.map[y][x] !== T_FLOOR) return false;
-    var o = objAt(x, y); if (o && (o.type === 'boulder' || (o.type === 'gate' && !o.open) || (o.type === 'door' && o.locked))) return false;
-    return true;
-  }
-  function updatePlates() {
-    // a plate is pressed if a boulder (or the player) stands on it; linked gates open while pressed
-    var pressed = {};
-    for (var i = 0; i < world.objects.length; i++) {
-      var o = world.objects[i];
-      if (o.type === 'plate') {
-        var on = !!objAt(o.x, o.y, 'boulder') || (world.player.x === o.x && world.player.y === o.y);
-        o.pressed = on;
-        if (on) pressed[o.link] = true;
-      }
-    }
-    for (var j = 0; j < world.objects.length; j++) {
-      var g = world.objects[j];
-      if (g.type === 'gate' && g.plateLinked !== false) {
-        // gates linked to plates follow the plate; lever-linked gates ignore this (handled by lever)
-        if (hasPlateLink(g.link)) g.open = !!pressed[g.link];
-      }
-    }
-  }
-  function hasPlateLink(link) { for (var i = 0; i < world.objects.length; i++) { var o = world.objects[i]; if (o.type === 'plate' && o.link === link) return true; } return false; }
-
-  function tryUnlock(door) {
-    if (hero.bag.key > 0) { hero.bag.key--; door.locked = false; logMsg('win', 'You unlock the door.'); fxBurst(door.x, door.y, '#ffd76a'); markDirty(); refreshAll(); }
-    else logMsg('', 'Locked. You need a key.');
-  }
-
-  function afterStep() {
-    var p = world.player;
-    updatePlates();
-    // pick up items
-    for (var i = world.items.length - 1; i >= 0; i--) {
-      var it = world.items[i];
-      if (it.x === p.x && it.y === p.y) pickup(it, i);
-    }
-    // town NPC — step on to shop; step on the door to go home / overworld
-    if (world.mode === 'town') {
-      var npcHere = objAt(p.x, p.y, 'npc'); if (npcHere) { openShop(npcHere.role); return; }
-      if (objAt(p.x, p.y, 'home')) { world._pendingHouse = true; return; }
-      if (objAt(p.x, p.y, 'owgate')) { world._pendingOverworld = true; return; }
-    }
-    // house — step on the exit to return to town
-    if (world.mode === 'house' && objAt(p.x, p.y, 'exit')) { world._pendingTown = true; return; }
-    // overworld — step onto a town/delve/animal/wanderer to act
-    if (world.mode === 'overworld') {
-      var ow = objAt(p.x, p.y);
-      if (ow) {
-        if (ow.type === 'town') { if (!townUnlocked(ow.town)) { Cade.showToast('🔒 ' + townReqText(ow.town), 'info', 2400); return; } hero.ow = { x: p.x, y: p.y }; world._pendingTownId = ow.town; return; }
-        if (ow.type === 'delve') {
-          if (!regionUnlocked(ow.region)) { Cade.showToast('That delve is sealed — clear the region before it', 'info', 1700); return; }
-          hero.ow = { x: p.x, y: p.y }; world._pendingDelve = ow.region; return;
-        }
-        if (ow.type === 'animal') { tameAttempt(ow); return; }
-        if (ow.type === 'gather') { harvestNode(ow); return; }
-        if (ow.type === 'wanderer') { talkWanderer(ow); return; }
-        if (ow.type === 'landmark' || ow.type === 'noticeboard') { readLore(ow); return; }
-        if (ow.type === 'seal' && ow.locked) { Cade.showToast('🔒 ' + townReqText(ow.town), 'info', 2400); return; }
-      }
-    }
-    // teleporter
-    var tp = objAt(p.x, p.y, 'tele');
-    if (tp) { p.x = tp.tox; p.y = tp.toy; p.rx = p.x; p.ry = p.y; fxBurst(p.x, p.y, '#a87fe0'); logMsg('', 'Whoosh — teleported.'); }
-    // trap
-    var tr = objAt(p.x, p.y, 'trap');
-    if (tr && tr.armed && trapHot(tr)) { var d = 4 + world.depth; hurtHero(d, 'spikes'); logMsg('die', 'Spikes! (-' + d + ')'); }
-    // region hazard (lava / brambles / quicksand / brine / void-fire)
-    var hzo = objAt(p.x, p.y, 'hazard'), HZ = hzo && HAZARDS[hzo.kind];
-    if (HZ) { hurtHero(HZ.dmg + Math.floor(world.depth / 4), 'hazard'); if (HZ.status) applyStatus(hero, HZ.status, 3); logMsg('die', 'You cross the ' + HZ.name + '!'); }
-    // rune-sequence plate — step them in the tablet's order to open the gate
-    var sq = objAt(p.x, p.y, 'seqplate'); if (sq) stepSeqPlate(sq);
-    // stairs — defer the transition so the caller's endTurn doesn't run a turn
-    // on the freshly-generated floor.
-    if (world.mode === 'town') {
-      if (p.x === world.stairs.x && p.y === world.stairs.y) { world._pendingDive = true; }
-    } else if (p.x === world.stairs.x && p.y === world.stairs.y) {
-      if (world.isBoss && bossAlive()) { logMsg('', 'The boss bars the stairs!'); }
-      else world._pendingDescend = true;
-    }
-  }
-  function bossAlive() { for (var i = 0; i < world.monsters.length; i++) if (world.monsters[i].boss) return true; return false; }
-  function trapHot(tr) { return ((world.steps + tr.phase) % 4) < 2; } // spikes up half the time
-
-  function pickup(it, idx) {
-    if (it.type === 'gold') { var g = Math.round(it.amt * greedOf()); hero.gold += g; logMsg('', '+' + g + ' gold.'); fxText(it.x, it.y, '+' + g, '#ffd76a'); }
-    else if (it.type === 'gem') { hero.gold += 50; hero.stats.gems++; questProgress('gems', 1); logMsg('win', 'A gleaming gem! (+50)'); fxText(it.x, it.y, '💎', '#7fe0d0'); }
-    else if (it.type === 'cons') { hero.bag[it.id] = (hero.bag[it.id] || 0) + 1; logMsg('', 'Picked up ' + CONS[it.id].name + '.'); fxText(it.x, it.y, CONS[it.id].icon, '#fff'); }
-    else if (it.type === 'gear') { var inst = it.item || generateItem(null, world.depth); acquireGear(inst); logMsg('win', 'Found ' + inst.name + (inst.rarity !== 'common' ? ' (' + rarityOf(inst).name + ')' : '') + '!'); fxText(it.x, it.y, inst.icon, rarityOf(inst).color); }
-    world.items.splice(idx, 1);
-    markDirty();
-  }
-  function buyPrice(p) { return Math.ceil((p || 0) * PRICE_MULT); }
-  function capOwned() {
-    var CAP = 60; if (!hero.owned || hero.owned.length <= CAP) return;
-    var lowIx = -1, lowS = Infinity;
-    for (var i = 0; i < hero.owned.length; i++) { var o = hero.owned[i];
-      if (o.uid === hero.equip.weapon || o.uid === hero.equip.armor || o.uid === hero.equip.trinket) continue;
-      var sc = itemScore(o); if (sc < lowS) { lowS = sc; lowIx = i; } }
-    if (lowIx >= 0) hero.owned.splice(lowIx, 1);
-  }
-  // Add an item instance to the pack; auto-equip if it scores higher than the
-  // current piece in that slot. Returns 'equipped' | 'kept'.
-  function acquireGear(it) {
-    if (!it) return false;
-    hero.owned = hero.owned || [];
-    hero.owned.push(it); capOwned();
-    var cur = equippedItem(it.slot);
-    if (!cur || itemScore(it) > itemScore(cur)) { hero.equip[it.slot] = it.uid; logMsg('win', 'Equipped ' + it.name + '.'); return 'equipped'; }
-    return 'kept';
-  }
-
-  function rest() {
-    if (!playerActive()) return false;
-    endTurn();   // waiting passes a turn — no free healing (potions matter now)
-    return true;
-  }
-
-  // ---- interact (E / center button): NPCs, chests, levers, stairs ----------
-  function interact() {
-    if (!playerActive()) return;
-    var p = world.player;
-    // adjacency includes current tile
-    var spots = [[p.x, p.y], [p.x + 1, p.y], [p.x - 1, p.y], [p.x, p.y + 1], [p.x, p.y - 1]];
-    for (var s = 0; s < spots.length; s++) {
-      var ox = spots[s][0], oy = spots[s][1];
-      var npc = objAt(ox, oy, 'npc'); if (npc) { openShop(npc.role); return; }
-      var lever = objAt(ox, oy, 'lever'); if (lever) { toggleLever(lever); return; }
-      var tab = objAt(ox, oy, 'tablet'); if (tab) { readTablet(tab); return; }
-      var shrine = objAt(ox, oy, 'shrine'); if (shrine) { prayShrine(shrine); return; }
-      var chest = objAt(ox, oy, 'chest'); if (chest && !chest.opened) { openChest(chest); return; }
-      var stair = objAt(ox, oy, 'stairs'); if (stair && stair.down) { startNewRun(); return; }
-      if (objAt(ox, oy, 'home')) { enter(-1); return; }
-      if (objAt(ox, oy, 'workbench')) { openFurnish(); return; }
-      if (objAt(ox, oy, 'exit')) { enter(0); return; }
-      if (objAt(ox, oy, 'owgate')) { enter(OW); return; }
-      if (world.mode === 'overworld') {
-        var twn = objAt(ox, oy, 'town'); if (twn) { if (!townUnlocked(twn.town)) { Cade.showToast('🔒 ' + townReqText(twn.town), 'info', 2400); return; } hero.ow = { x: twn.x, y: twn.y }; enter(0, twn.town); return; }
-        var dlv = objAt(ox, oy, 'delve'); if (dlv) { if (!regionUnlocked(dlv.region)) { Cade.showToast('That delve is sealed — clear the region before it', 'info', 1700); return; } hero.ow = { x: dlv.x, y: dlv.y }; hero._delveTown = hero._lastTown || 'hearth'; hero.stats.runs = (hero.stats.runs || 0) + 1; enter(regionStart(dlv.region)); return; }
-        var slk = objAt(ox, oy, 'seal'); if (slk && slk.locked) { Cade.showToast('🔒 ' + townReqText(slk.town), 'info', 2400); return; }
-        var ani = objAt(ox, oy, 'animal'); if (ani) { tameAttempt(ani); return; }
-        var gth = objAt(ox, oy, 'gather'); if (gth) { harvestNode(gth); return; }
-        var wan = objAt(ox, oy, 'wanderer'); if (wan) { talkWanderer(wan); return; }
-        var lmk = objAt(ox, oy, 'landmark'); if (lmk) { readLore(lmk); return; }
-      }
-      var nbd = objAt(ox, oy, 'noticeboard'); if (nbd) { readLore(nbd); return; }
-      var fn = objAt(ox, oy, 'furn');
-      if (fn) { if (fn.kind === 'bed') { hero.hp = maxHpOf(); hero.mp = maxMpOf(); logMsg('win', 'You rest. Fully restored.'); fxBurst(p.x, p.y, '#9fe0a0'); markDirty(); refreshAll(); } else if (fn.kind === 'stash') { openStash(); } else { Cade.showToast(FURNITURE[fn.kind].name, 'info', 1000); } return; }
-    }
-    // on town stairs tile?
-    if (world.mode === 'town' && p.x === world.stairs.x && p.y === world.stairs.y) { startNewRun(); return; }
-    rest();
-  }
-  function toggleLever(l) {
-    if (l.timed) {
-      // a timed gate: opens now and slams shut after a countdown of moves
-      for (var t = 0; t < world.objects.length; t++) { var g = world.objects[t]; if (g.type === 'gate' && g.link === l.link) { g.open = true; g.timer = l.timed; } }
-      l.on = true;
-      logMsg('win', 'The lever drops — the gate grinds open. Run! (' + l.timed + ')');
-      fxBurst(l.x, l.y, '#ffd76a'); computeFov(); markDirty(); refreshAll(); return;
-    }
-    l.on = !l.on;
-    for (var i = 0; i < world.objects.length; i++) { var o = world.objects[i]; if (o.type === 'gate' && o.link === l.link && !hasPlateLink(o.link)) o.open = l.on; }
-    logMsg('win', l.on ? 'The lever clunks — a gate grinds open.' : 'The lever resets.');
-    fxBurst(l.x, l.y, '#c9a86b'); computeFov(); markDirty(); refreshAll();
-  }
-  function stepSeqPlate(sp) {
-    if (world._seqTotal == null) { world._seqTotal = 0; for (var i = 0; i < world.objects.length; i++) if (world.objects[i].type === 'seqplate') world._seqTotal++; }
-    if (world._seqDone) return;
-    var at = world._seqAt || 0;
-    if (sp.ord === at) {
-      sp.lit = true; world._seqAt = at + 1; fxBurst(sp.x, sp.y, '#bfe0ff');
-      if (world._seqAt >= world._seqTotal) {
-        world._seqDone = true;
-        for (var g = 0; g < world.objects.length; g++) { var o = world.objects[g]; if (o.type === 'gate' && o.link === SEQ_LINK) o.open = true; }
-        logMsg('win', 'The runes blaze in sequence — the gate opens!'); computeFov();
-      } else logMsg('win', sp.rune + ' lights up. (' + world._seqAt + '/' + world._seqTotal + ')');
-    } else {
-      world._seqAt = 0;
-      for (var k = 0; k < world.objects.length; k++) if (world.objects[k].type === 'seqplate') world.objects[k].lit = false;
-      logMsg('die', 'The runes dim — the sequence resets.'); fxBurst(sp.x, sp.y, '#7a6a8a');
-    }
-    markDirty();
-  }
-  function readTablet(tb) {
-    Cade.showToast('The tablet reads:  ' + (tb.order || []).join('  →  '), 'info', 3600);
-    logMsg('', 'Tablet: ' + (tb.order || []).join(' → '));
-  }
-  function openChest(c) {
-    if (c.mimic) {
-      c.opened = true;
-      var sx = c.x, sy = c.y;
-      if (world.player.x === sx && world.player.y === sy) { var a = adjacentFree(sx, sy); if (a) { sx = a.x; sy = a.y; } }
-      var mb = makeMob(MOBS.mimic, sx, sy, false, 1 + world.depth * 0.12, world.depth);
-      mb.awake = true;
-      world.monsters.push(mb);
-      logMsg('die', 'The chest is a MIMIC!'); shake(6); fxBurst(c.x, c.y, '#caa24a');
-      markDirty(); refreshAll();
-      return;
-    }
-    c.opened = true;
-    var rolls = c.lush ? 3 : 1 + ri(2);
-    for (var i = 0; i < rolls; i++) {
-      var roll = Math.random();
-      if (roll < 0.4) { var g = (5 + ri(9)) * Math.max(1, Math.ceil((world.depth + 1) * 0.6)); hero.gold += Math.round(g * greedOf()); fxText(c.x, c.y - i * 0.3, '+' + g + 'g', '#ffd76a'); }
-      else if (roll < 0.7) { var id = chance(0.6) ? 'potion' : (chance(0.5) ? 'elixir' : 'bomb'); hero.bag[id] = (hero.bag[id] || 0) + 1; fxText(c.x, c.y - i * 0.3, CONS[id].icon, '#fff'); }
-      else { var inst = generateItem(null, world.depth + (c.lush ? 3 : 1), c.lush ? 1.5 : 0); acquireGear(inst); fxText(c.x, c.y - i * 0.3, inst.icon, rarityOf(inst).color); if (inst.rarity === 'legendary' || inst.rarity === 'epic') logMsg('win', 'A ' + rarityOf(inst).name + ' drop: ' + inst.name + '!'); }
-    }
-    logMsg('win', 'You open the chest!'); fxBurst(c.x, c.y, '#ffd76a'); markDirty(); refreshAll();
-  }
-  function prayShrine(s) {
-    if (s.used) { logMsg('', 'The shrine is silent now.'); return; }
-    s.used = true;
-    var r = Math.random();
-    if (r < 0.45) { hero.hp = maxHpOf(); hero.mp = maxMpOf(); logMsg('win', 'The shrine restores you fully.'); fxText(s.x, s.y, 'restored', '#9fe0a0'); }
-    else if (r < 0.72) { var g = 20 + world.depth * 10; hero.gold += g; hero.hp = maxHpOf(); logMsg('win', 'A blessing of fortune: +' + g + ' gold.'); fxText(s.x, s.y, '+' + g + 'g', '#ffd76a'); }
-    else if (r < 0.9) { hero.maxHp += 3; hero.hp = maxHpOf(); logMsg('win', 'Vitality surges — +3 max HP!'); fxText(s.x, s.y, '+3 HP', '#9fe0a0'); }
-    else { hero.atk += 1; logMsg('win', 'A gift of strength — +1 ATK!'); fxText(s.x, s.y, '+1 ATK', '#ffd2d2'); }
-    fxBurst(s.x, s.y, '#9fd8ff'); Cade.haptic(8); markDirty(); refreshAll();
-  }
-
-  // ---- consumables ----------------------------------------------------------
-  function useItem(id) {
-    if (!playerActive()) return;
-    if (!hero.bag[id] || hero.bag[id] <= 0) { logMsg('', 'No ' + CONS[id].name + '.'); return; }
-    var p = world.player;
-    if (id === 'potion' || id === 'hpotion') { var amt = id === 'hpotion' ? 110 : 45; if (hero.hp >= maxHpOf()) { logMsg('', 'Already at full HP.'); return; } var h = Math.min(maxHpOf() - hero.hp, amt); hero.hp = Math.min(maxHpOf(), hero.hp + amt); fxText(p.x, p.y, '+' + h + 'hp', '#9fe0a0'); }
-    else if (id === 'elixir' || id === 'eelixir') { var mamt = id === 'eelixir' ? 70 : 30; if (hero.mp >= maxMpOf()) { logMsg('', 'Already at full MP.'); return; } hero.mp = Math.min(maxMpOf(), hero.mp + mamt); fxText(p.x, p.y, '+mp', '#9fd0ff'); }
-    else if (id === 'antidote') { if (!(hero.status && (hero.status.poison > 0 || hero.status.burn > 0))) { logMsg('', 'Nothing to cure.'); return; } hero.status.poison = 0; hero.status.burn = 0; fxText(p.x, p.y, 'cured', '#9fe0a0'); logMsg('win', 'The antidote cleanses you.'); }
-    else if (id === 'bomb') { var d = p.dir; var bx = p.x + d.x, by = p.y + d.y; if (!walkable(bx, by)) { bx = p.x; by = p.y; } explodeAt(bx, by, 14 + world.depth, '#ffb060'); }
-    else if (id === 'scroll') { blinkToExplored(); }
-    else if (id === 'key') { logMsg('', 'Keys open locked doors — walk into one.'); return; }
-    hero.bag[id]--; markDirty(); refreshHud(); refreshBars(); refreshItemBar(); endTurn();
-  }
-  function blinkToExplored() {
-    var cands = [];
-    for (var y = 0; y < MH; y++) for (var x = 0; x < MW; x++) if (world.explored[y][x] && walkable(x, y) && !mobAt(x, y)) cands.push([x, y]);
-    if (!cands.length) return;
-    var c = pick(cands); var p = world.player; p.x = c[0]; p.y = c[1]; p.rx = p.x; p.ry = p.y;
-    fxBurst(p.x, p.y, '#a87fe0'); logMsg('', 'The scroll warps you away.'); computeFov();
-  }
-
-  // =========================================================================
-  //  abilities
-  // =========================================================================
-  function ensureCd() { if (!hero._cd) hero._cd = {}; return hero._cd; }
-  function spellDmg(mult) { return Math.round(atkOf() * mult * spellPowerOf()) + rr(0, 3); }
-  function useAbility(id) {
-    if (!playerActive()) return;
-    var ab = ABIL[id]; if (!ab) return;
-    if (!knowsSpell(id)) { logMsg('', 'You haven\'t learned ' + ab.name + '.'); return; }
-    if (hero.level < ab.lvl) { logMsg('', ab.name + ' needs level ' + ab.lvl + '.'); return; }
-    var cd = ensureCd();
-    if ((cd[id] || 0) > 0) { logMsg('', ab.name + ' on cooldown (' + cd[id] + ').'); return; }
-    if (hero.mp < ab.mp) { logMsg('', 'Not enough MP for ' + ab.name + '.'); return; }
-    var p = world.player, did = false;
-    if (ab.kind === 'melee') {
-      var tx = p.x + p.dir.x, ty = p.y + p.dir.y, m = mobAt(tx, ty);
-      if (!m) { logMsg('', 'Nothing in front to strike.'); return; }
-      p.bump = now(); p.bumpDir = p.dir; heroAttack(m, 2.2, 0.5); fxBurst(tx, ty, '#ffd76a'); did = true;
-    } else if (ab.kind === 'ray') { did = castRay(ab);
-    } else if (ab.kind === 'wave') { did = castWave(ab);
-    } else if (ab.kind === 'chainspell') { did = castChainSpell(ab);
-    } else if (ab.kind === 'self') {
-      var h = Math.round(maxHpOf() * (ab.heal || 0.35)); hero.hp = Math.min(maxHpOf(), hero.hp + h); fxText(p.x, p.y, '+' + h, '#9fe0a0'); fxBurst(p.x, p.y, '#9fe0a0');
-      if (ab.cure && hero.status) { hero.status.poison = 0; hero.status.burn = 0; logMsg('win', 'Cleansed of poison & burn.'); }
-      did = true;
-    } else if (ab.kind === 'buff') {
-      hero.buffs = hero.buffs || {}; hero.buffs[ab.buff] = ab.turns;
-      var BUFFMSG = { shield: ' — damage halved!', power: ' — ATK surges!', ward: ' — armoured in ice!', regen: ' — life flows back!', thorns: ' — clad in thorns!' };
-      var BUFFCOL = { shield: '#9fd8ff', power: '#ffb060', ward: '#9fd8ff', regen: '#9fe0a0', thorns: '#8fd06f' };
-      fxBurst(p.x, p.y, BUFFCOL[ab.buff] || '#bfe0ff');
-      logMsg('win', ab.name + (BUFFMSG[ab.buff] || ' active!')); did = true;
-    } else if (ab.kind === 'move') { did = doBlink(ab.range);
-    } else if (ab.kind === 'aoe') { did = doAoe(ab);
-    }
-    if (!did) return;
-    hero.mp -= ab.mp; cd[id] = ab.cd + 1;
-    markDirty(); refreshBars();
-    endTurn();
-  }
-  function spellColor(ab) { return ab.freeze ? '#9fd8ff' : ab.drain ? '#e05d8a' : ab.poison ? '#7fe0a0' : ab.weaken ? '#c79bff' : ab.stun && !ab.burn ? '#8fd06f' : ab.burn ? '#ff8040' : '#bfe0ff'; }
-  function applySpellStatus(m, ab) {
-    if (ab.burn) applyStatus(m, 'burn', 3);
-    if (ab.freeze) applyStatus(m, 'stun', 2);
-    if (ab.stun) applyStatus(m, 'stun', 2);
-    if (ab.poison) applyStatus(m, 'poison', 5);
-    if (ab.weaken) applyStatus(m, 'weaken', 5);
-  }
-  function castRay(ab) {
-    var p = world.player, x = p.x, y = p.y, hitMob = null, color = spellColor(ab);
-    for (var i = 1; i <= ab.range; i++) {
-      x += p.dir.x; y += p.dir.y;
-      if (x < 0 || y < 0 || x >= MW || y >= MH || world.map[y][x] !== T_FLOOR) { x -= p.dir.x; y -= p.dir.y; break; }
-      var m = mobAt(x, y); if (m) { hitMob = m; break; }
-    }
-    fxRay(p.x, p.y, x, y, color);
-    if (hitMob) {
-      var dmg = spellDmg(ab.mult || 1.5), dealt = Math.min(dmg, hitMob.hp);
-      damageMob(hitMob, dmg, 'spell', color);
-      applySpellStatus(hitMob, ab);
-      if (ab.drain && hero.hp < maxHpOf()) { var hl = Math.max(1, Math.floor(dealt * 0.7)); hero.hp = Math.min(maxHpOf(), hero.hp + hl); fxText(p.x, p.y, '+' + hl, '#9fe0a0'); }
-    }
-    shake(3);
-    return true;
-  }
-  // A sweeping wave: a 3-wide lane ahead, piercing all foes for `range` tiles.
-  // Each of the three lanes advances independently and STOPS for good once it
-  // meets a wall, so the wave can't wrap a corner to hit through stone.
-  function castWave(ab) {
-    var p = world.player, color = spellColor(ab), perp = { x: -p.dir.y, y: p.dir.x }, healed = 0;
-    var snap = world.monsters.slice();
-    var blockedL = false, blockedR = false;
-    for (var i = 1; i <= ab.range; i++) {
-      var bx = p.x + p.dir.x * i, by = p.y + p.dir.y * i;
-      if (bx < 0 || by < 0 || bx >= MW || by >= MH || world.map[by][bx] !== T_FLOOR) break;  // spine hits a wall — wave ends
-      for (var w = -1; w <= 1; w++) {
-        if (w === -1 && blockedL) continue;
-        if (w === 1 && blockedR) continue;
-        var tx = bx + perp.x * w, ty = by + perp.y * w;
-        if (tx < 0 || ty < 0 || tx >= MW || ty >= MH || world.map[ty][tx] !== T_FLOOR) { if (w === -1) blockedL = true; else if (w === 1) blockedR = true; continue; }
-        world.fx.push({ kind: 'spark', x: tx + 0.5, y: ty + 0.5, vx: 0, vy: 0, color: color, life: 1, born: now() });
-        for (var k = 0; k < snap.length; k++) { var m = snap[k]; if (m.hp > 0 && m.x === tx && m.y === ty) { var dmg = spellDmg(ab.mult || 1.3), dealt = Math.min(dmg, m.hp); damageMob(m, dmg, 'spell', color); applySpellStatus(m, ab); if (ab.drain) healed += Math.floor(dealt * 0.5); } }
-      }
-    }
-    if (ab.drain && healed > 0 && hero.hp < maxHpOf()) { healed = Math.min(healed, maxHpOf() - hero.hp); hero.hp += healed; fxText(p.x, p.y, '+' + healed, '#9fe0a0'); }
-    shake(6);
-    return true;
-  }
-  function castChainSpell(ab) {
-    var p = world.player, x = p.x, y = p.y, hitMob = null;
-    for (var i = 1; i <= ab.range; i++) { x += p.dir.x; y += p.dir.y; if (x < 0 || y < 0 || x >= MW || y >= MH || world.map[y][x] !== T_FLOOR) { x -= p.dir.x; y -= p.dir.y; break; } var m = mobAt(x, y); if (m) { hitMob = m; break; } }
-    fxRay(p.x, p.y, x, y, '#bfe0ff');
-    if (!hitMob) { shake(2); return true; }
-    var dmg = spellDmg(1.3);
-    damageMob(hitMob, dmg, 'spell', '#bfe0ff');
-    chainBounce(hitMob, Math.max(1, Math.round(dmg * 0.7)), 3, '#bfe0ff');
-    shake(4);
-    return true;
-  }
-  function doBlink(range) {
-    var p = world.player, lastX = p.x, lastY = p.y, moved = false;
-    for (var i = 1; i <= range; i++) {
-      var nx = p.x + p.dir.x * i, ny = p.y + p.dir.y * i;
-      if (!walkable(nx, ny) || mobAt(nx, ny)) break;
-      lastX = nx; lastY = ny; moved = true;
-    }
-    if (!moved) { logMsg('', 'No room to blink.'); return false; }
-    fxRay(p.x, p.y, lastX, lastY, '#a87fe0'); p.x = lastX; p.y = lastY; fxBurst(p.x, p.y, '#a87fe0');
-    afterStep();
-    return true;
-  }
-  function doAoe(ab) {
-    var p = world.player, range = ab.range || 2;
-    var color = spellColor(ab), mult = ab.mult || (ab.big ? 2.2 : ab.poison ? 0.8 : 1.2), healed = 0;
-    for (var i = world.monsters.length - 1; i >= 0; i--) {   // backwards: damageMob may splice
-      var m = world.monsters[i];
-      if (cheb(p.x, p.y, m.x, m.y) <= range) {
-        var dealt = Math.min(spellDmg(mult), m.hp);
-        damageMob(m, spellDmg(mult), 'spell', color);
-        applySpellStatus(m, ab);
-        if (ab.drain) healed += Math.floor(dealt * 0.5);
-      }
-    }
-    if (ab.drain && healed > 0 && hero.hp < maxHpOf()) { healed = Math.min(healed, maxHpOf() - hero.hp); hero.hp += healed; fxText(p.x, p.y, '+' + healed, '#9fe0a0'); }
-    shake(ab.big ? 12 : 9); fxBurst(p.x, p.y, color);
-    for (var r = 1; r <= range; r++) { var a = Math.random() * 6.28; world.fx.push({ kind: 'spark', x: p.x + 0.5 + Math.cos(a) * r, y: p.y + 0.5 + Math.sin(a) * r, vx: 0, vy: 0, color: color, life: 1, born: now() }); }
-    return true;
-  }
-
-  // =========================================================================
-  //  enemy turn
-  // =========================================================================
-  function tickStatus(e, isHero) {
-    e.status = e.status || {};
-    if (e.status.poison > 0) { var pd = 2; if (isHero) hurtHeroSilent(pd); else { e.hp -= pd; fxText(e.x, e.y, '-' + pd, '#9fe0a0'); if (e.hp <= 0) { killMob(e); return false; } } e.status.poison--; }
-    if (e.status.burn > 0) { var bd = 3; if (isHero) hurtHeroSilent(bd); else { e.hp -= bd; fxText(e.x, e.y, '-' + bd, '#ffb060'); if (e.hp <= 0) { killMob(e); return false; } } e.status.burn--; }
-    if (e.status.weaken > 0) e.status.weaken--;
-    if (e.status.stun > 0) { e.status.stun--; return 'stunned'; }
-    return true;
-  }
-  function hurtHeroSilent(d) { hero.hp -= d; fxText(world.player.x, world.player.y, '-' + d, '#c0ffb0'); if (hero.hp <= 0) die(); }
-
-  function actMob(m) {
-    var dist = cheb(m.x, m.y, world.player.x, world.player.y);
-    if (m.behavior === 'archer') archerAct(m, dist);
-    else if (m.behavior === 'thief') thiefAct(m, dist);
-    else if (m.behavior === 'summon') summonAct(m, dist);
-    else meleeAct(m, dist);
-  }
-  function bossPhase(m) {
-    if (m.boss && !m.enraged && m.hp <= m.maxHp * 0.5) {
-      m.enraged = true; m.atk = Math.round(m.atk * 1.35); m.swift = true;
-      logMsg('die', 'The ' + m.name + ' ENRAGES!'); shake(10); fxBurst(m.x, m.y, '#e85d5d');
-    }
-  }
-  function enemyTurn() {
-    var p = world.player;
-    for (var i = 0; i < world.monsters.length; i++) {
-      var m = world.monsters[i]; if (!m || m.hp <= 0) continue;
-      var alive = tickStatus(m, false);
-      if (alive === false) { i--; continue; }
-      if (m.regen && m.hp < m.maxHp) m.hp = Math.min(m.maxHp, m.hp + m.regen);
-      if (alive === 'stunned') continue;
-      var dist = cheb(m.x, m.y, p.x, p.y);
-      var sees = world.visible[m.y] && world.visible[m.y][m.x];
-      if (!m.awake) { if (sees && dist <= LIGHT + 1) m.awake = true; else continue; }
-      if (world.mode === 'dead') return;
-      bossPhase(m);
-      actMob(m);
-      if (hero.hp <= 0) return;
-      if (m.swift && m.hp > 0 && world.mode !== 'dead') actMob(m);   // swift elites/enraged bosses act twice
-      if (hero.hp <= 0) return;
-    }
-    // foes standing in a hazard take its toll too — lure them into the lava
-    for (var hi = world.monsters.length - 1; hi >= 0; hi--) {
-      var hm = world.monsters[hi], ho = objAt(hm.x, hm.y, 'hazard'), HH = ho && HAZARDS[ho.kind];
-      if (HH) { damageMob(hm, HH.dmg, 'hazard', HH.col); if (HH.status && hm.hp > 0) applyStatus(hm, HH.status, 3); }
-    }
-  }
-  function stepToward(m, p) {
-    var dx = sgn(p.x - m.x), dy = sgn(p.y - m.y);
-    if (m.erratic && chance(m.erratic)) { dx = rr(-1, 1); dy = rr(-1, 1); }
-    var opts = [[m.x + dx, m.y + dy], [m.x + dx, m.y], [m.x, m.y + dy]];
-    for (var o = 0; o < opts.length; o++) {
-      var tx = opts[o][0], ty = opts[o][1];
-      if (tx === m.x && ty === m.y) continue;
-      if (tx === p.x && ty === p.y) return false; // adjacent; let caller attack
-      if (!walkable(tx, ty) || mobAt(tx, ty)) continue;
-      m.x = tx; m.y = ty; return true;
-    }
-    return false;
-  }
-  function mobAtkVal(m) { return (m.status && m.status.weaken > 0) ? Math.max(1, Math.round(m.atk * 0.55)) : m.atk; }
-  function mobAttack(m) { m.bump = now(); m.bumpDir = { x: sgn(world.player.x - m.x), y: sgn(world.player.y - m.y) };
-    var dmg = Math.max(1, mobAtkVal(m) + rr(-1, 1)); hurtHero(dmg, m.name, m);
-    if (m.vamp && m.hp > 0) m.hp = Math.min(m.maxHp, m.hp + Math.ceil(dmg * 0.5));
-    if (m.poison) applyStatus(hero, 'poison', 4); if (m.burn) applyStatus(hero, 'burn', 3);
-  }
-  function meleeAct(m, dist) {
-    var p = world.player;
-    if (dist <= 1) { mobAttack(m); return; }
-    if (dist > LIGHT + 2) return;
-    stepToward(m, p);
-    if (cheb(m.x, m.y, p.x, p.y) <= 1) { /* could double-act; keep single */ }
-  }
-  function archerAct(m, dist) {
-    var p = world.player;
-    if (dist <= 1) { mobAttack(m); return; }
-    if (m.aiming) {
-      // the shot it telegraphed last turn lands now — only if you're still in the lane
-      m.aiming = false;
-      var lined = (m.x === p.x || m.y === p.y) && losClear(m.x, m.y, p.x, p.y) && cheb(m.x, m.y, p.x, p.y) <= (m.range || 5);
-      fxRay(m.x, m.y, lined ? p.x : m.aimT.x, lined ? p.y : m.aimT.y, m.burn ? '#ff80c0' : '#cdd3da');
-      if (lined) { var dmg = Math.max(1, mobAtkVal(m) + rr(0, 2)); hurtHero(dmg, m.name, m); if (m.burn) applyStatus(hero, 'burn', 3); if (m.poison) applyStatus(hero, 'poison', 4); }
-      else fxText(m.x, m.y, 'miss', '#cdd3da');
-      return;
-    }
-    var inLine = (m.x === p.x || m.y === p.y) && losClear(m.x, m.y, p.x, p.y);
-    if (inLine && dist <= (m.range || 5)) {   // wind up — gives you a turn to break the line
-      m.aiming = true; m.aimT = { x: p.x, y: p.y };
-      logMsg('', 'The ' + m.name + ' takes aim — move!');
-      return;
-    }
-    stepToward(m, p);
-  }
-  function thiefAct(m, dist) {
-    var p = world.player;
-    if (m._fleeing) { fleeFrom(m, p); m._fleeT = (m._fleeT || 0) - 1; if (m._fleeT <= 0) m._fleeing = false; return; }
-    if (dist <= 1) { var steal = Math.min(hero.gold, 8 + ri(12) + world.depth * 2); if (steal > 0) { hero.gold -= steal; m._loot = (m._loot || 0) + steal; fxText(p.x, p.y, '-' + steal + 'g', '#ffd76a'); logMsg('', 'The ' + m.name + ' steals ' + steal + ' gold!'); } m._fleeing = true; m._fleeT = 6; markDirty(); return; }
-    stepToward(m, p);
-  }
-  function fleeFrom(m, p) {
-    var dx = sgn(m.x - p.x), dy = sgn(m.y - p.y);
-    var opts = [[m.x + dx, m.y + dy], [m.x + dx, m.y], [m.x, m.y + dy]];
-    for (var o = 0; o < opts.length; o++) { var tx = opts[o][0], ty = opts[o][1]; if (walkable(tx, ty) && !mobAt(tx, ty) && !(tx === p.x && ty === p.y)) { m.x = tx; m.y = ty; return; } }
-  }
-  function summonAct(m, dist) {
-    var p = world.player;
-    if (dist <= 1) { mobAttack(m); return; }
-    if (m.summons && chance(0.25) && world.monsters.length < 16) {
-      var sp = adjacentFree(m.x, m.y); if (sp) { world.monsters.push(makeMob(MOBS[m.summons], sp.x, sp.y, false, 1 + world.depth * 0.05, world.depth)); world.monsters[world.monsters.length - 1].awake = true; fxBurst(sp.x, sp.y, m.col); logMsg('', 'The ' + m.name + ' summons aid!'); }
-      return;
-    }
-    stepToward(m, p);
-  }
-
-  // =========================================================================
-  //  turn pipeline
-  // =========================================================================
-  function endTurn() {
-    if (world.mode === 'dead') { refreshAll(); return; }
-    // consume any deferred area transition before spending a turn
-    if (world._pendingDescend) { world._pendingDescend = false; descend(); return; }
-    if (world._pendingDive) { world._pendingDive = false; startNewRun(); return; }
-    if (world._pendingTown) { world._pendingTown = false; enter(0); return; }
-    if (world._pendingHouse) { world._pendingHouse = false; enter(-1); return; }
-    if (world._pendingOverworld) { world._pendingOverworld = false; enter(OW); return; }
-    if (world._pendingTownId) { var ptid = world._pendingTownId; world._pendingTownId = 0; enter(0, ptid); return; }
-    if (world._pendingDelve != null) { var pr = world._pendingDelve; world._pendingDelve = null; hero._delveTown = hero._lastTown || 'hearth'; hero.stats.runs = (hero.stats.runs || 0) + 1; enter(regionStart(pr)); return; }
-    world.steps++;
-    // hero status (DoT)
-    tickStatus(hero, true);
-    if (hero.hp <= 0) { refreshAll(); return; }
-    // regen: HP only from a Regen trinket (slow); MP trickles slowly. No free
-    // healing just for walking/waiting — that's what potions & elixirs are for.
-    var rg = regenOf();
-    if (rg && world.steps % 4 === 0 && hero.hp < maxHpOf()) hero.hp = Math.min(maxHpOf(), hero.hp + rg);
-    if (world.steps % 12 === 0 && hero.mp < maxMpOf()) hero.mp = Math.min(maxMpOf(), hero.mp + 1);
-    // cooldowns + buffs
-    var cd = ensureCd(); for (var k in cd) if (cd[k] > 0) cd[k]--;
-    if (hero.buffs) {
-      if (hero.buffs.regen > 0) { var rh = Math.max(1, Math.ceil(maxHpOf() * 0.06)); if (hero.hp < maxHpOf()) { hero.hp = Math.min(maxHpOf(), hero.hp + rh); fxText(world.player.x, world.player.y, '+' + rh, '#9fe0a0'); } hero.buffs.regen--; }
-      if (hero.buffs.shield > 0) hero.buffs.shield--;
-      if (hero.buffs.power > 0) hero.buffs.power--;
-      if (hero.buffs.ward > 0) hero.buffs.ward--;
-      if (hero.buffs.thorns > 0) hero.buffs.thorns--;
-    }
-    // enemies (none in safe areas)
-    if (world.mode === 'overworld') overworldTick();
-    else if (world.mode !== 'town' && world.mode !== 'house') enemyTurn();
-    // timed gates count down and slam shut
-    for (var tg = 0; tg < world.objects.length; tg++) { var gt = world.objects[tg];
-      if (gt.type === 'gate' && gt.timer > 0) { gt.timer--;
-        if (gt.timer <= 0) { gt.timer = 0; if (!hasPlateLink(gt.link)) gt.open = false; logMsg('die', 'The timed gate slams shut!'); shake(4); } } }
-    updatePlates();
-    computeFov();
-    if (hero.hp <= 0 && world.mode !== 'dead') die();
-    refreshAll();
-    markDirty();
-  }
-
-  // =========================================================================
-  //  pathfinding (BFS) + tap-to-travel
-  // =========================================================================
-  function bfsPath(sx, sy, tx, ty) {
-    if (sx === tx && sy === ty) return [];
-    var q = [[sx, sy]], prev = {}, seen = {}; seen[key(sx, sy)] = 1;
-    while (q.length) {
-      var c = q.shift(), cx = c[0], cy = c[1];
-      var nb = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
-      for (var i = 0; i < 4; i++) {
-        var nx = nb[i][0], ny = nb[i][1];
-        if (nx < 0 || ny < 0 || nx >= MW || ny >= MH) continue;
-        var kk = key(nx, ny); if (seen[kk]) continue;
-        var passable = walkable(nx, ny);
-        // allow stepping onto target even if it has a mob/chest/stairs (we stop there)
-        if (!passable && !(nx === tx && ny === ty)) continue;
-        if (mobAt(nx, ny) && !(nx === tx && ny === ty)) continue;
-        seen[kk] = 1; prev[kk] = [cx, cy];
-        if (nx === tx && ny === ty) {
-          var path = [], cur = [tx, ty];
-          while (!(cur[0] === sx && cur[1] === sy)) { path.push(cur); cur = prev[key(cur[0], cur[1])]; if (!cur) break; }
-          path.reverse(); return path;
-        }
-        q.push([nx, ny]);
-      }
-    }
-    return null;
-  }
-  function startTravel(tx, ty) {
-    if (!playerActive()) return;
-    if (!world.explored[ty] || !world.explored[ty][tx]) return;
-    // only route to a real, reachable floor tile (or a foe/feature standing on
-    // floor) — never to a wall, sealed gate, or unexplored void.
-    if (!walkable(tx, ty)) return;
-    var p = world.player;
-    var path = bfsPath(p.x, p.y, tx, ty);
-    if (!path || !path.length) return;
-    world.path = path; world.pathT = 0;
-  }
-  function cancelTravel() { if (world) { world.path = null; } }
-  function travelStep() {
-    if (!world || !world.path || !world.path.length || !playerActive()) { if (world) world.path = null; return; }
-    // stop if a visible enemy is near
-    for (var i = 0; i < world.monsters.length; i++) { var m = world.monsters[i]; if (m.awake && world.visible[m.y] && world.visible[m.y][m.x] && cheb(m.x, m.y, world.player.x, world.player.y) <= LIGHT) { world.path = null; return; } }
-    var hpBefore = hero.hp;
-    var nxt = world.path.shift();
-    var dx = nxt[0] - world.player.x, dy = nxt[1] - world.player.y;
-    var moved = tryMove(dx, dy);
-    if (!moved) { world.path = null; return; }
-    if (world && hero.hp < hpBefore) world.path = null;   // took damage (trap/ambush) — stop here
-    if (!world || !world.path || !world.path.length) { if (world) world.path = null; }
-  }
-
-  // =========================================================================
-  //  rendering
-  // =========================================================================
-  function camera() {
-    var p = world.player;
-    var rx = p.rx == null ? p.x : p.rx, ry = p.ry == null ? p.y : p.ry;
-    // centre on the (smoothly-lerped) player position, in float tiles
-    var cx = clamp(rx - (VW - 1) / 2, 0, MW - VW);
-    var cy = clamp(ry - (VH - 1) / 2, 0, MH - VH);
-    return { x: cx, y: cy };
-  }
-  // Constant-speed glide toward the logical tile — crisp grid steps, no float drift.
-  function lerpEnt(e, dt) {
-    if (e.rx == null) e.rx = e.x; if (e.ry == null) e.ry = e.y;
-    var step = 14 * dt;                       // tiles / second
-    var dx = e.x - e.rx, dy = e.y - e.ry;
-    // snap if a long jump (teleport/blink across the map) to avoid a slow crawl
-    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) { e.rx = e.x; e.ry = e.y; return; }
-    e.rx = Math.abs(dx) <= step ? e.x : e.rx + step * (dx < 0 ? -1 : 1);
-    e.ry = Math.abs(dy) <= step ? e.y : e.ry + step * (dy < 0 ? -1 : 1);
-  }
-  function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
-
-  var lastFrame = 0;
-  function render(ts) {
-    if (!ui || !ui.canvas || !ui.canvas.isConnected) { state_teardown(); return; }
-    var dt = lastFrame ? Math.min(0.05, (ts - lastFrame) / 1000) : 0.016; lastFrame = ts;
-    var ctx = ui.ctx, w = world;
-    if (!w) { return; }
-    lerpEnt(w.player, dt);            // lerp player first so the camera tracks it smoothly
-    var cam = camera();
-    var b = w.biome;
-    // shake
-    var sox = 0, soy = 0;
-    if (w.shake > 0) { sox = (Math.random() - 0.5) * w.shake; soy = (Math.random() - 0.5) * w.shake; w.shake = Math.max(0, w.shake - dt * 40); }
-    ctx.setTransform(ui.dpr, 0, 0, ui.dpr, 0, 0);
-    ctx.clearRect(0, 0, CW, CH);
-    ctx.fillStyle = '#06070a'; ctx.fillRect(0, 0, CW, CH);
-    ctx.save(); ctx.translate(sox, soy);
-
-    // tiles — iterate one extra ring so sub-pixel scrolling never shows a gap
-    var sx0 = Math.floor(cam.x) - 1, sy0 = Math.floor(cam.y) - 1;
-    for (var vy = 0; vy < VH + 2; vy++) for (var vx = 0; vx < VW + 2; vx++) {
-      var mx = sx0 + vx, my = sy0 + vy;
-      if (mx < 0 || my < 0 || mx >= MW || my >= MH) continue;
-      if (!w.explored[my][mx]) continue;
-      var vis = w.visible[my][mx];
-      var px = (mx - cam.x) * TILE, py = (my - cam.y) * TILE;
-      var t = w.map[my][mx];
-      if (t === T_FLOOR) {
-        ctx.fillStyle = ((mx + my) & 1) ? b.floor : b.floor2;
-        ctx.fillRect(px, py, TILE, TILE);
-      } else if (b.hedge) {
-        // overworld maze wall — a leafy hedge
-        ctx.fillStyle = b.wall; ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = b.wallTop; for (var hh = 0; hh < 5; hh++) { var hx = px + 3 + ((mx * 7 + my * 13 + hh * 5) % (TILE - 6)), hy = py + 3 + ((my * 11 + mx * 5 + hh * 7) % (TILE - 6)); ctx.beginPath(); ctx.arc(hx, hy, 2.4, 0, 6.3); ctx.fill(); }
-      } else {
-        // wall
-        ctx.fillStyle = b.wall; ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = b.wallTop; ctx.fillRect(px, py, TILE, 4);
-        if (t === T_CRACK) { ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(px + 4, py + 4); ctx.lineTo(px + TILE - 6, py + TILE - 8); ctx.moveTo(px + TILE - 6, py + 6); ctx.lineTo(px + 6, py + TILE - 5); ctx.stroke(); }
-      }
-      if (!vis) { ctx.fillStyle = 'rgba(4,5,9,0.55)'; ctx.fillRect(px, py, TILE, TILE); }
-    }
-
-    // objects (lerp roaming overworld life so it glides)
-    for (var ol = 0; ol < w.objects.length; ol++) { if (w.objects[ol].mobile) lerpEnt(w.objects[ol], dt); }
-    for (var oi = 0; oi < w.objects.length; oi++) drawObject(ctx, w.objects[oi], cam);
-    // items
-    for (var ii = 0; ii < w.items.length; ii++) drawItem(ctx, w.items[ii], cam);
-    // stairs (dungeon only)
-    if ((w.mode === 'dungeon' || w.mode === 'dead') && w.explored[w.stairs.y][w.stairs.x]) {
-      var svis = w.visible[w.stairs.y][w.stairs.x];
-      glyph(ctx, '▼', (w.stairs.x - cam.x) * TILE + TILE / 2, (w.stairs.y - cam.y) * TILE + TILE / 2, w.isBoss && bossAlive() ? '#6a5a44' : '#7fe08a', svis ? 1 : 0.4, 18);
-    }
-    // monsters
-    for (var mi = 0; mi < w.monsters.length; mi++) { var m = w.monsters[mi]; lerpEnt(m, dt); if (w.visible[m.y] && w.visible[m.y][m.x]) drawMob(ctx, m, cam); }
-    // telegraphed shots — dashed warning lane you can step out of
-    ctx.save(); ctx.setLineDash([4, 4]); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,90,90,0.8)';
-    for (var ti = 0; ti < w.monsters.length; ti++) { var am = w.monsters[ti]; if (am.aiming && am.aimT && w.visible[am.y] && w.visible[am.y][am.x]) {
-      ctx.beginPath(); ctx.moveTo((am.x - cam.x) * TILE + TILE / 2, (am.y - cam.y) * TILE + TILE / 2); ctx.lineTo((am.aimT.x - cam.x) * TILE + TILE / 2, (am.aimT.y - cam.y) * TILE + TILE / 2); ctx.stroke();
-    } }
-    ctx.setLineDash([]); ctx.restore();
-    // player (already lerped at the top of the frame) + companion pet
-    var p = w.player; drawPet(ctx, p, cam, dt); drawPlayer(ctx, p, cam);
-
-    // projectiles / fx
-    drawFx(ctx, cam, dt);
-
-    ctx.restore();
-
-    // path dots
-    if (w.path && w.path.length) {
-      ctx.globalAlpha = 0.5;
-      for (var pi = 0; pi < w.path.length; pi++) { var c = w.path[pi]; ctx.fillStyle = b.accent; ctx.beginPath(); ctx.arc((c[0] - cam.x) * TILE + TILE / 2, (c[1] - cam.y) * TILE + TILE / 2, 2.5, 0, 6.3); ctx.fill(); }
-      ctx.globalAlpha = 1;
-    }
-
-    // dead overlay
-    if (w.mode === 'dead') drawDeath(ctx);
-
-    // advance auto-travel on a cadence
-    w.pathT = (w.pathT || 0) + dt;
-    if (w.path && w.path.length && w.pathT > 0.11) { w.pathT = 0; travelStep(); }
-
-    if (w._logDirty) { refreshLog(); w._logDirty = false; }
-
-    raf = requestAnimationFrame(render);
-  }
-
-  function glyph(ctx, ch, cx, cy, color, alpha, size) {
-    ctx.globalAlpha = alpha == null ? 1 : alpha;
-    ctx.fillStyle = color; ctx.font = '600 ' + (size || 16) + 'px ui-monospace, "JetBrains Mono", monospace';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(ch, cx, cy + 1);
-    ctx.globalAlpha = 1;
-  }
-  function drawObject(ctx, o, cam) {
-    if (!world.explored[o.y][o.x]) return;
-    var vis = world.visible[o.y][o.x];
-    var cx = (o.x - cam.x) * TILE + TILE / 2, cy = (o.y - cam.y) * TILE + TILE / 2;
-    var px = (o.x - cam.x) * TILE, py = (o.y - cam.y) * TILE;
-    var a = vis ? 1 : 0.4;
-    switch (o.type) {
-      case 'gate':
-        if (o.open) { glyph(ctx, '╬', cx, cy, 'rgba(150,140,120,0.35)', a, 16); }
-        else { ctx.globalAlpha = a; ctx.fillStyle = '#6b5a44'; for (var bx = 0; bx < 3; bx++) ctx.fillRect(px + 3 + bx * 7, py + 2, 4, TILE - 4); ctx.globalAlpha = 1; }
-        if (o.timer > 0) glyph(ctx, String(o.timer), cx, cy - TILE * 0.5, o.timer <= 5 ? '#ff6a6a' : '#ffd76a', 1, 12);
-        break;
-      case 'door':
-        ctx.globalAlpha = a; ctx.fillStyle = o.locked ? '#8a5a3a' : '#5a4a3a'; roundRect(ctx, px + 3, py + 2, TILE - 6, TILE - 4, 3); ctx.fill();
-        if (o.locked) glyph(ctx, '🔒', cx, cy, '#fff', a, 12); ctx.globalAlpha = 1; break;
-      case 'lever': glyph(ctx, o.on ? '⤵' : '⤴', cx, cy, o.on ? '#9fe08a' : world.biome.accent, a, 18); break;
-      case 'plate': ctx.globalAlpha = a; ctx.strokeStyle = o.pressed ? '#9fe08a' : '#8a8270'; ctx.lineWidth = 2; roundRect(ctx, px + 5, py + 5, TILE - 10, TILE - 10, 3); ctx.stroke(); ctx.globalAlpha = 1; break;
-      case 'boulder': ctx.globalAlpha = a; ctx.fillStyle = '#7a7062'; ctx.beginPath(); ctx.arc(cx, cy, TILE / 2 - 3, 0, 6.3); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.beginPath(); ctx.arc(cx - 3, cy - 3, TILE / 4, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1; break;
-      case 'trap':
-        if (!o.armed) { glyph(ctx, '⚙', cx, cy, 'rgba(120,120,120,0.5)', a, 12); break; }
-        if (trapHot(o)) glyph(ctx, '▲', cx, cy, '#e87a7a', a, 16); else glyph(ctx, '⬚', cx, cy, 'rgba(160,120,120,0.5)', a, 12);
-        break;
-      case 'tele': glyph(ctx, '◉', cx, cy, o.vault ? '#e0a0ff' : '#a87fe0', a * (0.6 + 0.4 * Math.abs(Math.sin(now() / 400))), 18); break;
-      case 'ice':
-        ctx.globalAlpha = a; ctx.fillStyle = '#a9d8ec'; roundRect(ctx, px + 1, py + 1, TILE - 2, TILE - 2, 4); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(px + 4, py + 4, TILE - 14, 2); ctx.fillRect(px + 8, py + 9, TILE - 18, 1.5); ctx.globalAlpha = 1; break;
-      case 'seqplate':
-        ctx.globalAlpha = a; ctx.fillStyle = o.lit ? 'rgba(120,200,255,0.35)' : 'rgba(40,48,60,0.6)';
-        roundRect(ctx, px + 3, py + 3, TILE - 6, TILE - 6, 4); ctx.fill();
-        ctx.strokeStyle = o.lit ? '#9fe0ff' : '#5a6478'; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1;
-        glyph(ctx, o.rune, cx, cy, '#fff', a, 13); break;
-      case 'tablet':
-        ctx.globalAlpha = a; ctx.fillStyle = '#6a6052'; roundRect(ctx, px + 6, py + 3, TILE - 12, TILE - 6, 2); ctx.fill();
-        ctx.fillStyle = '#cbbfa6'; ctx.font = '8px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText('▦', cx, cy - 3); ctx.fillText('▦', cx, cy + 4); ctx.globalAlpha = 1;
-        glyph(ctx, '📜', cx, cy - TILE * 0.5, '#fff', a, 11); break;
-      case 'shrine': glyph(ctx, '⛩', cx, cy, o.used ? 'rgba(150,160,180,0.45)' : '#bfe0ff', o.used ? a : a * (0.7 + 0.3 * Math.abs(Math.sin(now() / 500))), 18); break;
-      case 'hazard': var HZ = HAZARDS[o.kind] || {}; ctx.globalAlpha = a * 0.45; ctx.fillStyle = HZ.col || '#888'; roundRect(ctx, px + 1, py + 1, TILE - 2, TILE - 2, 3); ctx.fill(); ctx.globalAlpha = 1; glyph(ctx, HZ.ch || '≈', cx, cy, 'rgba(0,0,0,0.5)', a, 13); break;
-      case 'chest': glyph(ctx, o.opened ? '📭' : (o.lush ? '🎁' : '📦'), cx, cy, '#ffd76a', a, 16); break;
-      case 'npc':
-        drawCharacter(ctx, cx, cy - 1, TILE / 2 - 3, { x: 0, y: 1 }, o.cos || {}, now() + o.x * 130);
-        glyph(ctx, o.icon, cx + TILE * 0.42, cy - TILE * 0.34, '#fff', 1, 12);  // profession token
-        ctx.globalAlpha = 0.9; ctx.fillStyle = o.col || '#fff'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText(o.name, cx, cy + 14); ctx.globalAlpha = 1; break;
-      case 'stairs': glyph(ctx, '▾', cx, cy, '#9fe08a', 1, 20);
-        ctx.globalAlpha = 0.8; ctx.fillStyle = '#9fe08a'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText('descend', cx, cy + 14); ctx.globalAlpha = 1; break;
-      case 'home': glyph(ctx, '🏠', cx, cy, '#fff', 1, 18);
-        ctx.globalAlpha = 0.85; ctx.fillStyle = '#e0b060'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText('Home', cx, cy + 14); ctx.globalAlpha = 1; break;
-      case 'exit': glyph(ctx, '🚪', cx, cy, '#fff', 1, 18);
-        ctx.globalAlpha = 0.85; ctx.fillStyle = '#e0b060'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText('leave', cx, cy + 14); ctx.globalAlpha = 1; break;
-      case 'owgate': glyph(ctx, '🚪', cx, cy, '#fff', 1, 18);
-        ctx.globalAlpha = 0.85; ctx.fillStyle = '#9fd06f'; ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText('Overworld', cx, cy + 14); ctx.globalAlpha = 1; break;
-      case 'workbench': glyph(ctx, '🛠', cx, cy, '#fff', 1, 18); break;
-      case 'furn': glyph(ctx, (FURNITURE[o.kind] || {}).icon || '▫', cx, cy, '#fff', 1, 18); break;
-      case 'trophyicon': glyph(ctx, '🏆', cx, cy, '#ffd76a', 1, 16); break;
-      case 'deco': drawDeco(ctx, o, px, py, cx, cy); break;
-      case 'landmark':
-        glyph(ctx, o.icon || '🗿', cx, cy - 1, '#fff', a, 18);
-        glyph(ctx, '❓', cx + TILE * 0.34, cy - TILE * 0.34, '#cdb4ff', a * 0.9, 9); break;
-      case 'gather':
-        ctx.globalAlpha = a * (0.55 + 0.25 * Math.abs(Math.sin(now() / 500))); ctx.fillStyle = '#ffe28a'; ctx.beginPath(); ctx.arc(cx, cy, TILE / 2 - 4, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1;
-        glyph(ctx, (MATS[o.mat] || {}).icon || '◆', cx, cy, '#fff', a, 14); break;
-      case 'noticeboard':
-        ctx.globalAlpha = a; ctx.fillStyle = '#6b4a2a'; ctx.fillRect(cx - 8, cy - 7, 16, 12);
-        ctx.fillStyle = '#d8c9a8'; ctx.fillRect(cx - 6, cy - 5, 12, 8);
-        ctx.fillStyle = '#6b4a2a'; ctx.fillRect(cx - 1.5, cy + 5, 3, 4);
-        ctx.strokeStyle = '#9a8a6a'; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.moveTo(cx - 4, cy - 3); ctx.lineTo(cx + 4, cy - 3); ctx.moveTo(cx - 4, cy); ctx.lineTo(cx + 4, cy); ctx.moveTo(cx - 4, cy + 3); ctx.lineTo(cx + 2, cy + 3); ctx.stroke(); ctx.globalAlpha = 1; break;
-      case 'town': {
-        var T = TOWNS[o.town] || {}, tlock = !townUnlocked(o.town);
-        glyph(ctx, T.icon || '🏘', cx, cy - 2, '#fff', tlock ? 0.5 : 1, 20);
-        if (tlock) glyph(ctx, '🔒', cx + TILE * 0.34, cy - TILE * 0.32, '#fff', 0.95, 11);
-        ctx.globalAlpha = tlock ? 0.55 : 0.95; ctx.fillStyle = (T.pal && T.pal.accent) || '#ffd76a'; ctx.font = '700 9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText(T.name || o.town, cx, cy + 13); ctx.globalAlpha = 1; break;
-      }
-      case 'seal': {
-        if (o.locked) { ctx.globalAlpha = a; ctx.fillStyle = '#7a3a6a'; for (var sb = 0; sb < 3; sb++) ctx.fillRect(px + 3 + sb * 7, py + 2, 4, TILE - 4); ctx.globalAlpha = 1; glyph(ctx, '🔒', cx, cy, '#fff', 1, 11); }
-        else glyph(ctx, '⛓', cx, cy, 'rgba(180,160,200,0.35)', a, 14);
-        break;
-      }
-      case 'delve': {
-        var rg = REGIONS[o.region] || {}, unlocked = regionUnlocked(o.region);
-        // a dark portal disc behind the icon
-        ctx.globalAlpha = 0.9; ctx.fillStyle = '#0c0d12'; ctx.beginPath(); ctx.arc(cx, cy - 1, TILE / 2 - 2, 0, 6.3); ctx.fill();
-        ctx.strokeStyle = unlocked ? (rg.pal && rg.pal.accent || '#a87fe0') : '#4a4a55'; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1;
-        glyph(ctx, unlocked ? (rg.icon || '⛰') : '🔒', cx, cy - 1, '#fff', 1, 15);
-        ctx.globalAlpha = 0.9; ctx.fillStyle = unlocked ? (rg.pal && rg.pal.accent || '#cbb4ff') : '#7a7a85'; ctx.font = '700 8px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText((rg.name || 'Delve').replace(/^The /, ''), cx, cy + 13); ctx.globalAlpha = 1; break;
-      }
-      case 'animal': { var acx = ((o.rx == null ? o.x : o.rx) - cam.x) * TILE + TILE / 2, acy = ((o.ry == null ? o.y : o.ry) - cam.y) * TILE + TILE / 2; drawPetShape(ctx, acx, acy, TILE * 0.3, o.kind, now() + o.x * 90); break; }
-      case 'wanderer': { var wcx = ((o.rx == null ? o.x : o.rx) - cam.x) * TILE + TILE / 2, wcy = ((o.ry == null ? o.y : o.ry) - cam.y) * TILE + TILE / 2; drawCharacter(ctx, wcx, wcy - 1, TILE / 2 - 3, { x: 0, y: 1 }, o.cos || {}, now() + o.x * 130); glyph(ctx, '💬', wcx + TILE * 0.4, wcy - TILE * 0.36, '#fff', 0.85, 10); break; }
-    }
-  }
-  function drawDeco(ctx, o, px, py, cx, cy) {
-    switch (o.kind) {
-      case 'water':
-        ctx.fillStyle = '#2a6a8a'; ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = 'rgba(160,220,240,0.25)'; var wy = py + TILE / 2 + Math.sin(now() / 600 + o.x) * 1.5; ctx.fillRect(px, wy, TILE, 2); break;
-      case 'mountain':
-        ctx.fillStyle = '#5a5e66'; ctx.beginPath(); ctx.moveTo(px + 2, py + TILE - 2); ctx.lineTo(px + TILE / 2, py + 3); ctx.lineTo(px + TILE - 2, py + TILE - 2); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#d6dde6'; ctx.beginPath(); ctx.moveTo(px + TILE / 2 - 4, py + 9); ctx.lineTo(px + TILE / 2, py + 3); ctx.lineTo(px + TILE / 2 + 4, py + 9); ctx.closePath(); ctx.fill(); break;
-      case 'tree': ctx.fillStyle = '#5a3a22'; ctx.fillRect(cx - 1.5, cy + 2, 3, 6); ctx.fillStyle = '#3f7a3a'; ctx.beginPath(); ctx.arc(cx, cy, 6, 0, 6.3); ctx.fill(); ctx.fillStyle = '#4f9a4a'; ctx.beginPath(); ctx.arc(cx - 2, cy - 2, 4, 0, 6.3); ctx.fill(); break;
-      case 'pine': ctx.fillStyle = '#5a3a22'; ctx.fillRect(cx - 1.5, cy + 3, 3, 5); ctx.fillStyle = '#2f6e3c'; ctx.beginPath(); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx - 6, cy + 4); ctx.lineTo(cx + 6, cy + 4); ctx.closePath(); ctx.fill(); break;
-      case 'flower': glyph(ctx, '✿', cx, cy, ['#e88ab8', '#ffd76a', '#bfa0ff'][o.x % 3], 0.9, 12); break;
-      case 'rock': ctx.fillStyle = '#6a6a72'; ctx.beginPath(); ctx.arc(cx, cy + 2, 4, 0, 6.3); ctx.fill(); break;
-      case 'grass': ctx.strokeStyle = '#5a8a4a'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(cx - 3, cy + 4); ctx.lineTo(cx - 4, cy - 1); ctx.moveTo(cx, cy + 4); ctx.lineTo(cx, cy - 3); ctx.moveTo(cx + 3, cy + 4); ctx.lineTo(cx + 4, cy - 1); ctx.stroke(); break;
-      case 'road': ctx.fillStyle = 'rgba(150,128,90,0.34)'; roundRect(ctx, px + 1, py + 1, TILE - 2, TILE - 2, 5); ctx.fill(); ctx.fillStyle = 'rgba(120,100,70,0.30)'; ctx.fillRect(px + 5, py + 11, 3, 3); ctx.fillRect(px + 14, py + 6, 3, 3); break;
-      case 'cobble': ctx.fillStyle = 'rgba(150,150,160,0.18)'; ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2); ctx.strokeStyle = 'rgba(80,80,90,0.35)'; ctx.lineWidth = 0.6; ctx.strokeRect(px + 3.5, py + 3.5, 8, 8); ctx.strokeRect(px + 13.5, py + 13.5, 8, 8); break;
-      case 'fountain':
-        ctx.fillStyle = '#5a6470'; ctx.beginPath(); ctx.arc(cx, cy, TILE / 2 - 2, 0, 6.3); ctx.fill();
-        ctx.fillStyle = '#3a86b0'; ctx.beginPath(); ctx.arc(cx, cy, TILE / 2 - 5, 0, 6.3); ctx.fill();
-        ctx.fillStyle = '#bfe6f4'; ctx.beginPath(); ctx.arc(cx, cy - 1, 2.4 + Math.sin(now() / 300) * 0.7, 0, 6.3); ctx.fill(); break;
-      case 'lamp': ctx.fillStyle = '#3a3a44'; ctx.fillRect(cx - 1, cy - 2, 2, 9);
-        ctx.globalAlpha = 0.5 + 0.2 * Math.sin(now() / 500); ctx.fillStyle = '#ffe08a'; ctx.beginPath(); ctx.arc(cx, cy - 4, 4.5, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1;
-        ctx.fillStyle = '#ffd76a'; ctx.beginPath(); ctx.arc(cx, cy - 4, 2.2, 0, 6.3); ctx.fill(); break;
-      case 'banner': var hue = o.hue || 200; ctx.fillStyle = 'hsl(' + hue + ',55%,45%)'; ctx.beginPath(); ctx.moveTo(cx - 5, py + 2); ctx.lineTo(cx + 5, py + 2); ctx.lineTo(cx + 5, py + 16); ctx.lineTo(cx, py + 12); ctx.lineTo(cx - 5, py + 16); ctx.closePath(); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(cx - 1, py + 4, 2, 8); break;
-      case 'crate': ctx.fillStyle = '#8a6038'; ctx.fillRect(cx - 6, cy - 6, 12, 12); ctx.strokeStyle = '#5a3a20'; ctx.lineWidth = 1.2; ctx.strokeRect(cx - 6, cy - 6, 12, 12); ctx.beginPath(); ctx.moveTo(cx - 6, cy - 6); ctx.lineTo(cx + 6, cy + 6); ctx.moveTo(cx + 6, cy - 6); ctx.lineTo(cx - 6, cy + 6); ctx.stroke(); break;
-      case 'barrel': ctx.fillStyle = '#7a5028'; roundRect(ctx, cx - 5, cy - 6, 10, 12, 4); ctx.fill(); ctx.strokeStyle = '#caa060'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx - 5, cy - 2); ctx.lineTo(cx + 5, cy - 2); ctx.moveTo(cx - 5, cy + 2); ctx.lineTo(cx + 5, cy + 2); ctx.stroke(); break;
-      case 'bush': ctx.fillStyle = '#3f7a3a'; ctx.beginPath(); ctx.arc(cx - 3, cy + 1, 4, 0, 6.3); ctx.arc(cx + 3, cy + 1, 4, 0, 6.3); ctx.arc(cx, cy - 2, 4.5, 0, 6.3); ctx.fill(); break;
-      case 'flowerbed': ctx.fillStyle = '#4a3320'; roundRect(ctx, cx - 7, cy - 3, 14, 8, 2); ctx.fill(); ['#e88ab8', '#ffd76a', '#bfa0ff'].forEach(function (cc, i) { ctx.fillStyle = cc; ctx.beginPath(); ctx.arc(cx - 4 + i * 4, cy, 1.8, 0, 6.3); ctx.fill(); }); break;
-      case 'plant': ctx.fillStyle = '#caa060'; ctx.fillRect(cx - 3, cy + 1, 6, 5); ctx.fillStyle = '#3f8a4a'; ctx.beginPath(); ctx.arc(cx, cy - 2, 4, 0, 6.3); ctx.fill(); break;
-      case 'cactus': ctx.fillStyle = '#3f8a5a'; ctx.fillRect(cx - 2, cy - 6, 4, 12); ctx.fillRect(cx - 6, cy - 2, 4, 3); ctx.fillRect(cx - 6, cy - 4, 3, 4); ctx.fillRect(cx + 3, cy - 1, 4, 3); ctx.fillRect(cx + 4, cy - 4, 3, 4); break;
-      case 'reed': ctx.strokeStyle = '#7a9a5a'; ctx.lineWidth = 1.4; for (var ri2 = -1; ri2 <= 1; ri2++) { ctx.beginPath(); ctx.moveTo(cx + ri2 * 3, cy + 5); ctx.lineTo(cx + ri2 * 3 + 1, cy - 5); ctx.stroke(); } ctx.fillStyle = '#9a7a4a'; ctx.fillRect(cx - 1, cy - 6, 2, 3); break;
-      case 'deadtree': ctx.strokeStyle = '#6a5a4a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx, cy + 6); ctx.lineTo(cx, cy - 6); ctx.moveTo(cx, cy - 1); ctx.lineTo(cx - 4, cy - 5); ctx.moveTo(cx, cy - 3); ctx.lineTo(cx + 4, cy - 6); ctx.stroke(); break;
-      case 'gravestone': ctx.fillStyle = '#8a8a92'; roundRect(ctx, cx - 4, cy - 6, 8, 12, 4); ctx.fill(); ctx.strokeStyle = '#5a5a62'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(cx, cy - 3); ctx.lineTo(cx, cy + 2); ctx.moveTo(cx - 2, cy - 1); ctx.lineTo(cx + 2, cy - 1); ctx.stroke(); break;
-    }
-  }
-  function drawItem(ctx, it, cam) {
-    if (!world.visible[it.y] || !world.visible[it.y][it.x]) return;
-    var cx = (it.x - cam.x) * TILE + TILE / 2, cy = (it.y - cam.y) * TILE + TILE / 2;
-    var bob = Math.sin(now() / 350 + it.x) * 1.5;
-    if (it.type === 'gold') { ctx.fillStyle = '#ffd76a'; ctx.beginPath(); ctx.arc(cx, cy + bob, 4, 0, 6.3); ctx.fill(); }
-    else if (it.type === 'gem') glyph(ctx, '💎', cx, cy + bob, '#7fe0d0', 1, 14);
-    else if (it.type === 'cons') glyph(ctx, CONS[it.id].icon, cx, cy + bob, '#fff', 1, 14);
-    else if (it.type === 'gear') { glyph(ctx, it.item ? it.item.icon : '?', cx, cy + bob, it.item ? rarityOf(it.item).color : '#fff', 1, 14); }
-  }
-  function entShake(e) { var t = now() - (e.hit || 0); if (t < 160) { var k = (160 - t) / 160; return (Math.random() - 0.5) * 5 * k; } return 0; }
-  function bumpOff(e) { var t = now() - (e.bump || 0); if (t < 140 && e.bumpDir) { var k = Math.sin((1 - t / 140) * Math.PI) * 6; return { x: e.bumpDir.x * k, y: e.bumpDir.y * k }; } return { x: 0, y: 0 }; }
-  function drawMob(ctx, m, cam) {
-    var bo = bumpOff(m), sh = entShake(m);
-    var cx = (m.rx - cam.x) * TILE + TILE / 2 + bo.x + sh, cy = (m.ry - cam.y) * TILE + TILE / 2 + bo.y;
-    var r = (m.boss ? TILE / 2 + 2 : TILE / 2 - 2);
-    if (m.elite) { ctx.strokeStyle = m.enraged ? '#ff5050' : '#ffb84d'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, r + 2.5, 0, 6.3); ctx.stroke(); }
-    ctx.fillStyle = m.col; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill();
-    if (m.boss && m.enraged) { ctx.strokeStyle = '#ff5050'; ctx.lineWidth = 2; ctx.stroke(); }
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.font = '700 ' + (m.boss ? 15 : 12) + 'px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(m.ch, cx, cy + 1);
-    // status pips
-    if (m.status) { var sy2 = cy - r - 3; if (m.status.burn > 0) { ctx.fillStyle = '#ff8040'; ctx.fillRect(cx - 6, sy2, 3, 3); } if (m.status.poison > 0) { ctx.fillStyle = '#7fe0a0'; ctx.fillRect(cx - 1, sy2, 3, 3); } if (m.status.stun > 0) { ctx.fillStyle = '#9fd0ff'; ctx.fillRect(cx + 4, sy2, 3, 3); } }
-    // hp bar
-    if (m.hp < m.maxHp || m.boss) {
-      var bw = m.boss ? TILE + 6 : TILE - 6;
-      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(cx - bw / 2, cy + r + 2, bw, 3);
-      ctx.fillStyle = m.boss ? '#e85d5d' : '#d07a7a'; ctx.fillRect(cx - bw / 2, cy + r + 2, bw * Math.max(0, m.hp / m.maxHp), 3);
-    }
-  }
-  // ---- unified paper-doll renderer (player + NPCs + tailor preview) ----------
-  function drawCharacter(ctx, cx, cy, r, dir, cos, t) {
-    cos = cos || {};
-    var col = COSMETIC.color[cos.color] || COSMETIC.color.cyan;
-    var fx = dir ? dir.x : 0, fy = dir ? dir.y : 1;
-    // flowing bezier cape behind the facing direction
-    var capeDef = cos.cape && COSMETIC.cape[cos.cape] && COSMETIC.cape[cos.cape].color ? COSMETIC.cape[cos.cape] : null;
-    if (capeDef) {
-      var bx = -fx, by = -fy, ppx = -by, ppy = bx, sway = Math.sin((t || 0) / 280) * 0.10;
-      var sLx = cx + ppx * r * 0.72, sLy = cy + ppy * r * 0.72, sRx = cx - ppx * r * 0.72, sRy = cy - ppy * r * 0.72;
-      var tipx = cx + bx * r * 1.95 + ppx * r * sway * 3, tipy = cy + by * r * 1.95 + ppy * r * sway * 3;
-      ctx.fillStyle = capeDef.color;
-      ctx.beginPath(); ctx.moveTo(sLx, sLy);
-      ctx.quadraticCurveTo(cx + bx * r + ppx * r * 1.05, cy + by * r + ppy * r * 1.05, tipx, tipy);
-      ctx.quadraticCurveTo(cx + bx * r - ppx * r * 1.05, cy + by * r - ppy * r * 1.05, sRx, sRy);
-      ctx.closePath(); ctx.fill();
-      ctx.fillStyle = 'rgba(0,0,0,0.16)'; ctx.beginPath(); ctx.moveTo((sLx + sRx) / 2, (sLy + sRy) / 2); ctx.quadraticCurveTo(cx + bx * r, cy + by * r, tipx, tipy); ctx.lineTo(sRx, sRy); ctx.closePath(); ctx.fill();
-    }
-    // body
-    ctx.fillStyle = col.body; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill();
-    if (cos.pattern && cos.pattern !== 'none') { ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.clip(); drawPattern(ctx, cos.pattern, cx, cy, r, col); ctx.restore(); }
-    ctx.lineWidth = 2; ctx.strokeStyle = col.line; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.20)'; ctx.beginPath(); ctx.arc(cx - r * 0.3, cy - r * 0.35, r * 0.4, 0, 6.3); ctx.fill();
-    var beltDef = cos.belt && COSMETIC.belt[cos.belt] && COSMETIC.belt[cos.belt].color ? COSMETIC.belt[cos.belt] : null;
-    if (beltDef) { ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.clip(); ctx.fillStyle = beltDef.color; ctx.fillRect(cx - r, cy + r * 0.22, r * 2, r * 0.34); ctx.fillStyle = 'rgba(255,235,150,0.5)'; ctx.fillRect(cx - r * 0.13, cy + r * 0.25, r * 0.26, r * 0.28); ctx.restore(); }
-    drawEyes(ctx, cos.eyes || 'default', cx, cy, r, fx, fy, col);
-    drawHat(ctx, cos.hat, cx, cy - r * 0.55, r);
-  }
-  function drawPattern(ctx, pat, cx, cy, r, col) {
-    if (pat === 'belly') { ctx.fillStyle = 'rgba(255,255,255,0.30)'; ctx.beginPath(); ctx.ellipse(cx, cy + r * 0.25, r * 0.55, r * 0.6, 0, 0, 6.3); ctx.fill(); }
-    else if (pat === 'spots') { ctx.fillStyle = 'rgba(0,0,0,0.20)';[[-0.4, -0.2], [0.32, 0.1], [-0.1, 0.42], [0.45, -0.3]].forEach(function (s) { ctx.beginPath(); ctx.arc(cx + s[0] * r, cy + s[1] * r, r * 0.17, 0, 6.3); ctx.fill(); }); }
-    else if (pat === 'stripe') { ctx.strokeStyle = 'rgba(0,0,0,0.20)'; ctx.lineWidth = r * 0.22; for (var i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(cx - r + i * r * 0.5, cy - r); ctx.lineTo(cx + r + i * r * 0.5, cy + r); ctx.stroke(); } }
-    else if (pat === 'rune') { ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = '700 ' + Math.round(r * 0.95) + 'px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('ᛟ', cx, cy + 1); }
-  }
-  function drawEyes(ctx, style, cx, cy, r, fx, fy, col) {
-    if (style === 'none') return;
-    var px = -fy, py = fx, exC = cx + fx * 3, eyC = cy + fy * 3;
-    var e1x = exC + px * 3, e1y = eyC + py * 3, e2x = exC - px * 3, e2y = eyC - py * 3;
-    if (style === 'visor') { ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.clip(); ctx.fillStyle = '#10333f'; ctx.fillRect(exC - r * 0.72, eyC - 3, r * 1.44, 5); ctx.fillStyle = '#7fe0ff'; ctx.fillRect(exC - r * 0.4, eyC - 1.5, r * 0.8, 2); ctx.restore(); return; }
-    if (style === 'sleepy') { ctx.strokeStyle = col.line; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(e1x - 2, e1y); ctx.lineTo(e1x + 2, e1y); ctx.moveTo(e2x - 2, e2y); ctx.lineTo(e2x + 2, e2y); ctx.stroke(); return; }
-    var rad = style === 'cute' ? 2.7 : 2, ecol = style === 'glow' ? '#7fe0ff' : col.line;
-    if (style === 'glow') { ctx.shadowColor = '#7fe0ff'; ctx.shadowBlur = 6; }
-    ctx.fillStyle = ecol;
-    ctx.beginPath(); ctx.arc(e1x, e1y, rad, 0, 6.3); ctx.fill();
-    ctx.beginPath(); ctx.arc(e2x, e2y, rad, 0, 6.3); ctx.fill();
-    ctx.shadowBlur = 0;
-    if (style === 'cute') { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(e1x - 0.8, e1y - 0.8, 0.9, 0, 6.3); ctx.fill(); ctx.beginPath(); ctx.arc(e2x - 0.8, e2y - 0.8, 0.9, 0, 6.3); ctx.fill(); }
-    if (style === 'angry') { ctx.strokeStyle = col.line; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(e1x - 3, e1y - 3); ctx.lineTo(e1x + 1, e1y - 1); ctx.moveTo(e2x + 3, e2y - 3); ctx.lineTo(e2x - 1, e2y - 1); ctx.stroke(); }
-  }
-  function drawPetShape(ctx, cx, cy, r, kind, t) {
-    var d = COSMETIC.pet[kind]; if (!d || !d.col) return;
-    var bob = Math.sin((t || 0) / 250) * (r * 0.12);
-    cy += bob;
-    if (kind === 'wisp') {
-      ctx.globalAlpha = 0.5; ctx.fillStyle = d.col; ctx.beginPath(); ctx.arc(cx, cy, r * 1.4, 0, 6.3); ctx.fill(); ctx.globalAlpha = 1;
-      ctx.fillStyle = '#eaf6ff'; ctx.beginPath(); ctx.arc(cx, cy, r * 0.7, 0, 6.3); ctx.fill(); return;
-    }
-    if (kind === 'slime') {
-      ctx.fillStyle = d.col; ctx.beginPath(); ctx.moveTo(cx - r, cy + r * 0.6); ctx.quadraticCurveTo(cx - r, cy - r, cx, cy - r); ctx.quadraticCurveTo(cx + r, cy - r, cx + r, cy + r * 0.6); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#10333f'; ctx.beginPath(); ctx.arc(cx - r * 0.3, cy, 1.3, 0, 6.3); ctx.fill(); ctx.beginPath(); ctx.arc(cx + r * 0.3, cy, 1.3, 0, 6.3); ctx.fill(); return;
-    }
-    // cat / pup / drake — body + ears + eyes (+ wings for drake)
-    if (kind === 'drake') { ctx.fillStyle = 'rgba(120,180,90,0.85)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - r * 1.4, cy - r * 0.6); ctx.lineTo(cx - r * 0.6, cy + r * 0.3); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + r * 1.4, cy - r * 0.6); ctx.lineTo(cx + r * 0.6, cy + r * 0.3); ctx.closePath(); ctx.fill(); }
-    ctx.fillStyle = d.col; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.3); ctx.fill();
-    ctx.fillStyle = d.col; // ears
-    ctx.beginPath(); ctx.moveTo(cx - r * 0.7, cy - r * 0.4); ctx.lineTo(cx - r * 0.9, cy - r * 1.1); ctx.lineTo(cx - r * 0.2, cy - r * 0.7); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(cx + r * 0.7, cy - r * 0.4); ctx.lineTo(cx + r * 0.9, cy - r * 1.1); ctx.lineTo(cx + r * 0.2, cy - r * 0.7); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#10333f'; ctx.beginPath(); ctx.arc(cx - r * 0.32, cy - r * 0.05, 1.4, 0, 6.3); ctx.fill(); ctx.beginPath(); ctx.arc(cx + r * 0.32, cy - r * 0.05, 1.4, 0, 6.3); ctx.fill();
-  }
-  function drawPet(ctx, p, cam, dt) {
-    var kind = hero.cosmetics && hero.cosmetics.pet; if (!kind || kind === 'none' || !COSMETIC.pet[kind] || !COSMETIC.pet[kind].col) return;
-    if (!world.pet) world.pet = { rx: p.rx, ry: p.ry };
-    var tx = p.x - p.dir.x * 0.85, ty = p.y - p.dir.y * 0.85, sp = Math.min(1, 8 * dt);
-    world.pet.rx += (tx - world.pet.rx) * sp; world.pet.ry += (ty - world.pet.ry) * sp;
-    var cx = (world.pet.rx - cam.x) * TILE + TILE / 2, cy = (world.pet.ry - cam.y) * TILE + TILE / 2;
-    drawPetShape(ctx, cx, cy, TILE * 0.26, kind, now());
-  }
-  function drawPlayer(ctx, p, cam) {
-    var bo = bumpOff(p), sh = entShake(p);
-    var cx = (p.rx - cam.x) * TILE + TILE / 2 + bo.x + sh, cy = (p.ry - cam.y) * TILE + TILE / 2 + bo.y;
-    var r = TILE / 2 - 2;
-    var glow = ctx.createRadialGradient(cx, cy, 2, cx, cy, r + 8);
-    glow.addColorStop(0, 'rgba(255,224,150,0.32)'); glow.addColorStop(1, 'rgba(255,224,150,0)');
-    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, r + 8, 0, 6.3); ctx.fill();
-    drawCharacter(ctx, cx, cy, r, p.dir, hero.cosmetics || {}, now());
-  }
-  function drawHat(ctx, hat, hx, hy, r) {
-    if (!hat || hat === 'none') return;
-    if (hat === 'wizard') {
-      ctx.fillStyle = '#5b3fa0'; ctx.beginPath(); ctx.moveTo(hx, hy - r * 1.3); ctx.lineTo(hx - r * 0.7, hy + r * 0.2); ctx.lineTo(hx + r * 0.7, hy + r * 0.2); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#ffd76a'; ctx.beginPath(); ctx.arc(hx + r * 0.18, hy - r * 0.5, 1.6, 0, 6.3); ctx.fill();
-    } else if (hat === 'horns') {
-      ctx.fillStyle = '#e9e4d8';
-      ctx.beginPath(); ctx.moveTo(hx - r * 0.5, hy); ctx.lineTo(hx - r * 0.8, hy - r * 0.8); ctx.lineTo(hx - r * 0.2, hy - r * 0.15); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(hx + r * 0.5, hy); ctx.lineTo(hx + r * 0.8, hy - r * 0.8); ctx.lineTo(hx + r * 0.2, hy - r * 0.15); ctx.closePath(); ctx.fill();
-    } else if (hat === 'top') {
-      ctx.fillStyle = '#1c1c22'; ctx.fillRect(hx - r * 0.75, hy + r * 0.05, r * 1.5, 2.5);
-      ctx.fillRect(hx - r * 0.45, hy - r * 0.9, r * 0.9, r * 0.95);
-    } else if (hat === 'halo') {
-      ctx.strokeStyle = '#ffe28a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.ellipse(hx, hy - r * 0.7, r * 0.6, r * 0.22, 0, 0, 6.3); ctx.stroke();
-    } else if (hat === 'crown') {
-      ctx.fillStyle = '#ffd23a';
-      ctx.beginPath(); ctx.moveTo(hx - r * 0.6, hy + r * 0.1); ctx.lineTo(hx - r * 0.6, hy - r * 0.4); ctx.lineTo(hx - r * 0.3, hy - r * 0.1);
-      ctx.lineTo(hx, hy - r * 0.6); ctx.lineTo(hx + r * 0.3, hy - r * 0.1); ctx.lineTo(hx + r * 0.6, hy - r * 0.4); ctx.lineTo(hx + r * 0.6, hy + r * 0.1); ctx.closePath(); ctx.fill();
-    }
-  }
-  function drawFx(ctx, cam, dt) {
-    var w = world, t = now();
-    // projectiles handled as rays in fx
-    for (var i = w.fx.length - 1; i >= 0; i--) {
-      var f = w.fx[i]; var age = (t - f.born) / 1000;
-      if (f.kind === 'text') {
-        f.life = 1 - age / 0.9; if (f.life <= 0) { w.fx.splice(i, 1); continue; }
-        var tx = (f.x - cam.x) * TILE + TILE / 2, ty = (f.y - cam.y) * TILE + TILE / 2 + f.vy * age * 40 - 6;
-        ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.color; ctx.font = '700 12px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.fillText(f.text, tx, ty); ctx.globalAlpha = 1;
-      } else if (f.kind === 'spark') {
-        f.life = 1 - age / 0.5; if (f.life <= 0) { w.fx.splice(i, 1); continue; }
-        var sx = (f.x - cam.x) * TILE + f.vx * age * 14, sy = (f.y - cam.y) * TILE + f.vy * age * 14;
-        ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.color; ctx.fillRect(sx, sy, 3, 3); ctx.globalAlpha = 1;
-      } else if (f.kind === 'ray') {
-        f.life = 1 - age / 0.25; if (f.life <= 0) { w.fx.splice(i, 1); continue; }
-        ctx.globalAlpha = Math.max(0, f.life); ctx.strokeStyle = f.color; ctx.lineWidth = 3; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo((f.x0 - cam.x) * TILE + TILE / 2, (f.y0 - cam.y) * TILE + TILE / 2); ctx.lineTo((f.x1 - cam.x) * TILE + TILE / 2, (f.y1 - cam.y) * TILE + TILE / 2); ctx.stroke(); ctx.globalAlpha = 1;
-      }
-    }
-  }
-  function drawDeath(ctx) {
-    ctx.setTransform(ui.dpr, 0, 0, ui.dpr, 0, 0);
-    ctx.fillStyle = 'rgba(6,7,10,0.82)'; ctx.fillRect(0, 0, CW, CH);
-    ctx.fillStyle = '#e85d5d'; ctx.font = '700 26px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('You fell', CW / 2, CH / 2 - 26);
-    ctx.fillStyle = '#cbd2dc'; ctx.font = '13px ui-monospace, monospace';
-    ctx.fillText('Floor ' + world.depth + ' · Lost ' + (world._deathLost || 0) + ' gold', CW / 2, CH / 2 + 2);
-    ctx.fillText('Your character endures.', CW / 2, CH / 2 + 22);
-    ctx.fillStyle = world.biome.accent; ctx.font = '700 13px ui-monospace, monospace';
-    ctx.fillText('▶ Tap / Space — wake in town', CW / 2, CH / 2 + 48);
-  }
-
-  // =========================================================================
-  //  HUD / panels (DOM)
-  // =========================================================================
-  function bar(cur, max, color, label, icon) {
-    var pct = max > 0 ? clamp(cur / max, 0, 1) * 100 : 0;
-    return '<div class="cr-bar"><div class="cr-bar-fill" style="width:' + pct + '%;background:' + color + '"></div>' +
-      '<span class="cr-bar-lbl">' + icon + ' ' + Math.max(0, Math.round(cur)) + '/' + max + '</span></div>';
-  }
-  function refreshBars() {
-    if (!ui || !ui.bars) return;
-    ui.bars.innerHTML =
-      bar(hero.hp, maxHpOf(), 'linear-gradient(90deg,#c0392b,#e85d5d)', 'HP', '❤') +
-      bar(hero.mp, maxMpOf(), 'linear-gradient(90deg,#2e6da4,#5aa0e0)', 'MP', '✦') +
-      xpbar();
-  }
-  function xpbar() {
-    var need = xpForLevel(hero.level);
-    var pct = clamp(hero.xp / need, 0, 1) * 100;
-    return '<div class="cr-bar cr-xp"><div class="cr-bar-fill" style="width:' + pct + '%;background:linear-gradient(90deg,#b8860b,#ffd76a)"></div><span class="cr-bar-lbl">Lv ' + hero.level + '</span></div>';
-  }
-  function refreshHud() {
-    if (!ui || !ui.hud) return;
-    var loc = world.mode === 'overworld' ? '🗺 Overworld'
-      : world.mode === 'house' ? '🏠 Home'
-      : world.mode === 'town' ? ((TOWNS[world.townId] || TOWNS.hearth).icon + ' ' + (TOWNS[world.townId] || TOWNS.hearth).name)
-      : (world.isBoss ? '☠ Floor ' + world.depth : '⌄ Floor ' + world.depth);
-    ui.hud.innerHTML =
-      '<span>' + loc + '</span>' +
-      '<span>🗺 max ' + hero.maxDepth + '</span>' +
-      '<span>⚔ ' + atkOf() + '</span>' +
-      '<span>🛡 ' + defOf() + '</span>' +
-      '<span class="cr-gold">🪙 ' + hero.gold + '</span>';
-  }
-  // Log lines are now appended + auto-faded by logMsg(); nothing to rebuild here.
-  function refreshLog() {}
-  function refreshAll() { refreshBars(); refreshHud(); refreshLog(); refreshItemBar(); refreshAbilCd(); }
-
-  // ---- ability bar ----------------------------------------------------------
-  function buildAbilityBar() {
-    if (!ui || !ui.abil) return;
-    var ids = dockedSpells();
-    var html = ids.map(function (id, i) {
-      var a = ABIL[id];
-      return '<button class="cr-ab" data-ab="' + id + '" title="' + a.name + ' — ' + a.desc + ' (MP ' + a.mp + ')">' +
-        '<span class="cr-ab-ic">' + a.icon + '</span><span class="cr-ab-cd" data-cd="' + id + '"></span>' +
-        '<span class="cr-ab-key">' + (i + 1) + '</span></button>';
-    }).join('');
-    html += '<button class="cr-ab cr-ab-book" id="cr-book" title="Spellbook — choose which spells to dock">📖</button>';
-    ui.abil.innerHTML = html;
-    var btns = ui.abil.querySelectorAll('.cr-ab[data-ab]');
-    for (var i = 0; i < btns.length; i++) (function (btn) {
-      btn.addEventListener('click', function (e) { e.preventDefault(); useAbility(btn.getAttribute('data-ab')); });
-    })(btns[i]);
-    var bk = document.getElementById('cr-book'); if (bk) bk.addEventListener('click', function (e) { e.preventDefault(); openSpellbook(); });
-    refreshAbilCd();
-  }
-  function refreshAbilCd() {
-    if (!ui || !ui.abil) return;
-    var cd = ensureCd();
-    var els = ui.abil.querySelectorAll('.cr-ab-cd');
-    for (var i = 0; i < els.length; i++) { var id = els[i].getAttribute('data-cd'); var v = cd[id] || 0; els[i].textContent = v > 0 ? v : ''; els[i].parentNode.classList.toggle('cr-ab-down', v > 0 || hero.mp < ABIL[id].mp); }
-  }
-
-  // ---- quick item bar -------------------------------------------------------
-  function refreshItemBar() {
-    if (!ui || !ui.items) return;
-    // potion + elixir always show; the rest only when owned. Cap to keep it tidy.
-    var order = ['potion', 'hpotion', 'elixir', 'eelixir', 'bomb', 'scroll', 'antidote'];
-    var show = order.filter(function (id) { return id === 'potion' || id === 'elixir' || (hero.bag[id] || 0) > 0; }).slice(0, 7);
-    ui.items.innerHTML = show.map(function (id) {
-      var n = hero.bag[id] || 0;
-      return '<button class="cr-it' + (n ? '' : ' cr-it-empty') + '" data-it="' + id + '" title="' + CONS[id].name + ' — ' + CONS[id].desc + '">' +
-        '<span>' + CONS[id].icon + '</span><span class="cr-it-n">' + n + '</span></button>';
-    }).join('');
-    var btns = ui.items.querySelectorAll('.cr-it');
-    for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function (e) { e.preventDefault(); useItem(btn.getAttribute('data-it')); }); })(btns[i]);
-  }
-
-  // =========================================================================
-  //  overlay: character / inventory
-  // =========================================================================
-  function openCharacter() {
-    if (!hero) { Cade.showToast('Still loading your delver…', 'info', 1200); return; }
-    closeOverlay();
-    var ov = mkOverlay('Character');
-    var body = ov.querySelector('.cr-ov-body');
-    var html = '<div class="cr-sheet">';
-    html += '<div class="cr-sheet-row"><b>' + Cade.escapeHtml(hero.name) + '</b> · Level ' + hero.level +
-      ' <button class="cr-rename" data-rename="1">✏ rename</button></div>';
-    html += '<div class="cr-grid2">' +
-      stat('❤ Max HP', maxHpOf()) + stat('✦ Max MP', maxMpOf()) +
-      stat('⚔ Attack', atkOf()) + stat('🛡 Defense', defOf()) +
-      stat('🎯 Crit', Math.round(critOf() * 100) + '%') + stat('🪙 Gold', hero.gold) +
-      stat('🗺 Deepest', hero.maxDepth) + stat('💀 Deaths', hero.stats.deaths) +
-      stat('⚔ Kills', hero.stats.kills) + stat('💎 Gems', hero.stats.gems) + '</div>';
-    html += '<div class="cr-sec">Materials</div>' + matBar();
-    html += '<div class="cr-sec">Equipment</div><div class="cr-eqrow">' +
-      eqSlot('weapon') + eqSlot('armor') + eqSlot('trinket') + '</div>';
-    html += '<div class="cr-sec">Inventory — tap to equip / unequip</div><div class="cr-owned">';
-    hero.owned.slice().sort(function (a, b) { return a.slot === b.slot ? itemScore(b) - itemScore(a) : (a.slot < b.slot ? -1 : 1); }).forEach(function (it) {
-      var on = hero.equip[it.slot] === it.uid, c = rarityOf(it).color;
-      html += '<button class="cr-gear' + (on ? ' cr-on' : '') + '" data-eq="' + it.uid + '"><span>' + it.icon + '</span> <span style="color:' + c + '">' + Cade.escapeHtml(it.name) + '</span>' + (on ? ' ✓' : '') +
-        '<span class="cr-gear-st">' + instanceStatStr(it) + (it.lore ? ' — <i>' + Cade.escapeHtml(it.lore) + '</i>' : '') + '</span></button>'; });
-    html += '</div></div>';
-    body.innerHTML = html;
-    var btns = body.querySelectorAll('[data-eq]');
-    for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function () {
-      var it = itemByUid(btn.getAttribute('data-eq')); if (!it) return;
-      hero.equip[it.slot] = (hero.equip[it.slot] === it.uid) ? null : it.uid;
-      hero.hp = clamp(hero.hp, 0, maxHpOf()); hero.mp = clamp(hero.mp, 0, maxMpOf());
-      markDirty(); refreshAll(); openCharacter();
-    }); })(btns[i]);
-    var rn = body.querySelector('[data-rename]');
-    if (rn) rn.addEventListener('click', function () {
-      var v = window.prompt('Name your delver:', hero.name);
-      if (v == null) return;
-      v = String(v).replace(/[<>]/g, '').trim().slice(0, 24);
-      if (v) { hero.name = v; markDirty(); refreshAll(); openCharacter(); }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function today() { var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+
+  // ---- loading the data + engine scripts -------------------------------------------
+  var loading = null;
+  function loadScript(url) {
+    return new Promise(function (res, rej) {
+      var s = document.createElement('script'); s.src = url; s.async = true;
+      s.onload = function () { res(); }; s.onerror = function () { s.remove(); rej(new Error('load ' + url)); };
+      document.head.appendChild(s);
     });
   }
-  function stat(label, val) { return '<div class="cr-stat"><span>' + label + '</span><b>' + val + '</b></div>'; }
-  function eqSlot(slot) { var it = equippedItem(slot); return '<div class="cr-eqslot"><div class="cr-eqic">' + (it ? it.icon : '·') + '</div><div class="cr-eqnm" style="' + (it ? 'color:' + rarityOf(it).color : '') + '">' + (it ? Cade.escapeHtml(it.name) : '—') + '</div></div>'; }
-
-  // ---- overlay: spellbook (choose which known spells to dock) ----------------
-  function openSpellbook() {
-    if (!hero) return;
-    closeOverlay();
-    var ov = mkOverlay('Spellbook 📖');
-    var body = ov.querySelector('.cr-ov-body');
-    hero.docked = hero.docked || [];
-    var html = '<div class="cr-hint">Dock up to ' + DOCK_MAX + ' known spells onto your action bar. Learn more from the Arcanist in town.</div>';
-    html += '<div class="cr-sec">Known spells (' + dockedSpells().length + '/' + DOCK_MAX + ' docked)</div><div class="cr-owned">';
-    var known = ABIL_ORDER.filter(knowsSpell);
-    known.forEach(function (id) {
-      var a = ABIL[id], on = hero.docked.indexOf(id) >= 0, locked = hero.level < a.lvl;
-      html += '<button class="cr-gear' + (on ? ' cr-on' : '') + '" data-dock="' + id + '"><span>' + a.icon + '</span> ' + a.name +
-        '<span class="cr-gear-st">' + (locked ? 'needs Lv ' + a.lvl : 'MP ' + a.mp + ' · cd ' + a.cd) + (on ? ' · docked' : '') + '</span></button>';
-    });
-    html += '</div>';
-    var unknown = ABIL_ORDER.filter(function (id) { return !knowsSpell(id); });
-    if (unknown.length) html += '<div class="cr-sec">Not yet learned</div><div class="cr-hint">' + unknown.map(function (id) { return ABIL[id].icon + ' ' + ABIL[id].name; }).join(' · ') + '<br>Each town teaches a different school — visit the Arcanist (arcane), Pyromancer (Cinderforge), Tidecaller (Saltmere), Druid (Greenhollow) and Sandseer (Dustmarket).</div>';
-    body.innerHTML = html;
-    var btns = body.querySelectorAll('[data-dock]');
-    for (var i = 0; i < btns.length; i++) (function (btn) {
-      btn.addEventListener('click', function () {
-        var id = btn.getAttribute('data-dock'), ix = hero.docked.indexOf(id);
-        if (ix >= 0) hero.docked.splice(ix, 1);
-        else { if (hero.docked.length >= DOCK_MAX) { Cade.showToast('Action bar full — undock one first', 'info', 1600); return; } hero.docked.push(id); }
-        markDirty(); buildAbilityBar(); openSpellbook();
-      });
-    })(btns[i]);
+  function loadAll() {
+    if (E) return Promise.resolve();
+    if (loading) return loading;
+    loading = (window.__cadeCrawlerData ? Promise.resolve() : loadScript(DATA_URL))
+      .then(function () { return window.__cadeCrawlerEngine ? null : loadScript(ENGINE_URL); })
+      .then(function () {
+        E = window.__cadeCrawlerEngine; D = E && E.D;
+        if (!E || !D) throw new Error('engine missing');
+      })
+      .catch(function (e) { loading = null; throw e; });
+    return loading;
   }
 
-  // =========================================================================
-  //  overlay: shops (town NPCs)
-  // =========================================================================
-  function openShop(role) {
-    closeOverlay();
-    if (role === 'healer') return openHealer();
-    if (role === 'smith') return openSmith();
-    if (role === 'arcanist') return openArcanist();
-    if (role === 'tailor') return openTailor();
-    if (role === 'quest') return openQuestBoard();
-    if (role === 'oracle') return openOracle();
-    if (role === 'tamer') return openTamer();
-    if (role === 'alchemist') return openAlchemist();
-    var WT = (world && world.theme && WARE_THEME[world.theme]) || null;
-    var tname = (TOWNS[world && world.townId] || {}).name;
-    var ov = mkOverlay((tname && WT ? tname + ' ' : '') + 'Merchant 🛒');
-    var body = ov.querySelector('.cr-ov-body');
-    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>';
-    if (WT) html += '<div class="cr-hint">Local goods — stock leans to this region\'s craft.</div>';
-    html += '<div class="cr-shop">';
-    // consumables (themed towns stock a thematic subset)
-    var consList = WT ? WT.cons : ['potion', 'hpotion', 'elixir', 'eelixir', 'bomb', 'scroll', 'antidote', 'key'];
-    consList.forEach(function (id) { var c = CONS[id]; if (!c) return;
-      html += shopRow('cons:' + id, c.icon, c.name, c.desc, buyPrice(c.price), hero.bag[id] || 0); });
-    // rotating rolled-item stock (regenerated each town visit; persists while open)
-    if (!merchStock) {
-      merchStock = []; var ilvl = Math.max(2, hero.maxDepth + 1), slots = WT ? WT.slots : ['weapon', 'armor', 'trinket'];
-      for (var mi = 0; mi < 6; mi++) { var slot = slots[mi % slots.length];
-        merchStock.push(WT ? generateThemed(slot, ilvl, WT.stat, (mi === 5 ? 0.5 : 0) + (WT.luck || 0)) : generateItem(slot, ilvl, mi === 5 ? 0.5 : 0)); }
-    }
-    html += '<div class="cr-sec">Wares</div><div class="cr-shop">';
-    merchStock.forEach(function (it, idx) {
-      var price = buyPrice(itemPrice(it)), c = rarityOf(it).color;
-      html += '<div class="cr-srow"><span class="cr-sic" style="color:' + c + '">' + it.icon + '</span>' +
-        '<span class="cr-snm"><span style="color:' + c + '">' + Cade.escapeHtml(it.name) + '</span><span class="cr-sdesc">' + instanceStatStr(it) + '</span></span>' +
-        '<button class="cr-buy" data-gearbuy="' + idx + '" data-price="' + price + '">🪙 ' + price + '</button></div>';
-    });
-    html += '</div>';
-    // Sell back unwanted gear (40%). Excludes equipped pieces and legendaries.
-    var sellable = hero.owned.filter(function (it) { return hero.equip[it.slot] !== it.uid && !it.legend; });
-    if (sellable.length) {
-      html += '<div class="cr-sec">Sell gear (40% back)</div><div class="cr-shop">';
-      sellable.sort(function (a, b) { return itemScore(a) - itemScore(b); }).forEach(function (it) {
-        html += '<div class="cr-srow"><span class="cr-sic" style="color:' + rarityOf(it).color + '">' + it.icon + '</span>' +
-          '<span class="cr-snm"><span style="color:' + rarityOf(it).color + '">' + Cade.escapeHtml(it.name) + '</span><span class="cr-sdesc">' + instanceStatStr(it) + '</span></span>' +
-          '<button class="cr-buy cr-sell" data-sell="' + it.uid + '">🪙 ' + itemSell(it) + '</button></div>'; });
-      html += '</div>';
-    }
-    body.innerHTML = html;
-    bindShop(body, function () { openShop('merchant'); });
-    var gb = body.querySelectorAll('[data-gearbuy]');
-    for (var gi = 0; gi < gb.length; gi++) (function (btn) {
-      btn.addEventListener('click', function () {
-        var idx = parseInt(btn.getAttribute('data-gearbuy'), 10), price = parseInt(btn.getAttribute('data-price'), 10), it = merchStock[idx];
-        if (!it) return;
-        if (hero.gold < price) { Cade.showToast('Not enough gold', 'error', 1400); return; }
-        hero.gold -= price; merchStock.splice(idx, 1); acquireGear(it);
-        Cade.haptic(8); markDirty(); refreshAll(); openShop('merchant');
-      });
-    })(gb[gi]);
-    var sb = body.querySelectorAll('[data-sell]');
-    for (var si = 0; si < sb.length; si++) (function (btn) {
-      btn.addEventListener('click', function () {
-        var it = itemByUid(btn.getAttribute('data-sell')); if (!it) return;
-        if (hero.equip[it.slot] === it.uid) { Cade.showToast('Unequip it first', 'info', 1200); return; }
-        var ix = hero.owned.indexOf(it); if (ix < 0) return;
-        hero.owned.splice(ix, 1); hero.gold += itemSell(it);
-        Cade.haptic(8); markDirty(); refreshAll(); openShop('merchant');
-      });
-    })(sb[si]);
-  }
-  function shopRow(buyId, icon, name, desc, price, qty, owned) {
-    return '<div class="cr-srow"><span class="cr-sic">' + icon + '</span>' +
-      '<span class="cr-snm">' + name + '<span class="cr-sdesc">' + (desc || '') + '</span></span>' +
-      '<button class="cr-buy' + (owned ? ' cr-owned' : '') + '" data-buy="' + buyId + '" data-price="' + price + '">' + (owned ? 'owned' : '🪙 ' + price) +
-      (qty && !owned ? ' <small>(' + qty + ')</small>' : '') + '</button></div>';
-  }
-  function bindShop(body, reopen) {
-    var btns = body.querySelectorAll('[data-buy]');
-    for (var i = 0; i < btns.length; i++) (function (btn) {
-      btn.addEventListener('click', function () {
-        var spec = btn.getAttribute('data-buy'), price = parseInt(btn.getAttribute('data-price'), 10);
-        var parts = spec.split(':'), kind = parts[0], id = parts[1];
-        if (kind === 'gear' && hero.owned.indexOf(id) >= 0) { Cade.showToast('Already owned', 'info', 1200); return; }
-        if (kind === 'spell' && knowsSpell(id)) { Cade.showToast('Already learned', 'info', 1200); return; }
-        if (hero.gold < price) { Cade.showToast('Not enough gold', 'error', 1400); return; }
-        hero.gold -= price;
-        if (kind === 'cons') { hero.bag[id] = (hero.bag[id] || 0) + 1; }
-        else if (kind === 'spell') { learnSpell(id); logMsg('win', 'Learned ' + ABIL[id].name + '!'); buildAbilityBar(); }
-        else if (kind === 'furn') { hero.furniture = hero.furniture || {}; hero.furniture[id] = (hero.furniture[id] || 0) + 1; }
-        else { acquireGear(id); }
-        Cade.haptic(8); markDirty(); refreshAll(); reopen();
-      });
-    })(btns[i]);
-  }
-  function openHealer() {
-    var ov = mkOverlay('Healer ⛑️');
-    var body = ov.querySelector('.cr-ov-body');
-    var hpCost = Math.ceil((maxHpOf() - hero.hp) * 1.2);
-    var mpCost = Math.ceil((maxMpOf() - hero.mp) * 1.5);
-    var full = 30 + hero.maxDepth * 4;
-    body.innerHTML = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div><div class="cr-shop">' +
-      shopRow('heal:hp', '❤', 'Restore HP', 'Full heal HP', hpCost || 0, 0) +
-      shopRow('heal:mp', '✦', 'Restore MP', 'Full restore MP', mpCost || 0, 0) +
-      shopRow('heal:all', '✨', 'Full Rest', 'HP + MP to full', full, 0) +
-      '</div><div class="cr-hint">Out in the dungeon, only potions, elixirs and a Ring of Regen restore you.</div>';
-    var btns = body.querySelectorAll('[data-buy]');
-    for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function () {
-      var spec = btn.getAttribute('data-buy').split(':')[1], price = parseInt(btn.getAttribute('data-price'), 10);
-      if (hero.gold < price) { Cade.showToast('Not enough gold', 'error'); return; }
-      hero.gold -= price;
-      if (spec === 'hp' || spec === 'all') hero.hp = maxHpOf();
-      if (spec === 'mp' || spec === 'all') hero.mp = maxMpOf();
-      Cade.haptic(8); markDirty(); refreshAll(); openHealer();
-    }); })(btns[i]);
-  }
-  function openSmith() {
-    var ov = mkOverlay('Smith ⚒️');
-    var body = ov.querySelector('.cr-ov-body');
-    var w = equippedItem('weapon'), a = equippedItem('armor');
-    var wCost = 60 + (hero._wlvl || 0) * 80 + (w ? w.tier * 40 : 0);
-    var aCost = 60 + (hero._alvl || 0) * 80 + (a ? a.tier * 40 : 0);
-    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>' + matBar();
-    html += '<div class="cr-sec">Temper (permanent)</div><div class="cr-shop">' +
-      shopRow('smith:atk', '⚔', 'Temper Weapon', '+2 base ATK (current +' + (hero._wlvl || 0) * 2 + ')', wCost, 0) +
-      shopRow('smith:def', '🛡', 'Reinforce Armor', '+1 base DEF (current +' + (hero._alvl || 0) + ')', aCost, 0) + '</div>';
-    // reforge: reroll a magic+ piece's affixes for gold + materials
-    var reforgeable = hero.owned.filter(function (it) { return !it.legend && it.rarity !== 'common'; }).sort(function (x, y) { return itemScore(y) - itemScore(x); });
-    html += '<div class="cr-sec">Reforge — gamble new magic onto a piece</div><div class="cr-shop">';
-    if (!reforgeable.length) html += '<div class="cr-hint">Find some magic gear first.</div>';
-    reforgeable.forEach(function (it) {
-      var rc = reforgeCost(it), ok = hero.gold >= rc.gold && hasMats(rc.mats), eq = hero.equip[it.slot] === it.uid, c = rarityOf(it).color;
-      html += '<div class="cr-srow"><span class="cr-sic" style="color:' + c + '">' + it.icon + '</span>' +
-        '<span class="cr-snm"><span style="color:' + c + '">' + Cade.escapeHtml(it.name) + '</span>' + (eq ? ' ✓' : '') + '<span class="cr-sdesc">' + instanceStatStr(it) + ' · 🪙' + rc.gold + ' ' + matStr(rc.mats) + '</span></span>' +
-        '<button class="cr-buy' + (ok ? '' : ' cr-owned') + '" data-reforge="' + it.uid + '">' + (ok ? 'reforge' : '—') + '</button></div>';
-    });
-    html += '</div>';
-    // salvage: break unequipped, non-legendary gear into materials
-    var salv = hero.owned.filter(function (it) { return hero.equip[it.slot] !== it.uid && !it.legend; }).sort(function (x, y) { return itemScore(x) - itemScore(y); });
-    html += '<div class="cr-sec">Salvage — break gear into materials</div><div class="cr-shop">';
-    if (!salv.length) html += '<div class="cr-hint">Nothing spare to salvage.</div>';
-    salv.forEach(function (it) {
-      var y = salvageYield(it), c = rarityOf(it).color;
-      html += '<div class="cr-srow"><span class="cr-sic" style="color:' + c + '">' + it.icon + '</span>' +
-        '<span class="cr-snm"><span style="color:' + c + '">' + Cade.escapeHtml(it.name) + '</span><span class="cr-sdesc">' + instanceStatStr(it) + ' → ' + matStr(y) + '</span></span>' +
-        '<button class="cr-buy cr-sell" data-salvage="' + it.uid + '">salvage</button></div>';
-    });
-    html += '</div>';
-    body.innerHTML = html;
-    var btns = body.querySelectorAll('[data-buy]');
-    for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function () {
-      var spec = btn.getAttribute('data-buy').split(':')[1], price = parseInt(btn.getAttribute('data-price'), 10);
-      if (hero.gold < price) { Cade.showToast('Not enough gold', 'error'); return; }
-      hero.gold -= price;
-      if (spec === 'atk') { hero.atk += 2; hero._wlvl = (hero._wlvl || 0) + 1; }
-      else { hero.def += 1; hero._alvl = (hero._alvl || 0) + 1; }
-      Cade.haptic(8); Cade.showToast('Tempered!', 'success'); markDirty(); refreshAll(); openSmith();
-    }); })(btns[i]);
-    var rb = body.querySelectorAll('[data-reforge]');
-    for (var j = 0; j < rb.length; j++) (function (btn) { btn.addEventListener('click', function () {
-      var it = itemByUid(btn.getAttribute('data-reforge')); if (!it) return;
-      var rc = reforgeCost(it);
-      if (hero.gold < rc.gold || !hasMats(rc.mats)) { Cade.showToast('Not enough gold or materials', 'error', 1500); return; }
-      hero.gold -= rc.gold; spendMats(rc.mats);
-      var fresh = reforgeItem(it);
-      hero.hp = clamp(hero.hp, 0, maxHpOf()); hero.mp = clamp(hero.mp, 0, maxMpOf());
-      Cade.haptic(10); Cade.showToast('Reforged → ' + (fresh ? fresh.name : 'item'), 'success', 1800); markDirty(); refreshAll(); openSmith();
-    }); })(rb[j]);
-    var sb = body.querySelectorAll('[data-salvage]');
-    for (var k = 0; k < sb.length; k++) (function (btn) { btn.addEventListener('click', function () {
-      var it = itemByUid(btn.getAttribute('data-salvage')); if (!it) return;
-      if (hero.equip[it.slot] === it.uid) { Cade.showToast('Unequip it first', 'info', 1200); return; }
-      var y = salvageYield(it), ix = hero.owned.indexOf(it); if (ix < 0) return;
-      hero.owned.splice(ix, 1); for (var mk in y) addMat(mk, y[mk]);
-      Cade.haptic(8); Cade.showToast('Salvaged → ' + matStr(y), 'success', 1500); markDirty(); refreshAll(); openSmith();
-    }); })(sb[k]);
-  }
-  function openArcanist() {
-    var school = (world && TOWNS[world.townId] && TOWNS[world.townId].school) || 'arcane';
-    var S = SCHOOLS[school] || SCHOOLS.arcane;
-    var ov = mkOverlay(S.teacher + ' ' + S.icon);
-    var body = ov.querySelector('.cr-ov-body');
-    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>' +
-      '<div class="cr-hint">School of <b style="color:' + S.col + '">' + S.name + '</b>. Other schools are taught in other towns. Learn here, then dock up to ' + DOCK_MAX + ' in the 📖 Spellbook.</div><div class="cr-shop">';
-    var any = false;
-    ABIL_ORDER.forEach(function (id) {
-      var a = ABIL[id]; if (a.learn !== 'tome' || a.school !== school) return;
-      any = true; var known = knowsSpell(id);
-      html += shopRow('spell:' + id, a.icon, a.name, a.desc + ' (Lv ' + a.lvl + ', MP ' + a.mp + ')', buyPrice(a.price), known ? '✓' : 0, known);
-    });
-    if (!any) html += '<div class="cr-hint">No spells to teach here.</div>';
-    html += '</div>';
-    body.innerHTML = html;
-    bindShop(body, function () { openArcanist(); });
-  }
-  function hasCos(slot, id) { return (COSMETIC[slot][id] && COSMETIC[slot][id].price === 0) || (hero.ownedCos || []).indexOf(cosKey(slot, id)) >= 0; }
-  function cosSwatch(slot, id, c) {
-    if (slot === 'color') return '<span class="cr-swatch" style="background:' + c.body + '"></span>';
-    if (slot === 'cape' || slot === 'belt') return '<span class="cr-swatch" style="background:' + (c.color || 'transparent') + '"></span>';
-    if (slot === 'pet') return '<span class="cr-swatch" style="background:' + (c.col || 'transparent') + '"></span>';
-    var ic = slot === 'eyes' ? '👁' : slot === 'pattern' ? '▧' : '🎩';
-    return '<span class="cr-swatch cr-swatch-hat">' + (id === 'none' ? '∅' : ic) + '</span>';
-  }
-  function renderTailorPreview() {
-    var c = document.getElementById('cr-prev'); if (!c) return;
-    var x = c.getContext('2d');
-    x.clearRect(0, 0, 130, 120); x.fillStyle = '#0a0b0e'; roundRect(x, 0, 0, 130, 120, 10); x.fill();
-    drawCharacter(x, 60, 60, 30, { x: 0, y: 1 }, hero.cosmetics, now());
-    if (hero.cosmetics.pet && hero.cosmetics.pet !== 'none') drawPetShape(x, 102, 88, 13, hero.cosmetics.pet, now());
-  }
-  function matBar() {
-    return '<div class="cr-matbar">' + MAT_ORDER.map(function (k) { return '<span class="cr-mat">' + MATS[k].icon + ' ' + ((hero.mats || {})[k] || 0) + '</span>'; }).join('') + '</div>';
-  }
-  function openAlchemist() {
-    var ov = mkOverlay('Alchemist ⚗️'); var body = ov.querySelector('.cr-ov-body');
-    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>' + matBar() +
-      '<div class="cr-hint">Brew supplies from materials you gather in the wild and harvest from foes.</div><div class="cr-shop">';
-    RECIPES.forEach(function (r, i) {
-      var c = CONS[r.out], ok = hasMats(r.mats);
-      html += '<div class="cr-srow"><span class="cr-sic">' + c.icon + '</span><span class="cr-snm">' + c.name +
-        '<span class="cr-sdesc">' + c.desc + ' · costs ' + matStr(r.mats) + '</span></span>' +
-        '<button class="cr-buy' + (ok ? '' : ' cr-owned') + '" data-craft="' + i + '">' + (ok ? 'brew' : '—') + '</button></div>';
-    });
-    html += '</div>';
-    body.innerHTML = html;
-    var btns = body.querySelectorAll('[data-craft]');
-    for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function () {
-      var r = RECIPES[parseInt(btn.getAttribute('data-craft'), 10)]; if (!r) return;
-      if (!hasMats(r.mats)) { Cade.showToast('Not enough materials', 'error', 1400); return; }
-      spendMats(r.mats); hero.bag[r.out] = (hero.bag[r.out] || 0) + 1;
-      Cade.haptic(8); Cade.showToast('Brewed ' + CONS[r.out].name + '!', 'success', 1400); markDirty(); refreshAll(); openAlchemist();
-    }); })(btns[i]);
-  }
-  function openTailor() {
-    var ov = mkOverlay('Tailor 🎩');
-    var body = ov.querySelector('.cr-ov-body');
-    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>' +
-      '<div class="cr-tailor-prev"><canvas id="cr-prev" width="130" height="120"></canvas></div>' +
-      '<div class="cr-hint">Buy a look, then tap an owned one to wear it.</div>';
-    var slots = [['color', 'Body'], ['eyes', 'Eyes'], ['pattern', 'Pattern'], ['belt', 'Belt'], ['hat', 'Hat'], ['cape', 'Cape'], ['pet', 'Pet']];
-    slots.forEach(function (sl) {
-      var slot = sl[0];
-      html += '<div class="cr-sec">' + sl[1] + '</div><div class="cr-cosrow">';
-      for (var id in COSMETIC[slot]) {
-        var c = COSMETIC[slot][id], owned = hasCos(slot, id), worn = hero.cosmetics[slot] === id;
-        var label = owned ? (worn ? 'worn' : 'wear') : ('🪙' + c.price);
-        html += '<button class="cr-cos' + (worn ? ' cr-on' : '') + '" data-cos="' + slot + ':' + id + '" data-price="' + c.price + '" data-owned="' + (owned ? 1 : 0) + '">' +
-          cosSwatch(slot, id, c) + '<span>' + c.name + '</span><small>' + label + '</small></button>';
-      }
-      html += '</div>';
-    });
-    body.innerHTML = html;
-    renderTailorPreview();
-    var btns = body.querySelectorAll('[data-cos]');
-    for (var i = 0; i < btns.length; i++) (function (btn) {
-      btn.addEventListener('click', function () {
-        var parts = btn.getAttribute('data-cos').split(':'), slot = parts[0], id = parts[1];
-        var owned = btn.getAttribute('data-owned') === '1', price = parseInt(btn.getAttribute('data-price'), 10);
-        if (!owned) {
-          if (hero.gold < price) { Cade.showToast('Not enough gold', 'error', 1400); return; }
-          hero.gold -= price; hero.ownedCos = hero.ownedCos || []; hero.ownedCos.push(cosKey(slot, id));
-          Cade.showToast('Unlocked ' + COSMETIC[slot][id].name + '!', 'success', 1400);
-        }
-        hero.cosmetics[slot] = id;
-        Cade.haptic(8); markDirty(); refreshAll(); openTailor();
-      });
-    })(btns[i]);
-  }
-
-  // ---- beast tamer: buy or wear pets (befriended wild ones are free) --------
-  function openTamer() {
-    var ov = mkOverlay('Beast Tamer 🐾'); var body = ov.querySelector('.cr-ov-body');
-    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div>' +
-      '<div class="cr-hint">Wild beasts roam the Overworld — corner one (cut its escape) and ✋ it to tame it free. A Beast Lure makes that far easier. Or just buy a companion here.</div>' +
-      '<div class="cr-shop">' + shopRow('cons:lure', CONS.lure.icon, CONS.lure.name, CONS.lure.desc, buyPrice(CONS.lure.price), hero.bag.lure || 0) + '</div>' +
-      '<div class="cr-sec">Companions</div><div class="cr-cosrow">';
-    for (var id in COSMETIC.pet) {
-      var c = COSMETIC.pet[id], owned = hasCos('pet', id), worn = hero.cosmetics.pet === id;
-      var label = owned ? (worn ? 'worn' : 'wear') : ('🪙' + c.price);
-      html += '<button class="cr-cos' + (worn ? ' cr-on' : '') + '" data-pet="' + id + '" data-price="' + c.price + '" data-owned="' + (owned ? 1 : 0) + '">' +
-        cosSwatch('pet', id, c) + '<span>' + c.name + '</span><small>' + label + '</small></button>';
-    }
-    html += '</div>';
-    body.innerHTML = html;
-    bindShop(body, openTamer);
-    var btns = body.querySelectorAll('[data-pet]');
-    for (var i = 0; i < btns.length; i++) (function (btn) {
-      btn.addEventListener('click', function () {
-        var id = btn.getAttribute('data-pet'), owned = btn.getAttribute('data-owned') === '1', price = parseInt(btn.getAttribute('data-price'), 10);
-        if (!owned) {
-          if (hero.gold < price) { Cade.showToast('Not enough gold', 'error', 1400); return; }
-          hero.gold -= price; hero.ownedCos = hero.ownedCos || []; hero.ownedCos.push(cosKey('pet', id));
-          Cade.showToast('Adopted ' + COSMETIC.pet[id].name + '!', 'success', 1400);
-        }
-        hero.cosmetics.pet = id; Cade.haptic(8); markDirty(); refreshAll(); openTamer();
-      });
-    })(btns[i]);
-  }
-
-  // ---- quests ---------------------------------------------------------------
-  function questDesc(q) {
-    if (q.type === 'kills') return 'Slay ' + q.goal + ' monsters';
-    if (q.type === 'gems') return 'Collect ' + q.goal + ' gems';
-    if (q.type === 'depth') return 'Reach floor ' + q.goal;
-    if (q.type === 'boss') return 'Defeat a boss';
-    return 'Bounty';
-  }
-  function genQuest() {
-    var d = Math.max(1, hero.maxDepth), roll = ri(4), q = { prog: 0, done: false };
-    if (roll === 0) q.type = 'kills', q.goal = 8 + ri(10) + d;
-    else if (roll === 1) q.type = 'gems', q.goal = 2 + ri(3);
-    else if (roll === 2) q.type = 'depth', q.goal = Math.max(2, d + 1 + ri(3));
-    else q.type = 'boss', q.goal = 1;
-    q.id = 'q' + Date.now().toString(36) + ri(99999).toString(36);
-    q.reward = Math.round((40 + d * 18) * (q.type === 'boss' ? 4 : q.type === 'depth' ? 2 : 1) + ri(50));
-    q.desc = questDesc(q);
-    if (q.type === 'depth') q.prog = Math.min(q.goal, hero.maxDepth);
-    return q;
-  }
-  function questProgress(type, n) {
-    if (!hero.quests) return; var changed = false;
-    for (var i = 0; i < hero.quests.length; i++) { var q = hero.quests[i];
-      if (q.type === type && !q.done) { q.prog = (q.prog || 0) + n; if (q.prog >= q.goal) { q.prog = q.goal; q.done = true; changed = true; logMsg('win', 'Bounty ready to claim: ' + q.desc); } }
-    }
-    if (changed) markDirty();
-  }
-  function questDepth(depth) {
-    if (!hero.quests) return;
-    for (var i = 0; i < hero.quests.length; i++) { var q = hero.quests[i];
-      if (q.type === 'depth' && !q.done) { if (depth >= q.goal) { q.prog = q.goal; q.done = true; logMsg('win', 'Bounty ready to claim: ' + q.desc); } else q.prog = Math.max(q.prog || 0, depth); }
-    }
-  }
-  function openQuestBoard() {
-    var ov = mkOverlay('Quest Board 📜');
-    var body = ov.querySelector('.cr-ov-body');
-    hero.quests = hero.quests || [];
-    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' · bounties done: ' + (hero.questsDone || 0) + '</div><div class="cr-shop">';
-    if (!hero.quests.length) html += '<div class="cr-hint">No active bounties — take one below.</div>';
-    hero.quests.forEach(function (q) {
-      html += '<div class="cr-srow"><span class="cr-sic">' + (q.done ? '✅' : '📜') + '</span>' +
-        '<span class="cr-snm">' + q.desc + '<span class="cr-sdesc">' + (q.done ? 'Complete!' : (q.prog || 0) + ' / ' + q.goal) + ' · reward 🪙' + q.reward + '</span></span>' +
-        (q.done ? '<button class="cr-buy" data-claim="' + q.id + '">claim</button>' : '<button class="cr-buy" data-abandon="' + q.id + '">drop</button>') + '</div>';
-    });
-    if (hero.quests.length < 3) html += '<div class="cr-srow"><span class="cr-sic">➕</span><span class="cr-snm">New bounty<span class="cr-sdesc">Take a fresh contract</span></span><button class="cr-buy" data-newquest="1">take</button></div>';
-    html += '</div>';
-    body.innerHTML = html;
-    function findQ(id) { for (var i = 0; i < hero.quests.length; i++) if (hero.quests[i].id === id) return i; return -1; }
-    var cb = body.querySelectorAll('[data-claim]');
-    for (var i = 0; i < cb.length; i++) (function (btn) { btn.addEventListener('click', function () {
-      var ix = findQ(btn.getAttribute('data-claim')); if (ix < 0) return;
-      var q = hero.quests[ix]; hero.gold += Math.round(q.reward * greedOf()); hero.questsDone = (hero.questsDone || 0) + 1;
-      if (chance(0.5)) acquireGear(generateItem(null, hero.maxDepth + 2, 0.5));
-      hero.quests.splice(ix, 1);
-      Cade.haptic(10); Cade.showToast('Bounty complete! +' + q.reward + ' gold', 'success', 1800); markDirty(); refreshAll(); openQuestBoard();
-    }); })(cb[i]);
-    var ab = body.querySelectorAll('[data-abandon]');
-    for (var j = 0; j < ab.length; j++) (function (btn) { btn.addEventListener('click', function () {
-      var ix = findQ(btn.getAttribute('data-abandon')); if (ix >= 0) hero.quests.splice(ix, 1);
-      markDirty(); openQuestBoard();
-    }); })(ab[j]);
-    var nb = body.querySelector('[data-newquest]');
-    if (nb) nb.addEventListener('click', function () { if (hero.quests.length < 3) { hero.quests.push(genQuest()); markDirty(); openQuestBoard(); } });
-  }
+  // ---- settings -----------------------------------------------------------------
+  function loadSettings() { var s = jget(K_SET) || {}; return { sound: s.sound !== false, quick: s.quick !== false, mini: s.mini !== false, hints: s.hints !== false }; }
+  function saveSettings() { if (S) sset(K_SET, JSON.stringify(S.set)); }
 
   // ===========================================================================
-  //  THE ORACLE — story, codex (bestiary/regions/trophies) and arcane trials
+  //  persistence: local roster + Firebase mirror
   // ===========================================================================
-  function openOracle() {
-    if (!hero) return;
-    closeOverlay();
-    var ov = mkOverlay('The Oracle 🔮'); var body = ov.querySelector('.cr-ov-body');
-    var pending = hero._storyNew && hero._storyNew <= hero.story;
-    var totalKills = 0; for (var k in (hero.bestiary || {})) totalKills += hero.bestiary[k];
-    body.innerHTML =
-      '<div class="cr-oracle-quote">"The Delve remembers everyone, Delver. Let me show you what it remembers of you."</div>' +
-      '<div class="cr-shop">' +
-      '<div class="cr-srow"><span class="cr-sic">📖</span><span class="cr-snm">The Tale of the Deepdelve' +
-        '<span class="cr-sdesc">Chapter ' + hero.story + ' of ' + (STORY.length - 1) + ' uncovered</span></span>' +
-        '<button class="cr-buy' + (pending ? ' cr-new' : '') + '" data-or="story">' + (pending ? 'new!' : 'read') + '</button></div>' +
-      '<div class="cr-srow"><span class="cr-sic">📓</span><span class="cr-snm">Codex & Bestiary' +
-        '<span class="cr-sdesc">' + bestiaryKnown() + '/' + Object.keys(BESTIARY_LORE).length + ' creatures · ' + totalKills + ' slain</span></span>' +
-        '<button class="cr-buy" data-or="codex">open</button></div>' +
-      '<div class="cr-srow"><span class="cr-sic">✦</span><span class="cr-snm">Arcane Trials' +
-        '<span class="cr-sdesc">Test your mind & reflexes for gold</span></span>' +
-        '<button class="cr-buy" data-or="trials">enter</button></div>' +
-      '</div>';
-    var btns = body.querySelectorAll('[data-or]');
-    for (var i = 0; i < btns.length; i++) (function (btn) { btn.addEventListener('click', function () {
-      var w = btn.getAttribute('data-or');
-      if (w === 'story') openStory(hero._storyNew && hero._storyNew <= hero.story ? hero._storyNew : hero.story);
-      else if (w === 'codex') openCodex('bestiary');
-      else openTrials();
-    }); })(btns[i]);
-  }
-
-  // ---- story reader: paged chapters ----------------------------------------
-  function openStory(idx) {
-    closeOverlay();
-    idx = clamp(idx || 0, 0, hero.story);
-    if (hero._storyNew && idx >= hero._storyNew) { hero._storyNew = 0; markDirty(); }
-    var ov = mkOverlay('The Tale 📖'); var body = ov.querySelector('.cr-ov-body');
-    var ch = STORY[idx];
-    var html = '<div class="cr-chapnav">';
-    for (var c = 0; c <= hero.story; c++) html += '<button class="cr-chip' + (c === idx ? ' cr-on' : '') + '" data-ch="' + c + '">' + (STORY[c].icon || c) + '</button>';
-    html += '</div>';
-    html += '<div class="cr-story"><div class="cr-story-title">' + (ch.icon || '') + ' Chapter ' + ch.ch + ' — ' + Cade.escapeHtml(ch.title) + '</div>';
-    ch.lines.forEach(function (ln) { html += '<p>' + Cade.escapeHtml(ln) + '</p>'; });
-    if (idx < hero.story) html += '<button class="cr-buy" id="cr-storynext" style="width:100%;margin-top:6px">Next chapter →</button>';
-    else if (idx < STORY.length - 1) html += '<div class="cr-hint">Defeat the warden of ' + (storyForRegion(idx) ? regionNameOf(STORY[idx + 1].region) : 'the next region') + ' to uncover what comes next.</div>';
-    else html += '<div class="cr-hint">You have uncovered the whole tale — for now. The Delve always goes deeper.</div>';
-    html += '</div>';
-    html += '<button class="cr-buy" id="cr-storyback" style="width:100%;margin-top:6px">← Back to the Oracle</button>';
-    body.innerHTML = html;
-    var chips = body.querySelectorAll('[data-ch]');
-    for (var i = 0; i < chips.length; i++) (function (b) { b.addEventListener('click', function () { openStory(parseInt(b.getAttribute('data-ch'), 10)); }); })(chips[i]);
-    var nx = document.getElementById('cr-storynext'); if (nx) nx.addEventListener('click', function () { openStory(idx + 1); });
-    var bk = document.getElementById('cr-storyback'); if (bk) bk.addEventListener('click', openOracle);
-  }
-  function regionNameOf(key) { for (var i = 0; i < REGIONS.length; i++) if (REGIONS[i].key === key) return REGIONS[i].name; return 'the deep'; }
-
-  // ---- codex: bestiary / regions / trophies tabs ---------------------------
-  function openCodex(tab) {
-    closeOverlay();
-    tab = tab || 'bestiary';
-    var ov = mkOverlay('Codex 📓'); var body = ov.querySelector('.cr-ov-body');
-    var tabs = [['bestiary', '🐾 Bestiary'], ['regions', '🗺 Regions'], ['trophies', '🏆 Trophies']];
-    var html = '<div class="cr-chapnav">' + tabs.map(function (t) {
-      return '<button class="cr-chip cr-chip-wide' + (t[0] === tab ? ' cr-on' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>';
-    }).join('') + '</div><div class="cr-shop">';
-    if (tab === 'bestiary') {
-      var names = Object.keys(BESTIARY_LORE);
-      names.forEach(function (nm) {
-        var n = (hero.bestiary || {})[nm] || 0, seen = n > 0;
-        html += '<div class="cr-srow"><span class="cr-sic">' + (seen ? '📖' : '❔') + '</span>' +
-          '<span class="cr-snm">' + (seen ? Cade.escapeHtml(nm) : '???') +
-          '<span class="cr-sdesc">' + (seen ? Cade.escapeHtml(BESTIARY_LORE[nm]) : 'Not yet encountered.') + '</span></span>' +
-          '<span class="cr-buy cr-owned">' + (seen ? '×' + n : '—') + '</span></div>';
-      });
-    } else if (tab === 'regions') {
-      REGIONS.forEach(function (r, idx) {
-        var unlocked = regionUnlocked(idx), cleared = (hero.trophies || []).indexOf(r.key) >= 0;
-        html += '<div class="cr-srow"><span class="cr-sic">' + (unlocked ? r.icon : '🔒') + '</span>' +
-          '<span class="cr-snm"><span style="color:' + (unlocked ? r.pal.accent : '#6b7280') + '">' + (unlocked ? r.name : '???') + '</span>' +
-          '<span class="cr-sdesc">' + (unlocked ? Cade.escapeHtml(r.blurb) : 'Undiscovered.') + '</span></span>' +
-          '<span class="cr-buy cr-owned">' + (cleared ? '✓ cleared' : unlocked ? 'open' : '🔒') + '</span></div>';
-      });
-    } else {
-      var trophies = hero.trophies || [];
-      if (!trophies.length) html += '<div class="cr-hint">No trophies yet. Each region\'s warden leaves one when it falls — they hang in your home.</div>';
-      REGIONS.forEach(function (r) {
-        if (trophies.indexOf(r.key) < 0) return;
-        html += '<div class="cr-srow"><span class="cr-sic">🏆</span><span class="cr-snm">' + r.name +
-          '<span class="cr-sdesc">' + Cade.escapeHtml((BESTIARY_LORE[r.boss.name] || 'A fallen warden.')) + '</span></span>' +
-          '<span class="cr-buy cr-owned">+3 HP</span></div>';
-      });
-      if (trophies.length) html += '<div class="cr-hint">Trophy bonus: +' + trophyBonus() + ' max HP.</div>';
-    }
-    html += '</div><button class="cr-buy" id="cr-codexback" style="width:100%;margin-top:6px">← Back to the Oracle</button>';
-    body.innerHTML = html;
-    var tb = body.querySelectorAll('[data-tab]');
-    for (var i = 0; i < tb.length; i++) (function (b) { b.addEventListener('click', function () { openCodex(b.getAttribute('data-tab')); }); })(tb[i]);
-    var bk = document.getElementById('cr-codexback'); if (bk) bk.addEventListener('click', openOracle);
-  }
-
-  // ---- arcane trials (minigames) -------------------------------------------
-  function openTrials() {
-    closeOverlay();
-    var ov = mkOverlay('Arcane Trials ✦'); var body = ov.querySelector('.cr-ov-body');
-    body.innerHTML =
-      '<div class="cr-oracle-quote">"The wardens tested mind and nerve. So shall I. Best your own record for the richer reward."</div>' +
-      '<div class="cr-shop">' +
-      '<div class="cr-srow"><span class="cr-sic">🔮</span><span class="cr-snm">Rune Memory' +
-        '<span class="cr-sdesc">Repeat the glowing sequence · best ' + (hero._bestRune || 0) + '</span></span>' +
-        '<button class="cr-buy" data-trial="rune">play</button></div>' +
-      '<div class="cr-srow"><span class="cr-sic">⚡</span><span class="cr-snm">Reflex Trial' +
-        '<span class="cr-sdesc">Strike the runes before they fade · best ' + (hero._bestReflex || 0) + '</span></span>' +
-        '<button class="cr-buy" data-trial="reflex">play</button></div>' +
-      '</div><button class="cr-buy" id="cr-trialback" style="width:100%;margin-top:6px">← Back to the Oracle</button>';
-    var tb = body.querySelectorAll('[data-trial]');
-    for (var i = 0; i < tb.length; i++) (function (b) { b.addEventListener('click', function () {
-      if (b.getAttribute('data-trial') === 'rune') playRuneMemory(); else playReflex();
-    }); })(tb[i]);
-    var bk = document.getElementById('cr-trialback'); if (bk) bk.addEventListener('click', openOracle);
-  }
-
-  // Minigame timer bookkeeping — every timer registered here is killed when the
-  // overlay closes (closeOverlay -> trialStop), so a closed game leaks nothing.
-  var trialTimers = [];
-  function trialTimer(fn, ms) { var id = setTimeout(fn, ms); trialTimers.push({ t: 'to', id: id }); return id; }
-  function trialInterval(fn, ms) { var id = setInterval(fn, ms); trialTimers.push({ t: 'iv', id: id }); return id; }
-  function trialStop() {
-    for (var i = 0; i < trialTimers.length; i++) { var x = trialTimers[i]; if (x.t === 'iv') clearInterval(x.id); else clearTimeout(x.id); }
-    trialTimers = [];
-  }
-
-  var RUNES = ['🔥', '❄', '⚡', '☘', '☀', '🌙'];
-  function playRuneMemory() {
-    closeOverlay();
-    var ov = mkOverlay('Rune Memory 🔮'); var body = ov.querySelector('.cr-ov-body');
-    body.innerHTML =
-      '<div class="cr-mini-msg" id="cr-rm-msg">Watch the runes…</div>' +
-      '<div class="cr-mini-score" id="cr-rm-score">Round 1</div>' +
-      '<div class="cr-runegrid" id="cr-rm-grid"></div>';
-    var grid = document.getElementById('cr-rm-grid');
-    var cells = [];
-    RUNES.forEach(function (r, i) {
-      var b = document.createElement('button'); b.className = 'cr-rune'; b.textContent = r; b.setAttribute('data-i', i);
-      grid.appendChild(b); cells.push(b);
-    });
-    var seq = [], inputIdx = 0, round = 0, locked = true;
-    function flash(i, ms) { var c = cells[i]; if (!c) return; c.classList.add('cr-rune-lit'); trialTimer(function () { if (c) c.classList.remove('cr-rune-lit'); }, ms || 360); }
-    function show(n) {
-      locked = true; inputIdx = 0;
-      var step = 0;
-      var iv = trialInterval(function () {
-        if (step >= seq.length) { clearInterval(iv); setMsg('Your turn — repeat it.'); locked = false; return; }
-        flash(seq[step], 420); step++;
-      }, 620);
-    }
-    function setMsg(t) { var e = document.getElementById('cr-rm-msg'); if (e) e.textContent = t; }
-    function nextRound() {
-      round++; var s = document.getElementById('cr-rm-score'); if (s) s.textContent = 'Round ' + round;
-      seq.push(ri(RUNES.length)); setMsg('Watch the runes…'); trialTimer(function () { show(); }, 700);
-    }
-    function win(r) {
-      locked = true;
-      var reward = r * 12 + (r > (hero._bestRune || 0) ? 40 : 0);
-      var best = r > (hero._bestRune || 0); if (best) hero._bestRune = r;
-      hero.gold += reward; markDirty(); refreshAll();
-      setMsg('Sequence broken at round ' + (r + 1) + '. +' + reward + ' gold' + (best ? ' · new best!' : ''));
-      var s = document.getElementById('cr-rm-score'); if (s) s.innerHTML = '<button class="cr-buy" id="cr-rm-again">Play again</button> <button class="cr-buy cr-sell" id="cr-rm-done">Done</button>';
-      var ag = document.getElementById('cr-rm-again'); if (ag) ag.addEventListener('click', playRuneMemory);
-      var dn = document.getElementById('cr-rm-done'); if (dn) dn.addEventListener('click', openTrials);
-    }
-    for (var i = 0; i < cells.length; i++) (function (c) {
-      c.addEventListener('click', function () {
-        if (locked) return;
-        var i2 = parseInt(c.getAttribute('data-i'), 10); flash(i2, 200); Cade.haptic(4);
-        if (i2 === seq[inputIdx]) { inputIdx++; if (inputIdx >= seq.length) { setMsg('Good. Next round…'); locked = true; trialTimer(nextRound, 800); } }
-        else { win(round - 1); }
-      });
-    })(cells[i]);
-    nextRound();
-  }
-
-  function playReflex() {
-    closeOverlay();
-    var ov = mkOverlay('Reflex Trial ⚡'); var body = ov.querySelector('.cr-ov-body');
-    body.innerHTML =
-      '<div class="cr-mini-msg" id="cr-rx-msg">Strike runes the instant they appear. Miss three and it ends.</div>' +
-      '<div class="cr-mini-score" id="cr-rx-score">Score 0 · ♥♥♥</div>' +
-      '<div class="cr-reflex" id="cr-rx-field"></div>';
-    var field = document.getElementById('cr-rx-field');
-    var slots = [];
-    for (var i = 0; i < 9; i++) { var b = document.createElement('button'); b.className = 'cr-rxcell'; field.appendChild(b); slots.push(b); }
-    var score = 0, lives = 3, active = -1, lifeMs = 1100, running = true;
-    function upd() { var s = document.getElementById('cr-rx-score'); if (s) s.textContent = 'Score ' + score + ' · ' + (lives > 0 ? '♥'.repeat(lives) : '—'); }
-    function clearActive() { if (active >= 0 && slots[active]) slots[active].classList.remove('cr-rx-on'); active = -1; }
-    var spawnTimer = 0;
-    function spawn() {
-      if (!running) return;
-      clearActive();
-      active = ri(slots.length); var cell = slots[active], r = RUNES[ri(RUNES.length)];
-      cell.textContent = r; cell.classList.add('cr-rx-on');
-      var thisOne = active;
-      spawnTimer = trialTimer(function () {
-        if (running && active === thisOne) { miss(); }
-      }, lifeMs);
-    }
-    function miss() {
-      clearActive(); lives--; upd(); Cade.haptic(12);
-      if (lives <= 0) { end(); return; }
-      spawn();
-    }
-    function end() {
-      running = false; clearActive();
-      var reward = score * 8 + (score > (hero._bestReflex || 0) ? 50 : 0);
-      var best = score > (hero._bestReflex || 0); if (best) hero._bestReflex = score;
-      hero.gold += reward; markDirty(); refreshAll();
-      var m = document.getElementById('cr-rx-msg'); if (m) m.textContent = 'Done — score ' + score + '. +' + reward + ' gold' + (best ? ' · new best!' : '');
-      var s = document.getElementById('cr-rx-score'); if (s) s.innerHTML = '<button class="cr-buy" id="cr-rx-again">Play again</button> <button class="cr-buy cr-sell" id="cr-rx-done">Done</button>';
-      var ag = document.getElementById('cr-rx-again'); if (ag) ag.addEventListener('click', playReflex);
-      var dn = document.getElementById('cr-rx-done'); if (dn) dn.addEventListener('click', openTrials);
-    }
-    for (var j = 0; j < slots.length; j++) (function (cell, idx) {
-      cell.addEventListener('click', function () {
-        if (!running) return;
-        if (idx === active) { score++; lifeMs = Math.max(450, lifeMs - 14); clearTimeout(spawnTimer); upd(); Cade.haptic(6); clearActive(); trialTimer(spawn, 140); }
-      });
-    })(slots[j], j);
-    upd();
-    trialTimer(spawn, 700);
-  }
-
-  // ---- overlay: options (delete save / restart) -----------------------------
-  function openOptions() {
-    if (!hero) return;
-    closeOverlay();
-    var ov = mkOverlay('Options ⚙'); var body = ov.querySelector('.cr-ov-body');
-    var diffBtns = DIFF_ORDER.map(function (id) {
-      return '<button class="cr-cos' + (hero.difficulty === id ? ' cr-on' : '') + '" data-diff="' + id + '"><span>' + DIFFS[id].name + '</span><small>' + (id === 'normal' ? 'baseline' : Math.round(DIFFS[id].atk * 100) + '% dmg') + '</small></button>';
-    }).join('');
-    body.innerHTML =
-      '<div class="cr-hint">Your delver is saved on this device and synced to Firebase (room __cade_dungeon) when configured.</div>' +
-      '<div class="cr-grid2">' + stat('Level', hero.level) + stat('Deepest', hero.maxDepth) + stat('Bounties', hero.questsDone || 0) + stat('Runs', hero.stats.runs || 0) + '</div>' +
-      '<div class="cr-sec">Difficulty</div><div class="cr-hint">Harder foes hit back — and pay out more XP & loot. Applies as you descend.</div><div class="cr-cosrow">' + diffBtns + '</div>' +
-      '<div class="cr-sec">Danger zone</div>' +
-      '<button class="cr-buy cr-danger" id="cr-del">🗑 Delete character & start over</button>' +
-      '<div class="cr-hint" id="cr-del-hint"></div>';
-    var dbs = body.querySelectorAll('[data-diff]');
-    for (var i = 0; i < dbs.length; i++) (function (btn) { btn.addEventListener('click', function () { hero.difficulty = btn.getAttribute('data-diff'); Cade.haptic(6); markDirty(); openOptions(); }); })(dbs[i]);
-    var del = document.getElementById('cr-del'), armed = false;
-    del.addEventListener('click', function () {
-      if (!armed) { armed = true; del.textContent = '⚠ Tap again to permanently erase'; document.getElementById('cr-del-hint').textContent = 'Wipes level, gold, gear, spells, cosmetics — everything.'; return; }
-      wipeSave();
-    });
-  }
-  function wipeSave() {
-    try { Cade.store.remove(LKEY); } catch (e) {}
-    var db = fbDb(); if (db) { try { db.ref(FB_PATH).remove(); } catch (e) {} }
-    hero = freshHero(); hero.client = clientId; hero.rev = 1;
-    saveLocal();
-    closeOverlay(); buildAbilityBar(); enter(0); refreshAll();
-    Cade.showToast('A fresh delver begins.', 'success', 1800);
-  }
-
-  // ---- overlay: world map (minimap + fast travel) ---------------------------
-  function renderMinimap() {
-    var c = document.getElementById('cr-mm'); if (!c) return;
-    var x = c.getContext('2d'), W = c.width, H = c.height, sx = W / MW, sy = H / MH;
-    x.fillStyle = '#10140e'; x.fillRect(0, 0, W, H);
-    // draw the actual maze when we're standing in it
-    if (world && world.mode === 'overworld' && world.map) {
-      for (var yy = 0; yy < MH; yy++) for (var xx = 0; xx < MW; xx++) {
-        x.fillStyle = world.map[yy][xx] === T_FLOOR ? '#2c3d24' : '#161c14';
-        x.fillRect(xx * sx, yy * sy, sx + 0.7, sy + 0.7);
-      }
-    } else { x.fillStyle = '#1a221a'; x.fillRect(sx, sy, W - 2 * sx, H - 2 * sy); }
-    var pos = (hero && hero._owPos) || {};
-    DELVES.forEach(function (d) { var p = pos['delve:' + d.region]; if (!p) return; var un = regionUnlocked(d.region); x.fillStyle = un ? ((REGIONS[d.region].pal && REGIONS[d.region].pal.accent) || '#a87fe0') : '#55555f'; x.beginPath(); x.arc(p.x * sx + sx / 2, p.y * sy + sy / 2, 2.8, 0, 6.3); x.fill(); });
-    for (var tk in TOWNS) { var p2 = pos['town:' + tk]; if (!p2) continue; var un2 = townUnlocked(tk); x.fillStyle = un2 ? ((TOWNS[tk].pal && TOWNS[tk].pal.accent) || '#ffd76a') : '#6b7280'; x.fillRect(p2.x * sx - 1.5, p2.y * sy - 1.5, 4, 4); }
-    var pp = world && world.mode === 'overworld' ? { x: world.player.x, y: world.player.y } : (hero.ow || pos['town:hearth']);
-    if (pp) { x.fillStyle = '#fff'; x.beginPath(); x.arc(pp.x * sx + sx / 2, pp.y * sy + sy / 2, 3, 0, 6.3); x.fill(); x.strokeStyle = '#5ec8e6'; x.lineWidth = 2; x.stroke(); }
-  }
-  function openWorldMap() {
-    if (!hero) return;
-    closeOverlay();
-    var ov = mkOverlay('World Map 🗺'); var body = ov.querySelector('.cr-ov-body');
-    var html = '<div class="cr-mmwrap"><canvas id="cr-mm" width="280" height="226"></canvas></div>';
-    html += '<div class="cr-hint">Walk the Overworld, or fast-travel to a place you\'ve discovered.</div><div class="cr-shop">';
-    if (!world || world.mode !== 'overworld')
-      html += '<div class="cr-srow"><span class="cr-sic">🗺</span><span class="cr-snm">The Overworld<span class="cr-sdesc">Roam the realm on foot</span></span><button class="cr-buy" data-go="ow">walk</button></div>';
-    html += '<div class="cr-sec">Towns</div>';
-    for (var tk in TOWNS) { var T = TOWNS[tk], unlocked = townUnlocked(tk), seen = (hero.townsSeen || []).indexOf(tk) >= 0;
-      var sub = !unlocked ? ('🔒 ' + townReqText(tk)) : T.full ? 'Your home hub' : seen ? 'Visited' : 'Reach it on foot to discover';
-      html += '<div class="cr-srow"><span class="cr-sic">' + (unlocked ? T.icon : '🔒') + '</span><span class="cr-snm"><span style="color:' + (unlocked ? ((T.pal && T.pal.accent) || '#ffd76a') : '#6b7280') + '">' + T.name + '</span><span class="cr-sdesc">' + sub + '</span></span>' +
-        ((unlocked && seen) ? '<button class="cr-buy" data-town="' + tk + '">go</button>' : '<span class="cr-buy cr-owned">' + (unlocked ? '·' : '🔒') + '</span>') + '</div>'; }
-    html += '<div class="cr-sec">Delves</div>';
-    REGIONS.forEach(function (r, idx) {
-      var unlocked = regionUnlocked(idx), cleared = hero.maxDepth > regionEnd(idx);
-      var status = !unlocked ? '🔒 sealed' : cleared ? '✓ cleared' : 'floors ' + regionStart(idx) + '–' + regionEnd(idx);
-      html += '<div class="cr-srow"><span class="cr-sic">' + (unlocked ? r.icon : '🔒') + '</span><span class="cr-snm"><span style="color:' + (unlocked ? r.pal.accent : '#6b7280') + '">' + r.name + '</span><span class="cr-sdesc">' + status + '</span></span>' +
-        (unlocked ? '<button class="cr-buy" data-delve="' + idx + '">enter</button>' : '<span class="cr-buy cr-owned">🔒</span>') + '</div>';
-    });
-    html += '</div>';
-    body.innerHTML = html;
-    renderMinimap();
-    var go = body.querySelector('[data-go="ow"]'); if (go) go.addEventListener('click', function () { closeOverlay(); enter(OW); });
-    var pos = (hero && hero._owPos) || {};
-    var tb = body.querySelectorAll('[data-town]');
-    for (var i = 0; i < tb.length; i++) (function (btn) { btn.addEventListener('click', function () { var id = btn.getAttribute('data-town'); if (!townUnlocked(id)) { Cade.showToast('🔒 ' + townReqText(id), 'info', 2400); return; } closeOverlay(); hero.ow = pos['town:' + id] || null; enter(0, id); }); })(tb[i]);
-    var db = body.querySelectorAll('[data-delve]');
-    for (var j = 0; j < db.length; j++) (function (btn) { btn.addEventListener('click', function () {
-      var idx = parseInt(btn.getAttribute('data-delve'), 10); if (!regionUnlocked(idx)) { Cade.showToast('Sealed — clear the region before it', 'info', 1600); return; }
-      closeOverlay(); hero.ow = pos['delve:' + idx] || null; hero._delveTown = hero._lastTown || 'hearth'; hero.stats.runs = (hero.stats.runs || 0) + 1; enter(regionStart(idx));
-    }); })(db[j]);
-  }
-
-  // ---- overlay: furnish the house (grid editor) -----------------------------
-  function openFurnish() {
-    if (!hero) return;
-    closeOverlay();
-    hero.house = hero.house || { furniture: [] }; hero.furniture = hero.furniture || {};
-    var ov = mkOverlay('Furnish 🛠'); var body = ov.querySelector('.cr-ov-body');
-    function placedCount(k) { return hero.house.furniture.filter(function (f) { return f.kind === k; }).length; }
-    function unplaced(k) { return (hero.furniture[k] || 0) - placedCount(k); }
-    var occ = {}; hero.house.furniture.forEach(function (f) { occ[f.y * HW + f.x] = f.kind; });
-    var html = '<div class="cr-hint">Tap a floor tile to place the selected piece; tap a placed piece to remove it.</div>';
-    html += '<div class="cr-hgrid" style="grid-template-columns:repeat(' + HW + ',1fr)">';
-    for (var y = 0; y < HH; y++) for (var x = 0; x < HW; x++) {
-      var edge = (x === 0 || y === 0 || x === HW - 1 || y === HH - 1), wb = (x === 1 && y === 1);
-      var k = occ[y * HW + x];
-      html += '<button class="cr-hcell' + (edge ? ' cr-hwall' : '') + '" data-cell="' + x + ',' + y + '">' + (edge ? '' : wb ? '🛠' : (k ? FURNITURE[k].icon : '')) + '</button>';
-    }
-    html += '</div>';
-    html += '<div class="cr-sec">Your furniture</div><div class="cr-cosrow" id="cr-furnpal"></div>';
-    html += '<button class="cr-buy" id="cr-furnbuy" style="margin-top:8px;width:100%">＋ Buy furniture (Carpenter)</button>';
-    body.innerHTML = html;
-    var pal = document.getElementById('cr-furnpal'), any = false;
-    Object.keys(FURNITURE).forEach(function (kind) {
-      var n = unplaced(kind); if (n <= 0) return; any = true;
-      var b = document.createElement('button'); b.className = 'cr-cos' + (houseSel === kind ? ' cr-on' : '');
-      b.innerHTML = '<span class="cr-swatch cr-swatch-hat">' + FURNITURE[kind].icon + '</span><span>' + FURNITURE[kind].name + '</span><small>×' + n + '</small>';
-      b.addEventListener('click', function () { houseSel = (houseSel === kind ? null : kind); openFurnish(); });
-      pal.appendChild(b);
-    });
-    if (!any) pal.innerHTML = '<span class="cr-hint">No spare furniture — buy some below.</span>';
-    var cells = body.querySelectorAll('[data-cell]');
-    for (var i = 0; i < cells.length; i++) (function (btn) {
-      btn.addEventListener('click', function () {
-        var pr = btn.getAttribute('data-cell').split(','), cx = parseInt(pr[0], 10), cy = parseInt(pr[1], 10);
-        if (cx === 0 || cy === 0 || cx === HW - 1 || cy === HH - 1) return;
-        if (cx === 1 && cy === 1) { Cade.showToast('The workbench sits here', 'info', 1000); return; }
-        var ix = -1; for (var j = 0; j < hero.house.furniture.length; j++) { var f = hero.house.furniture[j]; if (f.x === cx && f.y === cy) { ix = j; break; } }
-        if (ix >= 0) { hero.house.furniture.splice(ix, 1); }
-        else { if (!houseSel || unplaced(houseSel) <= 0) { Cade.showToast('Pick a piece first', 'info', 1000); return; } hero.house.furniture.push({ kind: houseSel, x: cx, y: cy }); }
-        syncHouseFurniture(); Cade.haptic(6); markDirty(); openFurnish();
-      });
-    })(cells[i]);
-    var bb = document.getElementById('cr-furnbuy'); if (bb) bb.addEventListener('click', openFurnitureShop);
-  }
-  function openFurnitureShop() {
-    closeOverlay();
-    var ov = mkOverlay('Carpenter 🪚'); var body = ov.querySelector('.cr-ov-body');
-    var html = '<div class="cr-shopgold">🪙 ' + hero.gold + ' gold</div><div class="cr-shop">';
-    Object.keys(FURNITURE).forEach(function (kind) { var f = FURNITURE[kind]; html += shopRow('furn:' + kind, f.icon, f.name, f.desc, buyPrice(f.price), hero.furniture[kind] || 0); });
-    html += '</div><button class="cr-buy" id="cr-furnback" style="margin-top:8px;width:100%">← Back to furnishing</button>';
-    body.innerHTML = html;
-    bindShop(body, openFurnitureShop);
-    var bk = document.getElementById('cr-furnback'); if (bk) bk.addEventListener('click', openFurnish);
-  }
-  function openStash() {
-    closeOverlay();
-    hero.stash = hero.stash || [];
-    var ov = mkOverlay('Stash 🧰'); var body = ov.querySelector('.cr-ov-body');
-    var html = '<div class="cr-hint">Store gear to free your pack (' + hero.owned.length + '/60). In stash: ' + hero.stash.length + '.</div>';
-    html += '<div class="cr-sec">Pack — tap to store</div><div class="cr-owned">';
-    var pack = hero.owned.filter(function (it) { return hero.equip[it.slot] !== it.uid; });
-    pack.forEach(function (it) { html += '<button class="cr-gear" data-store="' + it.uid + '"><span>' + it.icon + '</span> <span style="color:' + rarityOf(it).color + '">' + Cade.escapeHtml(it.name) + '</span><span class="cr-gear-st">' + instanceStatStr(it) + '</span></button>'; });
-    if (!pack.length) html += '<span class="cr-hint">Nothing spare to store.</span>';
-    html += '</div><div class="cr-sec">Stash — tap to take</div><div class="cr-owned">';
-    hero.stash.forEach(function (it) { html += '<button class="cr-gear" data-take="' + it.uid + '"><span>' + it.icon + '</span> <span style="color:' + rarityOf(it).color + '">' + Cade.escapeHtml(it.name) + '</span><span class="cr-gear-st">' + instanceStatStr(it) + '</span></button>'; });
-    if (!hero.stash.length) html += '<span class="cr-hint">Empty.</span>';
-    html += '</div>';
-    body.innerHTML = html;
-    var st = body.querySelectorAll('[data-store]');
-    for (var i = 0; i < st.length; i++) (function (btn) { btn.addEventListener('click', function () {
-      var it = itemByUid(btn.getAttribute('data-store')); if (!it) return; var ix = hero.owned.indexOf(it); if (ix < 0) return;
-      hero.owned.splice(ix, 1); hero.stash.push(it); markDirty(); refreshAll(); openStash();
-    }); })(st[i]);
-    var tk = body.querySelectorAll('[data-take]');
-    for (var j = 0; j < tk.length; j++) (function (btn) { btn.addEventListener('click', function () {
-      if (hero.owned.length >= 60) { Cade.showToast('Pack is full', 'error', 1200); return; }
-      var uid2 = btn.getAttribute('data-take'), ix = -1; for (var q = 0; q < hero.stash.length; q++) if (hero.stash[q].uid === uid2) { ix = q; break; }
-      if (ix < 0) return; hero.owned.push(hero.stash[ix]); hero.stash.splice(ix, 1); markDirty(); refreshAll(); openStash();
-    }); })(tk[j]);
-  }
-
-  function mkOverlay(title) {
-    closeOverlay();
-    var el = document.createElement('div'); el.className = 'cr-overlay'; el.id = 'cr-overlay';
-    el.innerHTML = '<div class="cr-ov-card"><div class="cr-ov-head"><span>' + title + '</span><button class="cr-ov-x" aria-label="Close">×</button></div><div class="cr-ov-body"></div></div>';
-    ui.wrap.appendChild(el);
-    el.querySelector('.cr-ov-x').addEventListener('click', closeOverlay);
-    el.addEventListener('click', function (e) { if (e.target === el) closeOverlay(); });
-    return el;
-  }
-  function closeOverlay() { trialStop(); var o = document.getElementById('cr-overlay'); if (o) o.remove(); }
-
-  // =========================================================================
-  //  persistence: local + Firebase room _dungeon
-  // =========================================================================
-  function getClientId() {
-    var c = '';
-    try { c = Cade.store.get(CKEY) || ''; } catch (e) {}
-    if (!c) { c = 'c' + Math.random().toString(36).slice(2, 9) + (Date.now() % 100000); try { Cade.store.set(CKEY, c); } catch (e) {} }
+  function clientId() {
+    var c = sget(K_CLIENT);
+    if (!c) { c = 'c' + Math.random().toString(36).slice(2, 9) + (Date.now() % 100000); sset(K_CLIENT, c); }
     return c;
   }
-  function serialize() {
-    return {
-      v: 4, name: hero.name, level: hero.level, xp: hero.xp,
-      maxHp: hero.maxHp, hp: hero.hp, maxMp: hero.maxMp, mp: hero.mp,
-      atk: hero.atk, def: hero.def, crit: hero.crit, gold: hero.gold,
-      depth: hero.depth, maxDepth: hero.maxDepth, equip: hero.equip, bag: hero.bag,
-      owned: hero.owned, spells: hero.spells, docked: hero.docked,
-      cosmetics: hero.cosmetics, ownedCos: hero.ownedCos,
-      quests: hero.quests, questsDone: hero.questsDone || 0, difficulty: hero.difficulty || 'normal',
-      house: hero.house || { furniture: [] }, furniture: hero.furniture || {}, trophies: hero.trophies || [], stash: hero.stash || [],
-      story: hero.story || 0, lore: hero.lore || [], bestiary: hero.bestiary || {},
-      ow: hero.ow || null, townsSeen: hero.townsSeen || ['hearth'], mats: hero.mats || {},
-      _bestRune: hero._bestRune || 0, _bestReflex: hero._bestReflex || 0, _prolog: hero._prolog || false,
-      stats: hero.stats, _wlvl: hero._wlvl || 0, _alvl: hero._alvl || 0,
-      _konami: hero._konami || false, _fled: hero._fled || 0,
-      createdAt: hero.createdAt, updatedAt: Date.now(), rev: hero.rev, client: clientId
-    };
-  }
-  function deserialize(d) {
-    if (!d || typeof d !== 'object') return null;
-    var h = freshHero();
-    for (var k in d) if (d[k] != null) h[k] = d[k];
-    // normalize the only free-form, remotely-settable string
-    h.name = String(h.name == null ? 'Delver' : h.name).replace(/[<>]/g, '').slice(0, 24) || 'Delver';
-    h.bag = h.bag || { potion: 1 };
-    // ---- gear model migration: old saves stored base-id strings; new saves
-    //      store rolled item instances. Convert and re-point equipment. --------
-    var oldEquip = h.equip || {};
-    if (!Array.isArray(h.owned)) h.owned = [];
-    if (h.owned.length && typeof h.owned[0] === 'string') {
-      var map = {}, inst = [];
-      h.owned.forEach(function (id) { var b = gear(id); if (b) { var it = makeBaseInstance(id, 'common', Math.max(1, (b.tier || 1) * 2)); map[id] = it.uid; inst.push(it); } });
-      h.owned = inst;
-      h.equip = {
-        weapon: (oldEquip.weapon && map[oldEquip.weapon]) || null,
-        armor: (oldEquip.armor && map[oldEquip.armor]) || null,
-        trinket: (oldEquip.trinket && oldEquip.trinket !== 'none' && map[oldEquip.trinket]) || null
-      };
-    } else {
-      h.owned = h.owned.filter(function (it) { return it && it.uid && gear(it.base); }).map(repairItem);
-      h.equip = h.equip || {};
-      ['weapon', 'armor', 'trinket'].forEach(function (sl) { var u = h.equip[sl]; if (u && !h.owned.some(function (it) { return it.uid === u; })) h.equip[sl] = null; });
-    }
-    if (!h.owned.length) { var d0 = makeBaseInstance('dagger', 'common', 2), r0 = makeBaseInstance('rags', 'common', 1); h.owned = [d0, r0]; h.equip = { weapon: d0.uid, armor: r0.uid, trinket: null }; }
-    ['weapon', 'armor'].forEach(function (sl) { if (!h.equip[sl]) { for (var i = 0; i < h.owned.length; i++) if (h.owned[i].slot === sl) { h.equip[sl] = h.owned[i].uid; break; } } });
-    h.spells = (h.spells || ['strike']).filter(function (id) { return !!ABIL[id]; });
-    if (h.spells.indexOf('strike') < 0) h.spells.unshift('strike');
-    // BUGFIX: grant every auto-learned spell the hero has already out-leveled.
-    // (Auto-spells were only granted on the exact level-up tick, so migrated or
-    // high-level characters could never get Firebolt/Blink/etc., and the
-    // Arcanist only sells the tome spells — leaving no recovery path.)
-    ABIL_ORDER.forEach(function (id) { if (ABIL[id].learn === 'auto' && h.level >= ABIL[id].lvl && h.spells.indexOf(id) < 0) h.spells.push(id); });
-    h.docked = (h.docked || []).filter(function (id) { return h.spells.indexOf(id) >= 0; }).slice(0, DOCK_MAX);
-    for (var di = 0; di < h.spells.length && h.docked.length < DOCK_MAX; di++) if (h.docked.indexOf(h.spells[di]) < 0) h.docked.push(h.spells[di]);
-    h.cosmetics = h.cosmetics || {};
-    var COSDEF = { color: 'cyan', eyes: 'default', pattern: 'none', belt: 'none', hat: 'none', cape: 'none', pet: 'none' };
-    COS_SLOTS.forEach(function (sl) { if (!COSMETIC[sl] || !COSMETIC[sl][h.cosmetics[sl]]) h.cosmetics[sl] = COSDEF[sl]; });
-    h.ownedCos = Array.isArray(h.ownedCos) ? h.ownedCos : [];
-    h.quests = Array.isArray(h.quests) ? h.quests : [];
-    if (!DIFFS[h.difficulty]) h.difficulty = 'normal';
-    h.house = (h.house && Array.isArray(h.house.furniture)) ? h.house : { furniture: [] };
-    h.house.furniture = h.house.furniture.filter(function (f) { return f && FURNITURE[f.kind]; });
-    h.furniture = (h.furniture && typeof h.furniture === 'object') ? h.furniture : {};
-    h.trophies = (Array.isArray(h.trophies) ? h.trophies : []).filter(function (k) { return REGIONS.some(function (r) { return r.key === k; }); });
-    h.stash = (Array.isArray(h.stash) ? h.stash : []).filter(function (it) { return it && it.uid && gear(it.base); }).map(repairItem);
-    h.story = clamp(parseInt(h.story, 10) || 0, 0, STORY.length - 1);
-    h.lore = Array.isArray(h.lore) ? h.lore : [];
-    h.bestiary = (h.bestiary && typeof h.bestiary === 'object' && !Array.isArray(h.bestiary)) ? h.bestiary : {};
-    h.ow = (h.ow && typeof h.ow.x === 'number' && typeof h.ow.y === 'number') ? { x: h.ow.x, y: h.ow.y } : null;
-    h.townsSeen = Array.isArray(h.townsSeen) ? h.townsSeen.filter(function (t) { return !!TOWNS[t]; }) : ['hearth'];
-    if (h.townsSeen.indexOf('hearth') < 0) h.townsSeen.unshift('hearth');
-    h.mats = (h.mats && typeof h.mats === 'object' && !Array.isArray(h.mats)) ? h.mats : {};
-    for (var mk in h.mats) { if (!MATS[mk] || typeof h.mats[mk] !== 'number' || h.mats[mk] < 0) delete h.mats[mk]; }
-    h.stats = h.stats || { kills: 0, deaths: 0, floors: 0, gems: 0, runs: 0 };
-    h.buffs = {};
-    return h;
-  }
-  function loadLocal() { try { var s = Cade.store.get(LKEY); return s ? deserialize(JSON.parse(s)) : null; } catch (e) { return null; } }
-  function saveLocal() { try { Cade.store.set(LKEY, JSON.stringify(serialize())); } catch (e) {} }
-
   function fbDb() {
     try {
       if (typeof firebase === 'undefined' || !firebase.database) return null;
-      var url = Cade.store.get('cade-firebase-url'); if (!url) return null;
+      var url = sget('cade-firebase-url'); if (!url) return null;
       var app;
-      try { app = firebase.app('cade-dungeon'); }
-      catch (e) { app = firebase.initializeApp({ databaseURL: url }, 'cade-dungeon'); }
+      try { app = firebase.app('cade-dungeon'); } catch (e) { app = firebase.initializeApp({ databaseURL: url }, 'cade-dungeon'); }
       return firebase.database(app);
     } catch (e) { return null; }
   }
-  function progressScore(d) { return (d.maxDepth || 0) * 1000 + (d.level || 0) * 100 + (d.rev || 0); }
-
-  function loadHero(done) {
-    clientId = getClientId();
-    var local = loadLocal();
-    var db = fbDb();
-    if (!db) { hero = local || freshHero(); hero.client = clientId; done(); attachFbListener(); return; }
-    var settled = false;
-    var fin = function (h) { if (settled) return; settled = true; hero = h; hero.client = clientId; done(); attachFbListener(); };
-    var useRemote = function (val) {
-      var remote = deserialize(val);
-      var chosen;
-      if (remote && local) chosen = (progressScore(remote) >= progressScore(local)) ? remote : local;
-      else chosen = remote || local || freshHero();
-      fin(chosen);
-    };
-    try {
-      db.ref(FB_PATH).once('value').then(function (snap) {
-        var v = snap.val();
-        if (v != null) { useRemote(v); return; }
-        // nothing at the new path — migrate a save left at the old visible path
-        db.ref(FB_PATH_OLD).once('value').then(function (s2) {
-          var ov = s2.val();
-          if (ov != null) migrateOld = true;
-          useRemote(ov);
-        }).catch(function () { useRemote(null); });
-      }).catch(function () { fin(local || freshHero()); });
-    } catch (e) { fin(local || freshHero()); }
-    // safety timeout if Firebase hangs
-    setTimeout(function () { fin(local || freshHero()); }, 4000);
-  }
-
-  function attachFbListener() {
-    detachFbListener();
-    var db = fbDb(); if (!db) return;
-    try {
-      fbRef = db.ref(FB_PATH);
-      fbCb = function (snap) {
-        var remote = deserialize(snap.val());
-        if (!remote) return;
-        if (remote.client === clientId) return;            // our own echo
-        if (remote.rev <= hero.rev) return;                 // not newer
-        // adopt only when safe (in town and not mid-overlay battle) to avoid disrupting a run
-        if (world && world.mode === 'town') {
-          hero = remote; hero.client = clientId;
-          enter(0); Cade.showToast('Synced character from another device', 'success');
-        } else {
-          // a newer remote exists but we're mid-run — keep playing, but advance
-          // our logical clock past it so an equal-progress tie resolves to the
-          // active device and the progressScore transaction stays coherent.
-          hero._remoteAhead = remote.rev;
-          hero.rev = Math.max(hero.rev || 1, remote.rev || 1);
+  // load: local roster ⊕ remote roster; if neither exists, migrate the legacy hero.
+  function loadRoster(done) {
+    var local = jget(K_ROSTER), db = fbDb(), settled = false;
+    function finish(remote, legacyRemote) {
+      if (settled) return; settled = true;
+      var R = local ? E.normRoster(local) : null;
+      if (remote) R = R ? E.mergeRoster(R, remote) : E.normRoster(remote);
+      if (!R) R = E.newRoster();
+      // legacy migration (only once: a flag in the roster remembers)
+      if (!R.migrated) {
+        var old = legacyRemote || jget(K_LEGACY), localOld = jget(K_LEGACY);
+        if (localOld && legacyRemote && (localOld.rev || 0) > (legacyRemote.rev || 0)) old = localOld;
+        if (old && !Object.keys(R.slots).some(function (id) { return R.slots[id].flags && R.slots[id].flags.veteran; })) {
+          var h = E.migrateLegacy(old);
+          if (h && R.order.length < E.ROSTER_MAX) { R.slots[h.id] = h; R.order.unshift(h.id); R.active = h.id; S && (S.migratedNow = h.id); }
         }
+        R.migrated = 1;
+      }
+      done(R);
+    }
+    if (!db) { finish(null, null); return; }
+    try {
+      db.ref(FB_ROSTER).once('value').then(function (snap) {
+        var v = snap.val();
+        if (v || local) { finish(v, null); return; }
+        db.ref(FB_LEGACY).once('value').then(function (s2) {
+          var lv = s2.val();
+          if (lv) { finish(null, lv); return; }
+          db.ref(FB_LEGACY_OLD).once('value').then(function (s3) { finish(null, s3.val()); }).catch(function () { finish(null, null); });
+        }).catch(function () { finish(null, null); });
+      }).catch(function () { finish(null, null); });
+    } catch (e) { finish(null, null); }
+    setTimeout(function () { finish(null, null); }, 4000);
+  }
+  function attachFb() {
+    detachFb();
+    var db = fbDb(); if (!db || !S) return;
+    try {
+      S.fbRef = db.ref(FB_ROSTER);
+      S.fbCb = function (snap) {
+        var v = snap.val(); if (!v || !S || !S.R) return;
+        if (v.client === S.client && (v.rev || 0) <= (S.R.rev || 0)) return;   // our own echo
+        var inRun = !!S.G && S.G.mode === 'story', keep = inRun ? S.G.hero : null;
+        var merged = E.mergeRoster(S.R, v);
+        merged.migrated = 1;
+        if (keep) { merged.slots[keep.id] = keep; }
+        var activeBefore = S.R.active;
+        S.R = merged; S.R.active = S.R.slots[activeBefore] ? activeBefore : S.R.active;
+        sset(K_ROSTER, JSON.stringify(S.R));
+        if (!inRun && S.screen === 'town') { S.hero = S.R.slots[S.R.active] || S.hero; renderScreen(); }
+        else if (!inRun && (S.screen === 'title' || S.screen === 'roster')) renderScreen();
       };
-      fbRef.on('value', fbCb);
+      S.fbRef.on('value', S.fbCb);
     } catch (e) {}
   }
-  function detachFbListener() { try { if (fbRef && fbCb) fbRef.off('value', fbCb); } catch (e) {} fbRef = null; fbCb = null; }
-
-  function markDirty() { fbDirty = true; scheduleSave(); }
-  function scheduleSave() {
-    if (saveTimer) return;
-    saveTimer = setTimeout(function () { saveTimer = 0; if (fbDirty) saveNow(); }, 2500);
-  }
-  function saveNow() {
-    fbDirty = false;
-    if (!hero) return;
-    hero.rev = (hero.rev || 1) + 1;
-    saveLocal();
+  function detachFb() { try { if (S && S.fbRef && S.fbCb) S.fbRef.off('value', S.fbCb); } catch (e) {} if (S) { S.fbRef = null; S.fbCb = null; } }
+  function markDirty() { if (!S) return; S.dirty = true; if (!S.saveT) S.saveT = setTimeout(function () { if (S) { S.saveT = 0; saveNow(); } }, 1800); }
+  function saveNow(force) {
+    if (!S || !S.R) return;
+    S.dirty = false;
+    if (S.G && S.G.mode === 'story') E.syncHero(S.G);
+    var h = S.R.slots[S.R.active]; if (h) { h.rev = (h.rev || 1) + 1; h.updated = Date.now(); h.client = S.client; }
+    S.R.rev = (S.R.rev || 0) + 1; S.R.client = S.client;
+    var json = JSON.stringify(S.R);
+    sset(K_ROSTER, json);
     var db = fbDb(); if (!db) return;
-    var mine = serialize(), myScore = progressScore(mine);
+    // mid-delve the cloud copy is refreshed at most every 15 s (and always on the way out)
+    var tnow = Date.now();
+    if (!force && S.G && S.lastFb && tnow - S.lastFb < 15000) { if (!S.fbT) S.fbT = setTimeout(function () { if (S) { S.fbT = 0; saveNow(true); } }, 15000 - (tnow - S.lastFb)); return; }
+    S.lastFb = tnow; if (S.fbT) { clearTimeout(S.fbT); S.fbT = 0; }
+    var mine = JSON.parse(json);
     try {
-      // Conflict-safe write: keep whichever character is more progressed (same
-      // rule loadHero uses), so a second open device can't clobber a better run.
-      db.ref(FB_PATH).transaction(function (cur) {
-        if (cur && cur.client !== clientId && progressScore(cur) > myScore) return; // abort, keep remote
-        return mine;
+      db.ref(FB_ROSTER).transaction(function (cur) {
+        var m = cur ? E.mergeRoster(mine, cur) : mine;
+        m.migrated = 1; m.client = S ? S.client : mine.client; m.rev = Math.max(mine.rev || 0, (cur && cur.rev) || 0) + 1;
+        return JSON.parse(JSON.stringify(m));
       }, undefined, false);
-    } catch (e) { try { db.ref(FB_PATH).set(mine); } catch (e2) {} }
-    if (migrateOld) { migrateOld = false; try { db.ref(FB_PATH_OLD).remove(); } catch (e3) {} }
+    } catch (e) { try { db.ref(FB_ROSTER).set(mine); } catch (e2) {} }
   }
+  function runKey() { if (!S || !S.G) return null; return K_RUN + (S.G.mode === 'daily' ? 'daily' : S.G.heroId); }
+  function saveRunSoon() { if (!S || !S.G) return; if (!S.runT) S.runT = setTimeout(function () { if (S) { S.runT = 0; saveRunNow(); } }, 700); }
+  function saveRunNow() {
+    if (!S || !S.G || S.G.over) return;
+    try {
+      var snap = E.serializeRun(S.G);
+      snap.savedAt = Date.now();
+      if (S.G.mode === 'story') snap.heroRev = S.G.hero.rev || 0;
+      sset(runKey(), JSON.stringify(snap));
+    } catch (e) {}
+    if (S.G.mode === 'story') { E.syncHero(S.G); markDirty(); }
+  }
+  function clearRun(mode, heroId) { sdel(K_RUN + (mode === 'daily' ? 'daily' : heroId)); }
 
-  // =========================================================================
-  //  input
-  // =========================================================================
-  // ---- Konami easter egg ----------------------------------------------------
-  var konamiBuf = [];
-  var KONAMI = ['arrowup', 'arrowup', 'arrowdown', 'arrowdown', 'arrowleft', 'arrowright', 'arrowleft', 'arrowright', 'b', 'a'];
-  function konamiPush(k) {
-    if (!k) return;
-    konamiBuf.push(k.toLowerCase());
-    if (konamiBuf.length > KONAMI.length) konamiBuf.shift();
-    if (konamiBuf.length < KONAMI.length) return;
-    for (var i = 0; i < KONAMI.length; i++) if (konamiBuf[i] !== KONAMI[i]) return;
-    konamiBuf.length = 0; konamiReward();
-  }
-  function konamiReward() {
-    if (!hero) return;
-    if (!hero._konami) {
-      hero._konami = true; acquireGear('lucky');
-      Cade.showToast('🍀 The Delver’s Blessing — a Lucky Clover appears!', 'success', 3000);
-      logMsg('win', 'A four-leaf clover materializes in your pack!');
-    } else {
-      hero.hp = maxHpOf(); hero.mp = maxMpOf();
-      Cade.showToast('🍀 Fully restored.', 'success', 1800);
+  // ===========================================================================
+  //  sound — tiny WebAudio blips, created on the first gesture
+  // ===========================================================================
+  function Snd(on) { this.on = !!on; this.ac = null; this.last = {}; }
+  Snd.prototype.ensure = function () {
+    if (!this.on) return;
+    if (!this.ac) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; try { this.ac = new AC(); } catch (e) { this.ac = null; return; } }
+    if (this.ac.state === 'suspended') { try { this.ac.resume(); } catch (e) {} }
+  };
+  Snd.prototype.tone = function (f, dur, type, vol, slide, delay) {
+    var ac = this.ac; if (!this.on || !ac || ac.state === 'closed') return;
+    try {
+      var t = ac.currentTime + (delay || 0), o = ac.createOscillator(), g = ac.createGain();
+      o.type = type || 'sine'; o.frequency.setValueAtTime(f, t);
+      if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, slide), t + dur);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || 0.05, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur + 0.03);
+    } catch (e) {}
+  };
+  Snd.prototype.noise = function (dur, vol, hp, delay) {
+    var ac = this.ac; if (!this.on || !ac || ac.state === 'closed') return;
+    try {
+      var n = Math.floor(ac.sampleRate * dur), b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0);
+      for (var i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      var s = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+      f.type = 'highpass'; f.frequency.value = hp || 600;
+      s.buffer = b; g.gain.value = vol || 0.05; s.connect(f); f.connect(g); g.connect(ac.destination);
+      s.start(ac.currentTime + (delay || 0));
+    } catch (e) {}
+  };
+  Snd.prototype.play = function (k) {
+    if (!this.on || !this.ac) return;
+    var t = now(); if (this.last[k] && t - this.last[k] < 45) return; this.last[k] = t;
+    switch (k) {
+      case 'step': this.tone(140, 0.03, 'triangle', 0.012); break;
+      case 'hit': this.noise(0.06, 0.06, 900); this.tone(220, 0.06, 'square', 0.025, 110); break;
+      case 'crit': this.noise(0.09, 0.09, 700); this.tone(520, 0.12, 'sawtooth', 0.04, 160); break;
+      case 'hurt': this.tone(160, 0.14, 'sawtooth', 0.05, 70); break;
+      case 'miss': this.tone(900, 0.05, 'sine', 0.02, 1300); break;
+      case 'kill': this.tone(330, 0.08, 'square', 0.03, 520); this.tone(660, 0.08, 'triangle', 0.025, 0, 0.06); break;
+      case 'gold': this.tone(1320, 0.05, 'triangle', 0.03); this.tone(1760, 0.07, 'triangle', 0.025, 0, 0.05); break;
+      case 'pick': this.tone(880, 0.06, 'triangle', 0.03, 1320); break;
+      case 'rare': [880, 1108, 1318, 1760].forEach(function (f, i) { this.tone(f, 0.12, 'triangle', 0.03, 0, i * 0.06); }, this); break;
+      case 'level': [523, 659, 784, 1046].forEach(function (f, i) { this.tone(f, 0.16, 'square', 0.03, 0, i * 0.09); }, this); break;
+      case 'fire': this.noise(0.18, 0.05, 300); this.tone(300, 0.15, 'sawtooth', 0.025, 120); break;
+      case 'frost': this.tone(1600, 0.2, 'sine', 0.03, 600); break;
+      case 'zap': this.noise(0.08, 0.05, 2500); this.tone(1200, 0.1, 'square', 0.02, 300); break;
+      case 'holy': this.tone(880, 0.25, 'sine', 0.035); this.tone(1320, 0.25, 'sine', 0.025, 0, 0.05); break;
+      case 'dark': this.tone(110, 0.25, 'sawtooth', 0.035, 55); break;
+      case 'bow': this.tone(420, 0.05, 'triangle', 0.03, 900); break;
+      case 'swing': this.noise(0.08, 0.04, 1800); break;
+      case 'boom': this.noise(0.35, 0.1, 120); this.tone(80, 0.3, 'sine', 0.06, 40); break;
+      case 'heal': this.tone(660, 0.18, 'sine', 0.03, 990); break;
+      case 'door': this.tone(200, 0.08, 'triangle', 0.025, 150); break;
+      case 'stairs': [392, 330, 262, 196].forEach(function (f, i) { this.tone(f, 0.12, 'triangle', 0.03, 0, i * 0.08); }, this); break;
+      case 'chest': this.tone(500, 0.08, 'square', 0.025, 700); this.tone(1000, 0.12, 'triangle', 0.025, 0, 0.08); break;
+      case 'solve': [523, 784, 1046, 1568].forEach(function (f, i) { this.tone(f, 0.18, 'triangle', 0.035, 0, i * 0.1); }, this); break;
+      case 'lever': this.tone(180, 0.1, 'square', 0.03, 90); break;
+      case 'boss': this.tone(70, 0.8, 'sawtooth', 0.06, 50); this.tone(105, 0.8, 'sawtooth', 0.04, 70); break;
+      case 'death': [330, 262, 196, 131].forEach(function (f, i) { this.tone(f, 0.3, 'sawtooth', 0.04, 0, i * 0.18); }, this); break;
+      case 'warn': this.tone(740, 0.07, 'square', 0.02); this.tone(740, 0.07, 'square', 0.02, 0, 0.12); break;
+      case 'ui': this.tone(660, 0.03, 'triangle', 0.02); break;
+      case 'bad': this.tone(220, 0.12, 'square', 0.025, 160); break;
     }
-    if (world && world.player) fxBurst(world.player.x, world.player.y, '#7fe08a');
-    markDirty(); refreshAll();
+  };
+  Snd.prototype.close = function () { if (this.ac) { try { this.ac.close(); } catch (e) {} this.ac = null; } };
+
+  // ===========================================================================
+  //  theme → canvas palette
+  // ===========================================================================
+  function parseCol(s, d) {
+    s = (s || '').trim();
+    var m = s.match(/^#([0-9a-f]{3,8})$/i);
+    if (m) { var h = m[1]; if (h.length === 3) h = h.split('').map(function (c) { return c + c; }).join(''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
+    m = s.match(/rgba?\(([^)]+)\)/); if (m) { var p = m[1].split(/[ ,/]+/).map(parseFloat); return [p[0], p[1], p[2]]; }
+    return d;
+  }
+  function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+  function rgb(c, a) { return a == null ? 'rgb(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ')' : 'rgba(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ',' + a + ')'; }
+  function hsl(h, s, l) {
+    s /= 100; l /= 100;
+    var k = function (n) { return (n + h / 30) % 12; }, a = s * Math.min(l, 1 - l);
+    var f = function (n) { return l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); };
+    return [f(0) * 255, f(8) * 255, f(4) * 255];
+  }
+  function lum(c) { return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255; }
+  function readTheme() {
+    if (!S) return;
+    var cs = getComputedStyle(S.panel), v = function (n) { return cs.getPropertyValue(n); };
+    var bg = parseCol(v('--bg'), [250, 250, 249]), tx = parseCol(v('--text'), [28, 25, 23]), ac = parseCol(v('--accent'), [15, 149, 152]);
+    var dark = lum(bg) < 0.45;
+    S.th = { dark: dark, bg: bg, text: tx, accent: ac, font: (v('--font-mono') || '').trim() || 'ui-monospace, Menlo, Consolas, monospace' };
+    S.layerKey = '';
+  }
+  function biomePal(biome) {
+    var B = D.BIOMES[biome] || D.BIOMES.crypt, dk = S.th.dark, bg = S.th.bg;
+    var P = {
+      fog: dk ? [8, 8, 12] : mix(bg, [96, 80, 60], 0.3),
+      floor: dk ? hsl(B.hue, B.sat, 21) : hsl(B.hue, B.sat * 0.6 + 10, 90),
+      floor2: dk ? hsl(B.hue, B.sat, 24) : hsl(B.hue, B.sat * 0.6 + 10, 86),
+      speck: dk ? hsl(B.hue, B.sat, 31) : hsl(B.hue, B.sat * 0.5 + 8, 74),
+      wall: dk ? hsl(B.wallHue, B.sat * 0.8, 34) : hsl(B.wallHue, B.sat * 0.5 + 8, 40),
+      wallTop: dk ? hsl(B.wallHue, B.sat * 0.8, 42) : hsl(B.wallHue, B.sat * 0.5 + 8, 46),
+      wallFace: dk ? hsl(B.wallHue, B.sat * 0.8, 24) : hsl(B.wallHue, B.sat * 0.5 + 8, 30),
+      line: dk ? hsl(B.wallHue, B.sat * 0.8, 16) : hsl(B.wallHue, B.sat * 0.5 + 8, 30),
+      water: dk ? [26, 70, 104] : [120, 180, 220], deep: dk ? [12, 34, 66] : [60, 120, 180],
+      lava: [226, 88, 30], lava2: [255, 190, 70], chasm: dk ? [2, 2, 6] : [40, 34, 50],
+      fungus: dk ? hsl(300, 40, 40) : hsl(300, 40, 55), fungus2: dk ? hsl(160, 50, 45) : hsl(160, 45, 40),
+      door: dk ? [120, 82, 46] : [150, 104, 60], gate: dk ? [150, 150, 165] : [80, 80, 95],
+      accent: parseCol(B.accent, [200, 180, 100])
+    };
+    return P;
   }
 
-  function isTyping(e) {
-    var t = e.target; if (!t) return false;
-    var tag = t.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-    if (t.isContentEditable) return true;
-    if (t.closest && t.closest('.cm-editor')) return true;
-    return false;
+  // ===========================================================================
+  //  layout — size the stage from the room the panel has
+  // ===========================================================================
+  function layout() {
+    if (!S) return;
+    var vw = window.innerWidth || 800, vh = window.innerHeight || 600, vv = window.visualViewport;
+    if (vv && vv.width && vv.scale <= 1.01) vw = Math.min(vw, vv.width);
+    if (vv && vv.height && vv.scale <= 1.01) vh = Math.min(vh, vv.height);
+    var phone = vw <= 600, solo = S.panel.classList.contains('cade-solo-panel');
+    var W = Math.floor(Math.min(vw - (phone ? (solo ? 16 : 26) : 48), solo ? 760 : 600));
+    W = Math.max(280, W);
+    S.panel.style.setProperty('--cr-w', W + 'px');
+    var r = S.panel.getBoundingClientRect();
+    var top = r.height ? Math.min(Math.max(0, r.top), 140) : 60;
+    var mx = getComputedStyle(S.panel).maxHeight, mh = /px$/.test(mx) ? parseFloat(mx) : 0;
+    var room = vh - top - 8; if (mh > 0) room = Math.min(room, mh);
+    var head = S.panel.querySelector('.cade-panel-head'), hh = head ? head.getBoundingClientRect().height || 36 : 36;
+    var chrome = hh + (S.hudEl.offsetHeight || 40) + (S.abilEl.offsetHeight || 54) + (S.padEl.offsetHeight || 140) + 30;
+    var H = Math.floor(Math.max(200, Math.min(room - chrome, W * 1.35)));
+    if (!phone) H = Math.max(260, Math.min(H, 560));
+    var dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+    var ts = clamp(Math.floor(W / (phone ? 13 : 17)), 24, 44);
+    S.cw = W; S.chh = H; S.dpr = dpr; S.ts = ts;
+    S.cv.style.width = W + 'px'; S.cv.style.height = H + 'px';
+    S.stage.style.height = H + 'px';
+    S.cv.width = Math.round(W * dpr); S.cv.height = Math.round(H * dpr);
+    S.layerKey = '';
+    S.lay = { chrome: chrome };
   }
-  function onKey(e) {
-    var pan = document.getElementById('crawler-panel');
-    if (!pan) return;
-    if (Cade.isMinimized && Cade.isMinimized(pan)) return; // parked in the dock: keys belong to the editor
-    // Don't hijack keys while the user is typing in the editor / an input —
-    // only act when the game itself holds focus, or focus is on nothing special.
-    if (!pan.contains(document.activeElement) && isTyping(e)) return;
-    var k = e.key;
-    konamiPush(k);
-    if (k === 'Escape') { if (document.getElementById('cr-overlay')) { e.preventDefault(); closeOverlay(); return; } e.preventDefault(); close(); return; }
-    if (document.getElementById('cr-overlay')) return; // overlay captures nothing else
-    if (world && world.mode === 'dead') { if (k === ' ' || k === 'Enter') { e.preventDefault(); enter(0); } return; }
-    cancelTravel();
-    if (k === 'ArrowLeft' || k === 'a' || k === 'A') { e.preventDefault(); tryMove(-1, 0); }
-    else if (k === 'ArrowRight' || k === 'd' || k === 'D') { e.preventDefault(); tryMove(1, 0); }
-    else if (k === 'ArrowUp' || k === 'w' || k === 'W') { e.preventDefault(); tryMove(0, -1); }
-    else if (k === 'ArrowDown' || k === 's' || k === 'S') { e.preventDefault(); tryMove(0, 1); }
-    else if (k === ' ') { e.preventDefault(); rest(); }
-    else if (k === 'e' || k === 'E' || k === 'Enter') { e.preventDefault(); interact(); }
-    else if (k === 'c' || k === 'C') { e.preventDefault(); openCharacter(); }
-    else if (k >= '1' && k <= '4') { e.preventDefault(); var ids = dockedSpells(); var idx = parseInt(k, 10) - 1; if (ids[idx]) useAbility(ids[idx]); }
-    else if (k === 'q' || k === 'Q') { e.preventDefault(); useItem('potion'); }
+  function relayoutIfMoved() {
+    if (!S || !S.lay || (Cade.isMinimized && Cade.isMinimized(S.panel))) return;
+    var head = S.panel.querySelector('.cade-panel-head'), hh = head ? head.getBoundingClientRect().height || 36 : 36;
+    var chrome = hh + (S.hudEl.offsetHeight || 40) + (S.abilEl.offsetHeight || 54) + (S.padEl.offsetHeight || 140) + 30;
+    if (Math.abs(chrome - S.lay.chrome) > 2) layout();
   }
 
-  function bindCanvasInput(canvas) {
-    var sx = 0, sy = 0, st = 0, moved = false, tracking = false;
-    canvas.addEventListener('pointerdown', function (e) { try { canvas.focus(); } catch (er) {} sx = e.clientX; sy = e.clientY; st = now(); moved = false; tracking = true; }, { passive: true });
-    canvas.addEventListener('pointermove', function (e) { if (tracking && (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8)) moved = true; }, { passive: true });
-    canvas.addEventListener('pointerup', function (e) {
-      if (!tracking) return; tracking = false;
-      if (world && world.mode === 'dead') { enter(0); return; }
-      var dx = e.clientX - sx, dy = e.clientY - sy;
-      if (Math.abs(dx) > 22 || Math.abs(dy) > 22) {
-        cancelTravel();
-        if (Math.abs(dx) > Math.abs(dy)) tryMove(dx > 0 ? 1 : -1, 0); else tryMove(0, dy > 0 ? 1 : -1);
+  // ===========================================================================
+  //  renderer
+  // ===========================================================================
+  function th(x, y) { var h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+  var T = null;  // tile codes (from the engine)
+  function buildLayer() {
+    var G = S.G, ts = S.ts, dpr = S.dpr, tp = Math.round(ts * dpr);
+    var key = G.biome + '|' + tp + '|' + (S.th.dark ? 1 : 0) + '|' + S.tilesSig;
+    if (S.layerKey === key && S.layer) return;
+    S.layerKey = key;
+    if (!S.layer) S.layer = document.createElement('canvas');
+    var L = S.layer; L.width = G.w * tp; L.height = G.h * tp;
+    var c = L.getContext('2d'), P = biomePal(G.biome); S.pal = P;
+    c.fillStyle = rgb(P.fog); c.fillRect(0, 0, L.width, L.height);
+    for (var y = 0; y < G.h; y++) for (var x = 0; x < G.w; x++) drawTile(c, G, P, x, y, tp);
+  }
+  function tileAt(G, x, y) { return x < 0 || y < 0 || x >= G.w || y >= G.h ? 0 : G.t[y * G.w + x]; }
+  function drawFloor(c, P, x, y, s) {
+    var X = x * s, Y = y * s, r = th(x, y);
+    c.fillStyle = rgb(r < 0.5 ? P.floor : P.floor2); c.fillRect(X, Y, s, s);
+    c.fillStyle = rgb(P.speck, 0.55);
+    for (var i = 0; i < 3; i++) { var rx = th(x * 3 + i, y * 7 - i), ry = th(y * 5 + i, x * 11 + i); if (rx < 0.75) c.fillRect(X + rx * s * 0.9, Y + ry * s * 0.9, Math.max(1, s * 0.05), Math.max(1, s * 0.05)); }
+    c.strokeStyle = rgb(P.speck, 0.25); c.lineWidth = Math.max(1, s * 0.03); c.strokeRect(X + 0.5, Y + 0.5, s - 1, s - 1);
+  }
+  function drawTile(c, G, P, x, y, s) {
+    var t = tileAt(G, x, y), X = x * s, Y = y * s;
+    if (t === T.WALL || t === T.CRACK) {
+      var below = tileAt(G, x, y + 1), open = below !== T.WALL && below !== T.CRACK && y + 1 < G.h;
+      var near = false; for (var k = 0; k < 8 && !near; k++) { var d = [[0, -1], [1, 0], [0, 1], [-1, 0], [1, -1], [1, 1], [-1, 1], [-1, -1]][k], nt = tileAt(G, x + d[0], y + d[1]); if (nt !== T.WALL && nt !== T.CRACK && x + d[0] >= 0 && y + d[1] >= 0 && x + d[0] < G.w && y + d[1] < G.h) near = true; }
+      if (!near) { c.fillStyle = rgb(P.fog); c.fillRect(X, Y, s, s); return; }
+      c.fillStyle = rgb(P.wallTop); c.fillRect(X, Y, s, s);
+      // bricks
+      c.strokeStyle = rgb(P.line, 0.7); c.lineWidth = Math.max(1, s * 0.04);
+      var rows = 3, bh = s / rows;
+      for (var rr = 0; rr < rows; rr++) {
+        var yy = Y + rr * bh; c.beginPath(); c.moveTo(X, yy); c.lineTo(X + s, yy); c.stroke();
+        var off = (rr + x) % 2 ? s / 2 : 0; c.beginPath(); c.moveTo(X + off + s / 4, yy); c.lineTo(X + off + s / 4, yy + bh); c.stroke();
+      }
+      if (open) { c.fillStyle = rgb(P.wallFace); c.fillRect(X, Y + s * 0.62, s, s * 0.38); c.fillStyle = rgb(P.line, 0.5); c.fillRect(X, Y + s * 0.62, s, Math.max(1, s * 0.05)); }
+      if (t === T.CRACK) { c.strokeStyle = rgb(P.fog, 0.9); c.lineWidth = Math.max(1, s * 0.06); c.beginPath(); c.moveTo(X + s * 0.3, Y + s * 0.1); c.lineTo(X + s * 0.5, Y + s * 0.45); c.lineTo(X + s * 0.38, Y + s * 0.6); c.lineTo(X + s * 0.62, Y + s * 0.9); c.stroke(); }
+      return;
+    }
+    if (t === T.CHASM) {
+      c.fillStyle = rgb(P.chasm); c.fillRect(X, Y, s, s);
+      if (tileAt(G, x, y - 1) !== T.CHASM) { var gr = c.createLinearGradient(0, Y, 0, Y + s * 0.5); gr.addColorStop(0, rgb(P.wallFace, 0.9)); gr.addColorStop(1, rgb(P.chasm, 0)); c.fillStyle = gr; c.fillRect(X, Y, s, s * 0.5); }
+      return;
+    }
+    if (t === T.DEEP) { c.fillStyle = rgb(P.deep); c.fillRect(X, Y, s, s); return; }
+    if (t === T.WATER) { c.fillStyle = rgb(P.water); c.fillRect(X, Y, s, s); return; }
+    if (t === T.LAVA) { c.fillStyle = rgb(P.lava); c.fillRect(X, Y, s, s); return; }
+    drawFloor(c, P, x, y, s);
+    if (t === T.STAIRS) {
+      for (var i = 0; i < 4; i++) { var ins = s * (0.12 + i * 0.09); c.fillStyle = rgb(mix(P.floor, P.fog, 0.25 + i * 0.2)); c.fillRect(X + ins, Y + ins, s - ins * 2, s - ins * 2); }
+      c.strokeStyle = rgb(P.accent); c.lineWidth = Math.max(1, s * 0.05); c.strokeRect(X + s * 0.12, Y + s * 0.12, s * 0.76, s * 0.76);
+    } else if (t === T.DOOR || t === T.ODOOR) {
+      var hz = tileAt(G, x - 1, y) === T.WALL && tileAt(G, x + 1, y) === T.WALL;
+      c.fillStyle = rgb(P.wallFace);
+      if (hz) { c.fillRect(X, Y, s * 0.14, s); c.fillRect(X + s * 0.86, Y, s * 0.14, s); } else { c.fillRect(X, Y, s, s * 0.14); c.fillRect(X, Y + s * 0.86, s, s * 0.14); }
+      if (t === T.DOOR) {
+        c.fillStyle = rgb(P.door);
+        if (hz) c.fillRect(X + s * 0.14, Y + s * 0.18, s * 0.72, s * 0.64); else c.fillRect(X + s * 0.18, Y + s * 0.14, s * 0.64, s * 0.72);
+        c.strokeStyle = rgb(mix(P.door, [0, 0, 0], 0.4)); c.lineWidth = Math.max(1, s * 0.04);
+        for (var j = 1; j < 3; j++) { c.beginPath(); if (hz) { c.moveTo(X + s * 0.14 + j * s * 0.24, Y + s * 0.18); c.lineTo(X + s * 0.14 + j * s * 0.24, Y + s * 0.82); } else { c.moveTo(X + s * 0.18, Y + s * 0.14 + j * s * 0.24); c.lineTo(X + s * 0.82, Y + s * 0.14 + j * s * 0.24); } c.stroke(); }
+        c.fillStyle = rgb([230, 200, 120]); c.beginPath(); c.arc(X + s * (hz ? 0.7 : 0.5), Y + s * (hz ? 0.5 : 0.7), s * 0.05, 0, 7); c.fill();
+      }
+    } else if (t === T.GATE || t === T.OGATE) {
+      c.strokeStyle = rgb(P.gate); c.lineWidth = Math.max(1.5, s * 0.08);
+      var n = 4;
+      for (var b = 0; b < n; b++) { var bx = X + s * (0.15 + b * 0.7 / (n - 1)); c.beginPath(); c.moveTo(bx, Y + (t === T.OGATE ? s * 0.02 : s * 0.05)); c.lineTo(bx, Y + (t === T.OGATE ? s * 0.2 : s * 0.95)); c.stroke(); }
+      if (t === T.GATE) { c.beginPath(); c.moveTo(X + s * 0.08, Y + s * 0.3); c.lineTo(X + s * 0.92, Y + s * 0.3); c.moveTo(X + s * 0.08, Y + s * 0.7); c.lineTo(X + s * 0.92, Y + s * 0.7); c.stroke(); }
+    } else if (t === T.FUNGUS) {
+      for (var f = 0; f < 3; f++) {
+        var fx = X + s * (0.2 + th(x + f, y * 3) * 0.6), fy = Y + s * (0.35 + th(y + f, x * 5) * 0.45), fr = s * (0.12 + th(x * f, y) * 0.12);
+        c.fillStyle = rgb(mix(P.floor, [240, 230, 220], 0.4)); c.fillRect(fx - fr * 0.25, fy, fr * 0.5, fr * 1.2);
+        c.fillStyle = rgb(f % 2 ? P.fungus : P.fungus2); c.beginPath(); c.arc(fx, fy, fr, Math.PI, 0); c.fill();
+      }
+    }
+  }
+
+  // ---- per-frame -----------------------------------------------------------------
+  function camTarget() {
+    var G = S.G, vp = S.vis[0] || { x: G.p.x, y: G.p.y }, cols = S.cw / S.ts, rows = S.chh / S.ts;
+    var cx = vp.x + 0.5 - cols / 2, cy = vp.y + 0.5 - rows / 2;
+    if (G.w <= cols) cx = (G.w - cols) / 2; else cx = clamp(cx, -0.5, G.w - cols + 0.5);
+    if (G.h <= rows) cy = (G.h - rows) / 2; else cy = clamp(cy, -0.5, G.h - rows + 0.5);
+    return { x: cx, y: cy };
+  }
+  function updateVis(dt) {
+    var G = S.G, k = 1 - Math.exp(-dt * 20), seen = {};
+    function upd(id, x, y) {
+      seen[id] = 1;
+      var v = S.vis[id];
+      if (!v || Math.abs(v.x - x) + Math.abs(v.y - y) > 6) { S.vis[id] = { x: x, y: y }; return; }
+      v.x += (x - v.x) * k; v.y += (y - v.y) * k;
+      if (Math.abs(v.x - x) < 0.01) v.x = x; if (Math.abs(v.y - y) < 0.01) v.y = y;
+    }
+    upd(0, G.p.x, G.p.y);
+    G.mons.forEach(function (m) { upd(m.id, m.x, m.y); });
+    for (var id in S.vis) if (!seen[id]) delete S.vis[id];
+  }
+  function frame(t) {
+    if (!S) return;
+    S.raf = 0;
+    if (!S.cv.isConnected) return;
+    if (document.hidden || (Cade.isMinimized && Cade.isMinimized(S.panel))) return;
+    var dt = S.lastT ? Math.min(0.05, (t - S.lastT) / 1000) : 0.016; S.lastT = t;
+    S.time = t;
+    tickAuto(t);
+    if (S.G && !S.screen) draw(dt, t);
+    if (S.sceneCv && S.sceneCv.isConnected) drawIdle(S.sceneCv, t);
+    S.raf = requestAnimationFrame(frame);
+  }
+  function startLoop() { if (S && !S.raf) { S.lastT = 0; S.raf = requestAnimationFrame(frame); } }
+
+  function drawIdle(cv, t) {
+    // the town / title backdrop: a starry rim, the Sunstone, the shaft
+    var c = cv.getContext('2d'), dpr = S.dpr, W = cv.width / dpr, H = cv.height / dpr, dk = S.th.dark;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var sky = c.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, dk ? '#0b1020' : rgb(mix(S.th.bg, [120, 150, 200], 0.25)));
+    sky.addColorStop(1, dk ? '#1a1424' : rgb(mix(S.th.bg, [230, 190, 140], 0.35)));
+    c.fillStyle = sky; c.fillRect(0, 0, W, H);
+    for (var i = 0; i < 60; i++) { var sx = th(i, 3) * W, sy = th(i, 9) * H * 0.55, tw = 0.4 + 0.6 * Math.abs(Math.sin(t / 900 + i)); c.fillStyle = dk ? 'rgba(255,255,240,' + (0.25 + 0.5 * tw) + ')' : 'rgba(255,255,255,' + 0.5 * tw + ')'; c.fillRect(sx, sy, 1.5, 1.5); }
+    var hero = S.hero, cleared = hero ? (hero.story.ended ? 5 : hero.story.cleared) : 0, glow = 0.35 + cleared * 0.13;
+    var gx = W * 0.5, gy = H * 0.3, R = Math.min(W, H) * (0.25 + cleared * 0.03);
+    var gr = c.createRadialGradient(gx, gy, 0, gx, gy, R);
+    gr.addColorStop(0, 'rgba(255,230,150,' + glow + ')'); gr.addColorStop(1, 'rgba(255,200,100,0)');
+    c.fillStyle = gr; c.fillRect(0, 0, W, H);
+    // the tower + Sunstone
+    var sil = dk ? '#06070c' : rgb(mix(S.th.bg, [40, 40, 60], 0.6)), hz = H * 0.8;
+    c.fillStyle = sil; c.fillRect(gx - 7, gy + 6, 14, hz - gy); c.beginPath(); c.moveTo(gx - 11, gy + 8); c.lineTo(gx, gy - 4); c.lineTo(gx + 11, gy + 8); c.fill();
+    c.beginPath(); c.arc(gx, gy, 6 + Math.sin(t / 400) * 1.2, 0, 7); c.fillStyle = 'rgba(255,236,170,' + (0.7 + glow * 0.3) + ')'; c.fill();
+    // rooftops, leaving a gap for the shaft
+    c.fillStyle = sil; c.beginPath(); c.moveTo(0, H);
+    var bx = 0; for (i = 0; bx < W; i++) { var bw = 18 + th(i, 1) * 26, bh = H * (0.08 + th(i, 2) * 0.16); if (Math.abs(bx + bw / 2 - gx) < W * 0.12) bh *= 0.4; c.lineTo(bx, hz - bh); c.lineTo(bx + bw * 0.5, hz - bh - 8); c.lineTo(bx + bw, hz - bh); bx += bw; }
+    c.lineTo(W, H); c.fill();
+    for (i = 0; i < 16; i++) { var wx = th(i, 5) * W; if (Math.abs(wx - gx) < W * 0.12) continue; var wy = hz - 6 - th(i, 6) * H * 0.12; c.fillStyle = 'rgba(255,200,110,' + (0.55 + 0.35 * Math.sin(t / 700 + i)) + ')'; c.fillRect(wx, wy, 2.5, 3.5); }
+    // the shaft: a black mouth with a faint glow from below
+    var sg = c.createRadialGradient(gx, H * 0.93, 2, gx, H * 0.93, W * 0.2); sg.addColorStop(0, '#000'); sg.addColorStop(0.7, 'rgba(0,0,0,0.9)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = sg; c.beginPath(); c.ellipse(gx, H * 0.93, W * 0.2, H * 0.07, 0, 0, 7); c.fill();
+  }
+
+  function draw(dt, t) {
+    var G = S.G, c = S.ctx, dpr = S.dpr, ts = S.ts, W = S.cw, H = S.chh;
+    if (S.tilesDirty) { S.tilesSig = G.t.join(''); S.tilesDirty = false; }
+    buildLayer();
+    updateVis(dt);
+    var ct = camTarget();
+    if (!S.cam || S.snapCam) { S.cam = { x: ct.x, y: ct.y }; S.snapCam = false; }
+    var kc = 1 - Math.exp(-dt * 10); S.cam.x += (ct.x - S.cam.x) * kc; S.cam.y += (ct.y - S.cam.y) * kc;
+    var shx = 0, shy = 0;
+    if (S.shake > 0.1) { shx = (Math.random() - 0.5) * S.shake; shy = (Math.random() - 0.5) * S.shake; S.shake *= Math.pow(0.002, dt); } else S.shake = 0;
+    var ox = -S.cam.x * ts + shx, oy = -S.cam.y * ts + shy;
+    S.ox = ox; S.oy = oy;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var P = S.pal;
+    c.fillStyle = rgb(P.fog); c.fillRect(0, 0, W, H);
+    // static layer
+    var tp = Math.round(ts * dpr), sx = -ox / ts * tp, sy = -oy / ts * tp;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.drawImage(S.layer, Math.round(-sx), Math.round(-sy));
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var x0 = Math.max(0, Math.floor(S.cam.x - 1)), y0 = Math.max(0, Math.floor(S.cam.y - 1)), x1 = Math.min(G.w - 1, Math.ceil(S.cam.x + W / ts + 1)), y1 = Math.min(G.h - 1, Math.ceil(S.cam.y + H / ts + 1));
+    var vis = G.vis, seen = G.seen, w = G.w;
+    // animated terrain + ground effects
+    for (var y = y0; y <= y1; y++) for (var x = x0; x <= x1; x++) {
+      var i = y * w + x; if (!seen[i]) continue;
+      var tt = G.t[i], X = ox + x * ts, Y = oy + y * ts;
+      if (tt === T.WATER || tt === T.DEEP) {
+        c.strokeStyle = S.th.dark ? 'rgba(160,210,255,0.22)' : 'rgba(255,255,255,0.5)'; c.lineWidth = 1;
+        var ph = t / 700 + x * 0.7 + y * 0.4;
+        for (var wv = 0; wv < 2; wv++) { var wy = Y + ts * (0.3 + wv * 0.4) + Math.sin(ph + wv) * ts * 0.06; c.beginPath(); c.moveTo(X + ts * 0.15, wy); c.quadraticCurveTo(X + ts * 0.5, wy - ts * 0.1, X + ts * 0.85, wy); c.stroke(); }
+      } else if (tt === T.LAVA) {
+        var pl = 0.5 + 0.5 * Math.sin(t / 500 + x * 1.3 + y * 0.7);
+        c.fillStyle = 'rgba(255,200,80,' + (0.25 + pl * 0.35) + ')';
+        c.beginPath(); c.arc(X + ts * (0.3 + th(x, y) * 0.4), Y + ts * (0.3 + th(y, x) * 0.4), ts * (0.12 + pl * 0.1), 0, 7); c.fill();
+      } else if (tt === T.PORTAL) {
+        var a = t / 300;
+        for (var ring = 0; ring < 3; ring++) { c.strokeStyle = 'rgba(160,200,255,' + (0.8 - ring * 0.22) + ')'; c.lineWidth = 2; c.beginPath(); c.arc(X + ts / 2, Y + ts / 2, ts * (0.15 + ring * 0.12), a + ring, a + ring + 4.4); c.stroke(); }
+      }
+      if (!vis[i]) continue;
+      var gz = G.gas[i]; if (gz) { c.fillStyle = 'rgba(130,220,90,' + Math.min(0.5, 0.15 + gz.t * 0.07) + ')'; c.beginPath(); c.arc(X + ts / 2 + Math.sin(t / 600 + x) * ts * 0.1, Y + ts / 2 + Math.cos(t / 700 + y) * ts * 0.1, ts * 0.55, 0, 7); c.fill(); }
+      var fi = G.fire[i]; if (fi) { var fl = 0.6 + 0.4 * Math.sin(t / 90 + x * 3 + y); c.fillStyle = 'rgba(255,' + Math.round(120 + fl * 80) + ',40,' + (0.35 + 0.2 * fl) + ')'; c.beginPath(); c.moveTo(X + ts * 0.2, Y + ts * 0.9); c.quadraticCurveTo(X + ts * 0.5, Y + ts * (0.1 + 0.2 * fl), X + ts * 0.8, Y + ts * 0.9); c.fill(); }
+      var hy = G.holy[i]; if (hy) { c.fillStyle = 'rgba(255,230,140,' + (0.18 + 0.08 * Math.sin(t / 300 + x + y)) + ')'; c.fillRect(X + 1, Y + 1, ts - 2, ts - 2); }
+    }
+    // deco + objects
+    G.deco.forEach(function (d) { var i2 = d.y * w + d.x; if (seen[i2] && d.x >= x0 && d.x <= x1 && d.y >= y0 && d.y <= y1) drawDeco(c, d, ox + d.x * ts, oy + d.y * ts, ts); });
+    G.objs.forEach(function (o) {
+      if (o.x < x0 || o.x > x1 || o.y < y0 || o.y > y1) return;
+      var i3 = o.y * w + o.x; if (!seen[i3]) return;
+      var lootish = o.k === 'item' || o.k === 'gold' || o.k === 'cons' || o.k === 'corpse' || o.k === 'snare';
+      if (lootish && !vis[i3] && !G.mapped) return;
+      if (o.k === 'trap' && o.hidden) return;
+      drawObj(c, G, o, ox + o.x * ts, oy + o.y * ts, ts, t, !!vis[i3]);
+    });
+    // telegraphs (danger tiles)
+    drawTelegraphs(c, G, ox, oy, ts, t);
+    // targeting
+    if (S.tgt) drawTargeting(c, G, ox, oy, ts, t);
+    // actors
+    var list = G.mons.filter(function (m) { return E.monVisible(G, m) || m.ally && vis[m.y * w + m.x]; });
+    list.sort(function (a, b) { return a.y - b.y; });
+    list.forEach(function (m) { drawActor(c, G, m, ox, oy, ts, t); });
+    drawPlayer(c, G, ox, oy, ts, t);
+    // fog + torchlight
+    var L = E.lightRadius(G), vp = S.vis[0] || G.p, fogA = S.th.dark ? 0.62 : 0.55;
+    for (y = y0; y <= y1; y++) for (x = x0; x <= x1; x++) {
+      var j = y * w + x, a2;
+      if (!seen[j]) a2 = 1; else if (!vis[j]) a2 = fogA; else { var dd = Math.sqrt((x - vp.x) * (x - vp.x) + (y - vp.y) * (y - vp.y)); a2 = clamp((dd - L * 0.55) / (L * 0.9), 0, 1) * 0.36; }
+      if (a2 <= 0.01) continue;
+      c.fillStyle = rgb(P.fog, a2); c.fillRect(Math.floor(ox + x * ts), Math.floor(oy + y * ts), Math.ceil(ts) + 1, Math.ceil(ts) + 1);
+    }
+    drawFx(c, G, ox, oy, ts, t, dt);
+    drawEdgeArrows(c, G, ox, oy, ts, t);
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    if (S.set.mini) drawMini();
+  }
+  // visible enemies outside the view get a pointer at the stage edge
+  function drawEdgeArrows(c, G, ox, oy, s, t) {
+    var W = S.cw, H = S.chh, m = 12;
+    G.mons.forEach(function (mo) {
+      if (mo.ally || !E.monVisible(G, mo)) return;
+      var x = ox + (mo.x + 0.5) * s, y = oy + (mo.y + 0.5) * s;
+      if (x >= 0 && x <= W && y >= 0 && y <= H) return;
+      var cx = W / 2, cy = H / 2, dx = x - cx, dy = y - cy, k = Math.min((W / 2 - m) / Math.abs(dx || 1e-6), (H / 2 - m) / Math.abs(dy || 1e-6));
+      var ax = cx + dx * k, ay = cy + dy * k, a = Math.atan2(dy, dx);
+      c.save(); c.translate(ax, ay); c.rotate(a);
+      c.fillStyle = mo.boss ? '#ffd86a' : mo.intent ? '#ff4040' : '#e86050'; c.globalAlpha = 0.75 + 0.25 * Math.sin(t / 200);
+      c.beginPath(); c.moveTo(9, 0); c.lineTo(-5, -6); c.lineTo(-5, 6); c.closePath(); c.fill();
+      c.restore(); c.globalAlpha = 1;
+    });
+  }
+  function glyphFont(px, bold) { return (bold ? '700 ' : '') + Math.round(px) + 'px ' + S.th.font; }
+  function drawDeco(c, d, X, Y, s) {
+    var dk = S.th.dark, ink = dk ? 'rgba(230,220,200,0.28)' : 'rgba(60,50,40,0.35)';
+    c.fillStyle = ink; c.strokeStyle = ink; c.lineWidth = Math.max(1, s * 0.05);
+    switch (d.k) {
+      case 'bones': c.beginPath(); c.moveTo(X + s * 0.25, Y + s * 0.7); c.lineTo(X + s * 0.7, Y + s * 0.55); c.moveTo(X + s * 0.35, Y + s * 0.5); c.lineTo(X + s * 0.6, Y + s * 0.78); c.stroke(); break;
+      case 'urn': case 'ingot': case 'books': c.fillRect(X + s * 0.38, Y + s * 0.45, s * 0.24, s * 0.32); break;
+      case 'coffin': c.strokeRect(X + s * 0.3, Y + s * 0.2, s * 0.4, s * 0.62); break;
+      case 'candle': case 'brazier': c.fillStyle = 'rgba(255,200,90,' + (0.5 + 0.3 * Math.sin(S.time / 200 + X)) + ')'; c.beginPath(); c.arc(X + s * 0.5, Y + s * 0.45, s * 0.08, 0, 7); c.fill(); c.fillStyle = ink; c.fillRect(X + s * 0.46, Y + s * 0.52, s * 0.08, s * 0.25); break;
+      case 'shroom': c.fillStyle = 'rgba(220,120,220,0.45)'; c.beginPath(); c.arc(X + s * 0.5, Y + s * 0.6, s * 0.16, Math.PI, 0); c.fill(); break;
+      case 'spores': case 'crystal': c.fillStyle = d.k === 'crystal' ? 'rgba(180,140,255,0.5)' : 'rgba(150,230,150,0.4)'; for (var i = 0; i < 3; i++) { c.beginPath(); c.arc(X + s * (0.3 + i * 0.2), Y + s * (0.4 + (i % 2) * 0.25), s * 0.06, 0, 7); c.fill(); } break;
+      case 'openchest': c.strokeStyle = dk ? 'rgba(200,160,90,0.45)' : 'rgba(120,80,30,0.5)'; c.strokeRect(X + s * 0.22, Y + s * 0.42, s * 0.56, s * 0.36); break;
+      default: c.beginPath(); c.arc(X + s * 0.5, Y + s * 0.6, s * 0.08, 0, 7); c.fill();
+    }
+  }
+  var RUNE_SYM = ['◆', '▲', '●', '■'];
+  function rarCol(r) { return (D.RARITIES[r] || D.RARITIES.common).col; }
+  function drawObj(c, G, o, X, Y, s, t, lit) {
+    var cx = X + s / 2, cy = Y + s / 2;
+    switch (o.k) {
+      case 'chest':
+        c.fillStyle = o.vault ? '#c9a23a' : '#8a5a2a'; c.fillRect(X + s * 0.2, Y + s * 0.38, s * 0.6, s * 0.42);
+        c.fillStyle = o.vault ? '#e8c860' : '#a8703a'; c.fillRect(X + s * 0.2, Y + s * 0.3, s * 0.6, s * 0.16);
+        c.fillStyle = '#e8d070'; c.fillRect(X + s * 0.46, Y + s * 0.44, s * 0.08, s * 0.12);
+        c.strokeStyle = 'rgba(0,0,0,0.45)'; c.lineWidth = 1; c.strokeRect(X + s * 0.2, Y + s * 0.3, s * 0.6, s * 0.5);
+        if (lit && o.vault) { c.fillStyle = 'rgba(255,230,120,' + (0.25 + 0.2 * Math.sin(t / 300)) + ')'; c.beginPath(); c.arc(cx, cy, s * 0.5, 0, 7); c.fill(); }
+        break;
+      case 'boulder':
+        var g = c.createRadialGradient(cx - s * 0.12, cy - s * 0.12, s * 0.05, cx, cy, s * 0.42); g.addColorStop(0, '#b8b0a8'); g.addColorStop(1, '#5a544e');
+        c.fillStyle = g; c.beginPath(); c.arc(cx, cy, s * 0.4, 0, 7); c.fill(); break;
+      case 'plate':
+        c.fillStyle = o.on ? rgb(S.th.accent) : (S.th.dark ? '#4a4a52' : '#9a9aa4'); c.fillRect(X + s * 0.18, Y + s * 0.18, s * 0.64, s * 0.64);
+        c.strokeStyle = 'rgba(0,0,0,0.4)'; c.strokeRect(X + s * 0.18, Y + s * 0.18, s * 0.64, s * 0.64); break;
+      case 'lever':
+        c.fillStyle = '#6a6a72'; c.fillRect(X + s * 0.3, Y + s * 0.62, s * 0.4, s * 0.18);
+        c.strokeStyle = o.on ? rgb(S.th.accent) : '#c0b090'; c.lineWidth = Math.max(2, s * 0.08); c.beginPath(); c.moveTo(cx, Y + s * 0.66); c.lineTo(cx + (o.on ? s * 0.22 : -s * 0.22), Y + s * 0.24); c.stroke();
+        c.fillStyle = o.reset ? '#e07050' : '#d0d0d8'; c.beginPath(); c.arc(cx + (o.on ? s * 0.22 : -s * 0.22), Y + s * 0.24, s * 0.08, 0, 7); c.fill(); break;
+      case 'rune':
+        c.fillStyle = o.lit ? 'rgba(150,220,255,0.35)' : 'rgba(120,120,160,0.18)'; c.beginPath(); c.arc(cx, cy, s * 0.4, 0, 7); c.fill();
+        c.fillStyle = o.lit ? '#bfe8ff' : (S.th.dark ? '#7a7aa0' : '#5a5a80'); c.font = glyphFont(s * 0.5, true); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(RUNE_SYM[o.sym], cx, cy + 1); break;
+      case 'tablet':
+        c.fillStyle = S.th.dark ? '#8a8a96' : '#7a7a86'; c.fillRect(X + s * 0.25, Y + s * 0.15, s * 0.5, s * 0.7);
+        c.fillStyle = 'rgba(0,0,0,0.35)'; for (var l = 0; l < 3; l++) c.fillRect(X + s * 0.32, Y + s * (0.3 + l * 0.16), s * 0.36, s * 0.05); break;
+      case 'event':
+        var EV = D.EVENTS[o.id];
+        c.fillStyle = o.used ? 'rgba(120,120,120,0.3)' : 'rgba(' + parseCol(EV.col, [200, 200, 200]).join(',') + ',' + (0.22 + 0.12 * Math.sin(t / 400)) + ')';
+        c.beginPath(); c.arc(cx, cy, s * 0.46, 0, 7); c.fill();
+        c.fillStyle = o.used ? '#888' : EV.col; c.font = glyphFont(s * 0.6, true); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(EV.ch, cx, cy + 1); break;
+      case 'lore': case 'quest':
+        c.fillStyle = o.k === 'quest' ? '#ffd86a' : '#e8dcc0'; c.fillRect(X + s * 0.28, Y + s * 0.25, s * 0.44, s * 0.5);
+        c.fillStyle = 'rgba(80,60,30,0.6)'; for (var l2 = 0; l2 < 3; l2++) c.fillRect(X + s * 0.33, Y + s * (0.35 + l2 * 0.12), s * 0.34, s * 0.04);
+        c.strokeStyle = 'rgba(255,230,150,' + (0.4 + 0.3 * Math.sin(t / 300)) + ')'; c.lineWidth = 2; c.strokeRect(X + s * 0.24, Y + s * 0.21, s * 0.52, s * 0.58); break;
+      case 'trap':
+        c.strokeStyle = '#e05050'; c.lineWidth = Math.max(1.5, s * 0.07); c.beginPath();
+        for (var k = 0; k < 3; k++) { var bx = X + s * (0.22 + k * 0.2); c.moveTo(bx, Y + s * 0.7); c.lineTo(bx + s * 0.1, Y + s * 0.4); c.lineTo(bx + s * 0.2, Y + s * 0.7); } c.stroke(); break;
+      case 'vent':
+        var warn = o.ph === 2, col = o.kind === 'flame' ? '255,120,40' : o.kind === 'gas' ? '130,220,90' : o.kind === 'void' ? '180,120,255' : '220,220,220';
+        c.fillStyle = S.th.dark ? '#2a2a30' : '#8a8a90'; c.fillRect(X + s * 0.2, Y + s * 0.2, s * 0.6, s * 0.6);
+        c.strokeStyle = 'rgba(0,0,0,0.5)'; c.lineWidth = 1; for (var v = 1; v < 4; v++) { c.beginPath(); c.moveTo(X + s * 0.2, Y + s * (0.2 + v * 0.15)); c.lineTo(X + s * 0.8, Y + s * (0.2 + v * 0.15)); c.stroke(); }
+        if (warn && lit) { c.fillStyle = 'rgba(' + col + ',' + (0.35 + 0.25 * Math.sin(t / 80)) + ')'; c.fillRect(X, Y, s, s); c.strokeStyle = 'rgba(' + col + ',0.9)'; c.lineWidth = 2; c.strokeRect(X + 1, Y + 1, s - 2, s - 2); }
+        break;
+      case 'snare':
+        c.strokeStyle = '#c0a060'; c.lineWidth = 2; c.beginPath(); c.arc(cx, cy, s * 0.25, 0, 7); c.stroke(); c.beginPath(); c.moveTo(cx - s * 0.25, cy); c.lineTo(cx + s * 0.25, cy); c.stroke(); break;
+      case 'corpse':
+        c.globalAlpha = 0.35; c.fillStyle = o.col; c.font = glyphFont(s * 0.55, true); c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.save(); c.translate(cx, cy + s * 0.1); c.rotate(1.2); c.fillText(o.ch, 0, 0); c.restore(); c.globalAlpha = 1; break;
+      case 'gold':
+        c.fillStyle = '#f0c840'; for (var gi = 0; gi < 3; gi++) { c.beginPath(); c.ellipse(X + s * (0.38 + gi * 0.12), Y + s * (0.62 - gi * 0.06), s * 0.12, s * 0.07, 0, 0, 7); c.fill(); }
+        c.strokeStyle = '#9a7a10'; c.lineWidth = 1; c.stroke(); break;
+      case 'cons':
+        c.fillStyle = o.id === 'potion' ? '#e05050' : o.id === 'tonic' ? '#5080e0' : o.id === 'bomb' ? '#404048' : o.id === 'recall' || o.id === 'mapping' ? '#e8dcc0' : '#70d0a0';
+        c.beginPath(); c.arc(cx, cy + s * 0.08, s * 0.18, 0, 7); c.fill(); c.fillRect(cx - s * 0.06, cy - s * 0.22, s * 0.12, s * 0.16); break;
+      case 'item':
+        var rc = rarCol(o.it.rarity);
+        c.fillStyle = 'rgba(' + parseCol(rc, [200, 200, 200]).join(',') + ',' + (0.2 + 0.15 * Math.sin(t / 250 + o.x)) + ')'; c.beginPath(); c.arc(cx, cy, s * 0.42, 0, 7); c.fill();
+        c.fillStyle = rc; c.font = glyphFont(s * 0.5, true); c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText({ weapon: '/', armor: '[', helm: '^', charm: '"' }[o.it.slot] || '*', cx, cy + 1); break;
+    }
+  }
+  function tokenColors(col) { var cc = parseCol(col, [200, 200, 200]); return { fill: cc, ink: lum(cc) > 0.55 ? '#141414' : '#fafafa', edge: rgb(mix(cc, [0, 0, 0], 0.55)) }; }
+  function actorPos(id, x, y) {
+    var v = S.vis[id] || { x: x, y: y }, l = S.lunge[id], dx = 0, dy = 0;
+    if (l) { var k = (S.time - l.t0) / 160; if (k >= 1) delete S.lunge[id]; else { var a = Math.sin(k * Math.PI) * 0.32; dx = l.dx * a; dy = l.dy * a; } }
+    return { x: v.x + dx, y: v.y + dy };
+  }
+  function drawToken(c, X, Y, s, col, ch, o) {
+    o = o || {};
+    var tc = tokenColors(col), r = s * (o.big ? 0.5 : 0.4), cx = X + s / 2, cy = Y + s / 2 + (o.bob || 0);
+    c.fillStyle = 'rgba(0,0,0,0.25)'; c.beginPath(); c.ellipse(cx, Y + s * 0.86, r * 0.85, r * 0.3, 0, 0, 7); c.fill();
+    if (o.ring) { c.strokeStyle = o.ring; c.lineWidth = Math.max(2, s * 0.08); c.beginPath(); c.arc(cx, cy, r + s * 0.06, 0, 7); c.stroke(); }
+    if (o.ring2) { c.strokeStyle = o.ring2; c.lineWidth = Math.max(1.5, s * 0.05); c.beginPath(); c.arc(cx, cy, r + s * 0.13, 0, 7); c.stroke(); }
+    var g = c.createRadialGradient(cx - r * 0.35, cy - r * 0.35, r * 0.1, cx, cy, r);
+    g.addColorStop(0, rgb(mix(tc.fill, [255, 255, 255], 0.35))); g.addColorStop(1, rgb(tc.fill));
+    c.fillStyle = o.flash ? '#ffffff' : g; c.beginPath(); c.arc(cx, cy, r, 0, 7); c.fill();
+    c.strokeStyle = tc.edge; c.lineWidth = Math.max(1, s * 0.05); c.stroke();
+    if (o.dashed) { c.setLineDash([3, 3]); c.strokeStyle = '#7fe0a0'; c.lineWidth = 2; c.beginPath(); c.arc(cx, cy, r + 3, 0, 7); c.stroke(); c.setLineDash([]); }
+    c.fillStyle = o.flash ? '#000' : tc.ink; c.font = glyphFont(r * 1.25, true); c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(ch, cx, cy + r * 0.06);
+  }
+  function hpBar(c, X, Y, s, frac, col, sh) {
+    var w = s * 0.76, x = X + s * 0.12, y = Y + s * 0.92;
+    c.fillStyle = 'rgba(0,0,0,0.55)'; c.fillRect(x - 1, y - 1, w + 2, 5);
+    c.fillStyle = col; c.fillRect(x, y, w * clamp(frac, 0, 1), 3);
+    if (sh) { c.fillStyle = '#9fd8ff'; c.fillRect(x, y - 3, w * clamp(sh, 0, 1), 2); }
+  }
+  function statusDots(c, a, X, Y, s, t) {
+    var st = a.st, cols = [], k;
+    if (st.poison) cols.push('#7ae07a'); if (st.burn) cols.push('#ff8a3a'); if (st.bleed) cols.push('#e04a4a'); if (st.frozen) cols.push('#9fdcff');
+    if (st.stun) cols.push('#ffe06a'); if (st.root) cols.push('#c0a060'); if (st.weaken) cols.push('#a08ac0'); if (st.mark) cols.push('#ff5a9a'); if (st.slow) cols.push('#6a8ad0');
+    for (k = 0; k < cols.length; k++) { c.fillStyle = cols[k]; c.beginPath(); c.arc(X + s * 0.15 + k * s * 0.14, Y + s * 0.1, s * 0.06, 0, 7); c.fill(); }
+    if (st.frozen) { c.fillStyle = 'rgba(160,220,255,0.35)'; c.fillRect(X + s * 0.1, Y + s * 0.1, s * 0.8, s * 0.8); }
+    if (st.stun) { c.fillStyle = '#ffe06a'; c.font = glyphFont(s * 0.3, true); c.fillText('✶', X + s * 0.5 + Math.sin(t / 150) * s * 0.2, Y + s * 0.02); }
+  }
+  function drawActor(c, G, m, ox, oy, s, t) {
+    var p = actorPos(m.id, m.x, m.y), X = ox + p.x * s, Y = oy + p.y * s;
+    var flash = S.flash[m.id] && S.time - S.flash[m.id] < 110;
+    var ring = null, ring2 = null;
+    if (m.elite) { ring = D.ELITE[m.elite[0]].col; if (m.elite[1]) ring2 = D.ELITE[m.elite[1]].col; }
+    if (m.boss) { ring = '#ffd86a'; ring2 = '#b04040'; }
+    var bob = (m.asleep ? 0 : Math.sin(t / 260 + m.id) * s * 0.025);
+    if (m.k === 'shade' && !m.revealed) c.globalAlpha = 0.6;
+    drawToken(c, X, Y, s, m.col, m.ch, { ring: ring, ring2: ring2, big: !!m.boss, flash: flash, bob: bob, dashed: m.ally });
+    c.globalAlpha = 1;
+    if (m.st.shield && m.st.shield.v > 0) { c.strokeStyle = 'rgba(140,200,255,0.8)'; c.lineWidth = 2; c.beginPath(); c.arc(X + s / 2, Y + s / 2, s * 0.52, 0, 7); c.stroke(); }
+    if (m.hp < m.maxHp || m.elite || m.boss) hpBar(c, X, Y, s, m.hp / m.maxHp, m.ally ? '#7fe0a0' : m.elite ? '#ffb040' : '#e04a4a');
+    statusDots(c, m, X, Y, s, t);
+    if (m.asleep) { c.fillStyle = S.th.dark ? '#c0c8ff' : '#5060a0'; c.font = glyphFont(s * 0.3, true); c.textAlign = 'center'; c.fillText('z', X + s * 0.85, Y + s * 0.1 - ((t / 40) % 10) * 0.6); }
+    if (m.intent) { c.fillStyle = '#ff4040'; c.font = glyphFont(s * 0.45, true); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('!', X + s * 0.85, Y + s * 0.05 + Math.sin(t / 90) * 2); }
+    if (S.G.p.target === m.id && !m.ally) { c.strokeStyle = rgb(S.th.accent); c.lineWidth = 2; var q = s * 0.08, e = s * 0.25; [[X + q, Y + q, 1, 1], [X + s - q, Y + q, -1, 1], [X + q, Y + s - q, 1, -1], [X + s - q, Y + s - q, -1, -1]].forEach(function (b) { c.beginPath(); c.moveTo(b[0], b[1] + e * b[3]); c.lineTo(b[0], b[1]); c.lineTo(b[0] + e * b[2], b[1]); c.stroke(); }); }
+  }
+  function drawPlayer(c, G, ox, oy, s, t) {
+    var p = actorPos(0, G.p.x, G.p.y), X = ox + p.x * s, Y = oy + p.y * s, cls = D.CLASSES[G.hero.cls];
+    // torch glow under the hero
+    var gl = c.createRadialGradient(X + s / 2, Y + s / 2, 0, X + s / 2, Y + s / 2, s * 1.6);
+    gl.addColorStop(0, S.th.dark ? 'rgba(255,200,120,0.16)' : 'rgba(255,220,150,0.18)'); gl.addColorStop(1, 'rgba(255,200,120,0)');
+    c.fillStyle = gl; c.fillRect(X - s * 1.2, Y - s * 1.2, s * 3.4, s * 3.4);
+    if (G.p.st.invis) c.globalAlpha = 0.45;
+    var flash = S.flash[0] && S.time - S.flash[0] < 110;
+    drawToken(c, X, Y, s, cls.color, '@', { flash: flash, ring: G.p.st.unbreak ? '#ffb070' : G.p.st.inv ? '#9fdcff' : null, bob: Math.sin(t / 300) * s * 0.02 });
+    c.globalAlpha = 1;
+    // facing pip
+    var f = G.p.face || [0, 1]; c.fillStyle = cls.color; c.beginPath(); c.arc(X + s / 2 + f[0] * s * 0.48, Y + s / 2 + f[1] * s * 0.48, s * 0.06, 0, 7); c.fill();
+    if (G.p.st.shield && G.p.st.shield.v > 0) { c.strokeStyle = 'rgba(255,230,140,' + (0.6 + 0.3 * Math.sin(t / 200)) + ')'; c.lineWidth = 2.5; c.beginPath(); c.arc(X + s / 2, Y + s / 2, s * 0.54, 0, 7); c.stroke(); }
+    statusDots(c, G.p, X, Y, s, t);
+  }
+  function drawTelegraphs(c, G, ox, oy, s, t) {
+    var pulse = 0.5 + 0.5 * Math.sin(t / 110);
+    G.mons.forEach(function (m) {
+      if (!m.intent) return;
+      var col = m.ally ? '120,220,140' : m.intent.elem === 'poison' ? '120,220,80' : m.intent.elem === 'wave' ? '80,170,255' : m.intent.elem === 'void' ? '180,110,255' : '255,60,50';
+      m.intent.tiles.forEach(function (q) {
+        if (!G.seen[q[1] * G.w + q[0]]) return;
+        var X = ox + q[0] * s, Y = oy + q[1] * s;
+        c.fillStyle = 'rgba(' + col + ',' + (0.18 + 0.22 * pulse) + ')'; c.fillRect(X + 1, Y + 1, s - 2, s - 2);
+        c.strokeStyle = 'rgba(' + col + ',0.85)'; c.lineWidth = 1.5; c.strokeRect(X + 2, Y + 2, s - 4, s - 4);
+        if (m.intent.t > 1) { c.fillStyle = 'rgba(' + col + ',0.95)'; c.font = glyphFont(s * 0.36, true); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(m.intent.t), X + s / 2, Y + s / 2); }
+      });
+    });
+    G.delayed.forEach(function (e) {
+      for (var y = e.y - e.rad; y <= e.y + e.rad; y++) for (var x = e.x - e.rad; x <= e.x + e.rad; x++) {
+        var X = ox + x * s, Y = oy + y * s;
+        c.fillStyle = 'rgba(255,150,40,' + (0.2 + 0.2 * pulse) + ')'; c.fillRect(X + 1, Y + 1, s - 2, s - 2);
+      }
+    });
+  }
+  function drawTargeting(c, G, ox, oy, s, t) {
+    var tg = S.tgt;
+    tg.list.forEach(function (q) { var X = ox + q.x * s, Y = oy + q.y * s; c.fillStyle = rgb(S.th.accent, 0.13); c.fillRect(X + 1, Y + 1, s - 2, s - 2); });
+    if (!tg.cur) return;
+    var rad = tg.radius || 0, ok = tg.list.some(function (q) { return q.x === tg.cur.x && q.y === tg.cur.y; });
+    for (var y = tg.cur.y - rad; y <= tg.cur.y + rad; y++) for (var x = tg.cur.x - rad; x <= tg.cur.x + rad; x++) {
+      var X = ox + x * s, Y = oy + y * s; c.fillStyle = ok ? rgb(S.th.accent, 0.28) : 'rgba(200,60,60,0.25)'; c.fillRect(X + 1, Y + 1, s - 2, s - 2);
+    }
+    if (tg.line) { var ln = lineTo(G, tg.cur.x, tg.cur.y, tg.range); c.fillStyle = rgb(S.th.accent, 0.25); ln.forEach(function (q) { c.fillRect(ox + q[0] * s + 2, oy + q[1] * s + 2, s - 4, s - 4); }); }
+    var X2 = ox + tg.cur.x * s, Y2 = oy + tg.cur.y * s, pad = 2 + Math.sin(t / 150) * 2;
+    c.strokeStyle = ok ? rgb(S.th.accent) : '#e04040'; c.lineWidth = 2.5; c.strokeRect(X2 - pad, Y2 - pad, s + pad * 2, s + pad * 2);
+  }
+  function lineTo(G, tx, ty, R) {
+    var out = [], x0 = G.p.x, y0 = G.p.y, dx = tx - x0, dy = ty - y0, n = Math.max(Math.abs(dx), Math.abs(dy));
+    if (!n) return out;
+    for (var i = 1; i <= R; i++) { var x = Math.round(x0 + dx / n * i), y = Math.round(y0 + dy / n * i); if (x < 0 || y < 0 || x >= G.w || y >= G.h || E.OPAQUE[G.t[y * G.w + x]]) break; out.push([x, y]); }
+    return out;
+  }
+
+  // ---- effects ---------------------------------------------------------------------
+  function burst(x, y, col, n, spd, life, size, grav) {
+    for (var i = 0; i < (n || 8); i++) {
+      var a = Math.random() * Math.PI * 2, v = (spd || 2.5) * (0.4 + Math.random() * 0.8);
+      S.fx.parts.push({ x: x + 0.5, y: y + 0.5, vx: Math.cos(a) * v, vy: Math.sin(a) * v - (grav ? 1.5 : 0), life: 0, max: (life || 0.5) * (0.7 + Math.random() * 0.6), col: col, size: size || 0.08, g: grav || 0 });
+    }
+    if (S.fx.parts.length > 400) S.fx.parts.splice(0, S.fx.parts.length - 400);
+  }
+  function floatText(x, y, s, col, big) { S.fx.texts.push({ x: x + 0.5 + (Math.random() - 0.5) * 0.3, y: y + 0.2, s: s, col: col, life: 0, max: big ? 1.4 : 0.9, big: !!big }); if (S.fx.texts.length > 40) S.fx.texts.shift(); }
+  function ring(x, y, r, col, dur) { S.fx.rings.push({ x: x + 0.5, y: y + 0.5, r: r || 1, col: col, t0: S.time, dur: dur || 380 }); }
+  function areaFlash(tiles, col, dur) { S.fx.areas.push({ tiles: tiles, col: col, t0: S.time, dur: dur || 320 }); }
+  function banner(title, sub, dur) { S.fx.banner = { title: title, sub: sub || '', t0: S.time, dur: dur || 2600 }; }
+  var ELEM_COL = { fire: '#ff8a3a', frost: '#9fdcff', shock: '#bfe0ff', holy: '#ffe08a', void: '#c08aff', poison: '#7ae07a', burn: '#ff8a3a', bleed: '#e04a4a', wave: '#6ab0ff', blood: '#e04a4a', trap: '#e0e0e0' };
+  var PROJ_COL = { fire: '#ff8a3a', arrow: '#e8d8b0', bigarrow: '#ffe08a', zap: '#bfe0ff', holy: '#ffe08a', bone: '#e8e0d0', knife: '#d0d0e0', drain: '#e04a6a', heal: '#7fe0a0', bomb: '#404048', beam: '#d0b0ff' };
+  function drainEvents() {
+    var G = S.G; if (!G || !G.ev.length) return;
+    var evs = G.ev; G.ev = [];
+    for (var i = 0; i < evs.length; i++) handleEvent(evs[i]);
+  }
+  function handleEvent(e) {
+    var G = S.G, snd = S.snd, vis = function (x, y) { return G.vis && G.vis[y * G.w + x]; };
+    switch (e.t) {
+      case 'log': addLog(e.s, e.c); break;
+      case 'dmg':
+        if (!vis(e.x, e.y) && !e.p) break;
+        var col = e.p ? '#ff6a5a' : e.crit ? '#ffe06a' : (ELEM_COL[e.elem] || (S.th.dark ? '#ffffff' : '#ffffff'));
+        floatText(e.x, e.y, (e.crit ? e.n + '!' : String(e.n)), col, e.crit);
+        if (e.ab) floatText(e.x, e.y - 0.3, '(' + e.ab + ')', '#9fd8ff');
+        var a = G.p.x === e.x && G.p.y === e.y ? 0 : null; G.mons.forEach(function (m) { if (m.x === e.x && m.y === e.y) a = m.id; });
+        if (a != null) S.flash[a] = S.time;
+        burst(e.x, e.y, ELEM_COL[e.elem] || (e.p ? '#e04a4a' : '#e8d0b0'), e.crit ? 12 : 5, e.crit ? 3.5 : 2.2, 0.4, 0.07);
+        if (e.p) { snd.play('hurt'); S.shake = Math.max(S.shake, e.crit ? 7 : 4); Cade.haptic && Cade.haptic(15); S.hurtT = S.time; }
+        else snd.play(e.crit ? 'crit' : 'hit');
+        if (e.crit && !e.p) S.shake = Math.max(S.shake, 3);
+        break;
+      case 'miss': if (vis(e.x, e.y)) { floatText(e.x, e.y, 'miss', '#b0b0b0'); snd.play('miss'); } break;
+      case 'block': floatText(e.x, e.y, 'block', '#9fd8ff'); snd.play('miss'); break;
+      case 'immune': floatText(e.x, e.y, 'immune', '#9fdcff'); break;
+      case 'heal': if (!e.quiet || e.n >= 3) floatText(e.x, e.y, '+' + e.n, '#7fe0a0'); if (!e.quiet) { burst(e.x, e.y, '#7fe0a0', 8, 1.5, 0.6, 0.07, -0.5); snd.play('heal'); } break;
+      case 'atk': S.lunge[e.id] = { dx: Math.sign(e.tx - e.x), dy: Math.sign(e.ty - e.y), t0: S.time }; if (e.id === 0) snd.play('swing'); break;
+      case 'proj':
+        S.fx.projs.push({ x0: e.x0 + 0.5, y0: e.y0 + 0.5, x1: e.x1 + 0.5, y1: e.y1 + 0.5, t0: S.time + (e.delay || 0), dur: Math.max(90, Math.hypot(e.x1 - e.x0, e.y1 - e.y0) * 28), k: e.k, col: PROJ_COL[e.k] || '#ffffff' });
+        snd.play(e.k === 'fire' ? 'fire' : e.k === 'zap' ? 'zap' : e.k === 'holy' || e.k === 'heal' ? 'holy' : e.k === 'drain' || e.k === 'beam' ? 'dark' : 'bow');
+        break;
+      case 'die':
+        S.fx.ghosts.push({ x: e.x, y: e.y, ch: e.ch, col: e.col, t0: S.time, dur: e.boss ? 1400 : 420, big: e.boss });
+        if (vis(e.x, e.y) || e.boss) { burst(e.x, e.y, e.col, e.boss ? 60 : 14, e.boss ? 5 : 3, e.boss ? 1.4 : 0.6, 0.09, 3); snd.play(e.boss ? 'boom' : 'kill'); }
+        break;
+      case 'fx': fxEvent(e); break;
+      case 'area':
+        var ac = e.k === 'boom' ? 'rgba(255,140,50,' : e.k === 'gas' ? 'rgba(120,230,90,' : e.k === 'wave' ? 'rgba(90,170,255,' : e.k === 'void' ? 'rgba(180,110,255,' : 'rgba(255,90,70,';
+        areaFlash(e.tiles, ac, 380);
+        e.tiles.forEach(function (q, ix) { if (ix % 2 === 0 && vis(q[0], q[1])) burst(q[0], q[1], ac + '1)', 4, 2.4, 0.4, 0.08); });
+        if (!e.small) snd.play(e.k === 'boom' ? 'boom' : e.k === 'wave' ? 'frost' : e.k === 'void' ? 'dark' : 'hit');
+        break;
+      case 'shake': S.shake = Math.max(S.shake, e.n); break;
+      case 'level': ring(G.p.x, G.p.y, 2, '#ffe08a', 700); burst(G.p.x, G.p.y, '#ffe08a', 30, 3, 1.1, 0.08, -0.5); banner('LEVEL ' + e.lvl, 'You grow stronger.', 1800); snd.play('level'); refreshBars(); break;
+      case 'floor': S.vis = {}; S.snapCam = true; S.tilesDirty = true; S.fx.parts = []; S.fx.projs = []; S.fx.areas = []; snd.play('stairs'); S.auto = null; break;
+      case 'act':
+        var A = D.STORY.acts[e.act - 1]; if (A) banner(A.name.toUpperCase(), D.BIOMES[e.biome].name, 3600); break;
+      case 'intent': var m = mon(e.id); if (m && vis(m.x, m.y)) snd.play('warn'); stopAuto(); break;
+      case 'alert': if (vis(e.x, e.y)) floatText(e.x, e.y - 0.2, '!', '#ffd040', true); break;
+      case 'spot': stopAuto('spot'); break;
+      case 'status': if (vis(e.x, e.y) && (e.k === 'stun' || e.k === 'frozen' || e.k === 'root' || e.k === 'mark')) floatText(e.x, e.y - 0.3, e.k === 'frozen' ? 'frozen' : e.k === 'mark' ? 'marked' : e.k + 'ed', '#d0d0ff'); break;
+      case 'pick':
+        if (e.k === 'gold') { floatText(e.x, e.y, '+' + e.n + 'g', '#f0c840'); snd.play('gold'); }
+        else if (e.k === 'item') { snd.play(e.rarity === 'common' || e.rarity === 'magic' ? 'pick' : 'rare'); if (e.rarity !== 'common' && e.rarity !== 'magic') { ring(e.x, e.y, 1, rarCol(e.rarity), 500); burst(e.x, e.y, rarCol(e.rarity), 16, 2.5, 0.8, 0.07, -0.5); } }
+        else snd.play('pick');
+        break;
+      case 'cast': break;
+      case 'boss': snd.play('boss'); S.shake = 6; break;
+      case 'phase': banner(e.name.toUpperCase(), e.line, 3000); snd.play('boss'); break;
+      case 'bounty': snd.play('solve'); break;
+      case 'snd': snd.play(e.k === 'push' ? 'door' : e.k); break;
+      case 'dash': for (var k = 0; k <= 6; k++) { var tx = e.x0 + (e.x1 - e.x0) * k / 6, ty = e.y0 + (e.y1 - e.y0) * k / 6; burst(tx, ty, '#e0d0b0', 2, 1, 0.35, 0.07); } snd.play('swing'); break;
+      case 'bump': break;
+    }
+  }
+  function mon(id) { var G = S.G; for (var i = 0; i < G.mons.length; i++) if (G.mons[i].id === id) return G.mons[i]; return null; }
+  function fxEvent(e) {
+    var snd = S.snd;
+    switch (e.k) {
+      case 'nova': ring(e.x, e.y, e.r + 0.5, e.col, 420); burst(e.x, e.y, e.col, 24, 4, 0.5, 0.07); snd.play(e.col === '#9fdcff' ? 'frost' : 'holy'); break;
+      case 'boom': ring(e.x, e.y, (e.r || 1) + 0.5, e.col, 380); burst(e.x, e.y, e.col, 30, 4.5, 0.6, 0.1); burst(e.x, e.y, '#555', 10, 2, 0.9, 0.12, -0.3); snd.play('boom'); break;
+      case 'sweep': ring(e.x, e.y, 1.5, e.col, 260); snd.play('swing'); break;
+      case 'smoke': burst(e.x, e.y, 'rgba(160,160,170,0.8)', 26, 1.6, 1.0, 0.18, -0.6); break;
+      case 'blink': burst(e.x, e.y, '#c0a0ff', 16, 2.5, 0.5, 0.06); snd.play('zap'); break;
+      case 'sparkle': burst(e.x, e.y, e.col || '#ffe08a', 12, 2, 0.6, 0.06, -0.5); snd.play('chest'); break;
+      case 'heal': ring(e.x, e.y, 1, '#7fe0a0', 400); break;
+      case 'shield': ring(e.x, e.y, 0.9, e.col || '#ffe08a', 500); snd.play('holy'); break;
+      case 'shieldbreak': burst(e.x, e.y, '#9fd8ff', 14, 3, 0.5, 0.07); break;
+      case 'raise': burst(e.x, e.y, e.col || '#a8e0c8', 16, 1.8, 0.8, 0.07, -0.8); snd.play('dark'); break;
+      case 'rain': var tl = []; for (var y = e.y - e.r; y <= e.y + e.r; y++) for (var x = e.x - e.r; x <= e.x + e.r; x++) tl.push([x, y]); areaFlash(tl, 'rgba(230,215,170,', 300); snd.play('bow'); break;
+      case 'meteor': ring(e.x, e.y, e.r + 1, '#ff8a3a', 500); burst(e.x, e.y, '#ff8a3a', 50, 5, 0.9, 0.12); burst(e.x, e.y, '#ffe08a', 20, 3, 0.6, 0.08); snd.play('boom'); break;
+      case 'flash': S.fx.flash = { col: e.col, t0: S.time, dur: 450 }; break;
+      case 'gate': burst(e.x, e.y, '#d0d0d8', 10, 2, 0.6, 0.06); snd.play('solve'); break;
+      case 'rune': ring(e.x, e.y, 0.8, '#9fdcff', 400); snd.play('holy'); break;
+      case 'trap': burst(e.x, e.y, '#e05050', 12, 2.5, 0.5, 0.07); snd.play('bad'); break;
+      case 'revive': ring(e.x, e.y, 2, '#ffe08a', 800); burst(e.x, e.y, '#ffe08a', 40, 3.5, 1.2, 0.08, -0.6); snd.play('level'); break;
+      case 'steal': burst(e.x, e.y, '#f0c840', 10, 2.5, 0.6, 0.06); break;
+    }
+  }
+  function drawFx(c, G, ox, oy, s, t, dt) {
+    var fx = S.fx;
+    fx.areas = fx.areas.filter(function (a) {
+      var k = (t - a.t0) / a.dur; if (k >= 1) return false;
+      c.fillStyle = a.col + (0.55 * (1 - k)) + ')';
+      a.tiles.forEach(function (q) { c.fillRect(ox + q[0] * s, oy + q[1] * s, s, s); });
+      return true;
+    });
+    fx.ghosts = fx.ghosts.filter(function (g) {
+      var k = (t - g.t0) / g.dur; if (k >= 1) return false;
+      c.globalAlpha = 1 - k; drawToken(c, ox + g.x * s, oy + g.y * s - k * s * 0.3, s, g.col, g.ch, { big: g.big }); c.globalAlpha = 1; return true;
+    });
+    fx.rings = fx.rings.filter(function (r) {
+      var k = (t - r.t0) / r.dur; if (k >= 1) return false;
+      c.strokeStyle = r.col; c.globalAlpha = 1 - k; c.lineWidth = 3 * (1 - k) + 1;
+      c.beginPath(); c.arc(ox + r.x * s, oy + r.y * s, Math.max(1, r.r * s * (0.3 + 0.7 * k)), 0, 7); c.stroke(); c.globalAlpha = 1; return true;
+    });
+    fx.projs = fx.projs.filter(function (p) {
+      if (t < p.t0) return true;
+      var k = (t - p.t0) / p.dur; if (k >= 1) { burst(p.x1 - 0.5, p.y1 - 0.5, p.col, 6, 2, 0.35, 0.06); return false; }
+      var x = p.x0 + (p.x1 - p.x0) * k, y = p.y0 + (p.y1 - p.y0) * k, tx = p.x0 + (p.x1 - p.x0) * Math.max(0, k - 0.25), ty = p.y0 + (p.y1 - p.y0) * Math.max(0, k - 0.25);
+      c.strokeStyle = p.col; c.lineWidth = p.k === 'bigarrow' || p.k === 'beam' ? 4 : 2.5; c.lineCap = 'round';
+      if (p.k === 'zap') { c.beginPath(); c.moveTo(ox + p.x0 * s, oy + p.y0 * s); for (var j = 1; j <= 5; j++) { var f = j / 5 * k; c.lineTo(ox + (p.x0 + (p.x1 - p.x0) * f + (Math.random() - 0.5) * 0.3) * s, oy + (p.y0 + (p.y1 - p.y0) * f + (Math.random() - 0.5) * 0.3) * s); } c.stroke(); }
+      else { c.beginPath(); c.moveTo(ox + tx * s, oy + ty * s); c.lineTo(ox + x * s, oy + y * s); c.stroke(); }
+      c.fillStyle = p.col; c.beginPath(); c.arc(ox + x * s, oy + y * s, p.k === 'fire' || p.k === 'bomb' ? s * 0.14 : s * 0.07, 0, 7); c.fill();
+      if (p.k === 'fire' && Math.random() < 0.6) burst(x - 0.5, y - 0.5, '#ffb050', 1, 0.5, 0.3, 0.06);
+      return true;
+    });
+    for (var i = fx.parts.length - 1; i >= 0; i--) {
+      var q = fx.parts[i]; q.life += dt; if (q.life >= q.max) { fx.parts.splice(i, 1); continue; }
+      q.x += q.vx * dt; q.y += q.vy * dt; q.vy += q.g * dt; q.vx *= 0.92; q.vy *= 0.92;
+      c.globalAlpha = 1 - q.life / q.max; c.fillStyle = q.col; var ps = q.size * s; c.fillRect(ox + q.x * s - ps / 2, oy + q.y * s - ps / 2, ps, ps);
+    }
+    c.globalAlpha = 1;
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    fx.texts = fx.texts.filter(function (x) {
+      x.life += dt; if (x.life >= x.max) return false;
+      var k = x.life / x.max, yy = oy + (x.y - k * 0.9) * s, sz = s * (x.big ? 0.52 : 0.38) * (k < 0.15 ? 0.7 + k * 2 : 1);
+      c.font = glyphFont(sz, true); c.globalAlpha = 1 - Math.max(0, k - 0.6) / 0.4;
+      c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.7)'; c.strokeText(x.s, ox + x.x * s, yy); c.fillStyle = x.col; c.fillText(x.s, ox + x.x * s, yy);
+      c.globalAlpha = 1; return true;
+    });
+    // hurt vignette
+    if (S.hurtT && t - S.hurtT < 350) { var hk = 1 - (t - S.hurtT) / 350; var gw = c.createRadialGradient(S.cw / 2, S.chh / 2, Math.min(S.cw, S.chh) * 0.3, S.cw / 2, S.chh / 2, Math.max(S.cw, S.chh) * 0.7); gw.addColorStop(0, 'rgba(200,0,0,0)'); gw.addColorStop(1, 'rgba(200,0,0,' + 0.35 * hk + ')'); c.fillStyle = gw; c.fillRect(0, 0, S.cw, S.chh); }
+    var s2 = E.stats(G.hero, G);
+    if (G.p.hp < s2.maxHp * 0.25) { var lw = 0.18 + 0.1 * Math.sin(t / 250); var gl = c.createRadialGradient(S.cw / 2, S.chh / 2, Math.min(S.cw, S.chh) * 0.35, S.cw / 2, S.chh / 2, Math.max(S.cw, S.chh) * 0.75); gl.addColorStop(0, 'rgba(150,0,0,0)'); gl.addColorStop(1, 'rgba(150,0,0,' + lw + ')'); c.fillStyle = gl; c.fillRect(0, 0, S.cw, S.chh); }
+    if (fx.flash) { var fk = (t - fx.flash.t0) / fx.flash.dur; if (fk >= 1) fx.flash = null; else { c.globalAlpha = 0.5 * (1 - fk); c.fillStyle = fx.flash.col; c.fillRect(0, 0, S.cw, S.chh); c.globalAlpha = 1; } }
+    if (fx.banner) {
+      var bk = (t - fx.banner.t0) / fx.banner.dur;
+      if (bk >= 1) fx.banner = null;
+      else {
+        var al = bk < 0.12 ? bk / 0.12 : bk > 0.8 ? (1 - bk) / 0.2 : 1;
+        c.globalAlpha = al * 0.8; c.fillStyle = S.th.dark ? '#000' : rgb(S.th.bg); c.fillRect(0, S.chh * 0.36, S.cw, S.chh * 0.22);
+        c.globalAlpha = al; c.fillStyle = rgb(S.th.accent); c.font = glyphFont(Math.min(22, S.cw / (fx.banner.title.length * 0.7 + 2)), true);
+        c.fillText(fx.banner.title, S.cw / 2, S.chh * 0.44);
+        c.fillStyle = S.th.dark ? '#e8e8e8' : rgb(S.th.text); c.font = glyphFont(12, false);
+        wrapText(c, fx.banner.sub, S.cw / 2, S.chh * 0.52, S.cw - 30, 15);
+        c.globalAlpha = 1;
+      }
+    }
+  }
+  function wrapText(c, s, x, y, maxW, lh) {
+    var words = String(s).split(' '), line = '', lines = [];
+    words.forEach(function (w) { var tst = line ? line + ' ' + w : w; if (c.measureText(tst).width > maxW && line) { lines.push(line); line = w; } else line = tst; });
+    if (line) lines.push(line);
+    lines.slice(0, 3).forEach(function (l, i) { c.fillText(l, x, y + i * lh); });
+  }
+  function drawMini() {
+    var G = S.G, mc = S.mini; if (!mc) return;
+    var cell = S.cw < 420 ? 2 : 3, w = G.w * cell, h = G.h * cell;
+    if (mc.width !== w * S.dpr) { mc.width = w * S.dpr; mc.height = h * S.dpr; mc.style.width = w + 'px'; mc.style.height = h + 'px'; }
+    var c = mc.getContext('2d'); c.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
+    c.clearRect(0, 0, w, h);
+    c.fillStyle = S.th.dark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.65)'; c.fillRect(0, 0, w, h);
+    var P = S.pal, fl = S.th.dark ? 'rgba(200,190,170,0.55)' : 'rgba(80,70,60,0.45)';
+    for (var y = 0; y < G.h; y++) for (var x = 0; x < G.w; x++) {
+      var i = y * G.w + x; if (!G.seen[i]) continue;
+      var t = G.t[i];
+      if (t === T.WALL || t === T.CRACK) continue;
+      c.fillStyle = t === T.STAIRS ? '#ffd040' : t === T.WATER || t === T.DEEP ? '#4a90d0' : t === T.LAVA ? '#ff6a2a' : t === T.CHASM ? '#000' : t === T.GATE ? '#c0c0c8' : t === T.PORTAL ? '#9fd0ff' : fl;
+      c.fillRect(x * cell, y * cell, cell, cell);
+    }
+    G.objs.forEach(function (o) {
+      if (!G.seen[o.y * G.w + o.x]) return;
+      var col = o.k === 'chest' ? '#c9a23a' : o.k === 'event' && !o.used ? '#c070ff' : o.k === 'lever' && !o.on ? '#70d0ff' : o.k === 'item' ? rarCol(o.it.rarity) : o.k === 'lore' || o.k === 'quest' ? '#ffe08a' : null;
+      if (col) { c.fillStyle = col; c.fillRect(o.x * cell, o.y * cell, cell, cell); }
+    });
+    G.mons.forEach(function (m) { if (E.monVisible(G, m)) { c.fillStyle = m.ally ? '#7fe0a0' : m.boss ? '#ff3030' : '#e05050'; c.fillRect(m.x * cell - 0.5, m.y * cell - 0.5, cell + 1, cell + 1); } });
+    c.fillStyle = rgb(S.th.accent); c.fillRect(G.p.x * cell - 1, G.p.y * cell - 1, cell + 2, cell + 2);
+  }
+
+  // ===========================================================================
+  //  HUD, ability bar, log
+  // ===========================================================================
+  function svg(path, fill) { return '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="' + (fill ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + path + '</svg>'; }
+  var IC_SND_ON = svg('<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>');
+  var IC_SND_OFF = svg('<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/>');
+  var IC_HELP = svg('<circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.6M12 17h.01"/>');
+  var IC_MENU = svg('<path d="M4 7h16M4 12h16M4 17h16"/>');
+  var ART = [
+    '╔╦╗╔═╗╔═╗╔═╗╔╦╗╔═╗╦  ╦  ╦╔═╗',
+    ' ║║║╣ ║╣ ╠═╝ ║║║╣ ║  ╚╗╔╝║╣ ',
+    '═╩╝╚═╝╚═╝╩  ═╩╝╚═╝╩═╝ ╚╝ ╚═╝'].join('\n');
+
+  function hero() { return S.G ? S.G.hero : S.hero; }
+  function refreshHud() { refreshBars(); refreshAbil(); refreshChips(); }
+  function refreshBars() {
+    if (!S) return;
+    var h = hero(); if (!h) return;
+    var G = S.G, s = E.stats(h, G), cr = D.CLASSES[h.cls].res;
+    var hp = G ? G.p.hp : h.hp, res = G ? G.p.res : h.res;
+    S.hpFill.style.width = clamp(hp / s.maxHp * 100, 0, 100) + '%';
+    S.hpLbl.textContent = 'HP ' + Math.max(0, Math.round(hp)) + '/' + s.maxHp;
+    S.hpEl.classList.toggle('low', hp < s.maxHp * 0.3);
+    S.resFill.style.width = clamp(res / s.maxRes * 100, 0, 100) + '%';
+    S.resFill.style.background = cr.color;
+    S.resLbl.textContent = cr.name + ' ' + Math.round(res) + '/' + s.maxRes;
+    S.xpFill.style.width = (h.level >= E.LEVEL_CAP ? 100 : clamp(h.xp / E.xpForLevel(h.level) * 100, 0, 100)) + '%';
+    var where;
+    if (G) where = (G.mode === 'daily' ? '☀ ' : '') + 'B' + G.depth + ' · ' + D.BIOMES[G.biome].short;
+    else where = 'Lanternfall';
+    S.whereEl.textContent = where;
+    S.goldEl.innerHTML = G && G.mode === 'daily' ? 'score <b>' + E.dailyScore(G) + '</b>' : 'Lv <b>' + h.level + '</b> · <b>' + h.gold + '</b>g';
+    // boss bar
+    var boss = G && G.mons.filter(function (m) { return m.boss && m.aware; })[0];
+    if (boss) { S.bossEl.hidden = false; S.bossName.textContent = boss.name + (boss.phase ? ' — phase ' + (boss.phase + 1) : ''); S.bossFill.style.width = clamp(boss.hp / boss.maxHp * 100, 0, 100) + '%'; }
+    else S.bossEl.hidden = true;
+    S.stage.classList.toggle('boss', !S.bossEl.hidden);
+  }
+  function refreshChips() {
+    if (!S || !S.G) { if (S) S.chipsEl.innerHTML = ''; return; }
+    var G = S.G, h = G.hero, out = [];
+    (h.bless || []).forEach(function (b) { var B = D.BLESSINGS[b.id]; out.push('<span class="cr-chip ' + (B.good ? 'good' : 'bad') + '" title="' + esc(B.name + ': ' + B.desc + ' (' + b.n + ' floors)') + '">' + B.icon + '<i>' + b.n + '</i></span>'); });
+    var st = G.p.st, map = { poison: ['☠', 'bad'], burn: ['🔥', 'bad'], bleed: ['🩸', 'bad'], stun: ['✶', 'bad'], frozen: ['❄', 'bad'], root: ['⛓', 'bad'], slow: ['🐌', 'bad'], weaken: ['↓', 'bad'], dark: ['🌑', 'bad'], invis: ['👁', 'good'], unbreak: ['🛡', 'good'], inv: ['✧', 'good'], haste: ['⚡', 'good'], regen: ['✚', 'good'], shield: ['🔰', 'good'], sanct: ['✺', 'good'] };
+    for (var k in st) {
+      var m = map[k]; if (!m) continue;
+      var v = st[k], n = typeof v === 'number' ? v : v.t != null ? (v.t > 900 ? '' : v.t) : '';
+      out.push('<span class="cr-chip ' + m[1] + '" title="' + k + '">' + m[0] + '<i>' + n + '</i></span>');
+    }
+    if (G.p.st.ramp) out.push('<span class="cr-chip good" title="Rampage">⚔<i>' + G.p.st.ramp.n + '</i></span>');
+    var html = out.join('');
+    if (html !== S.chipsHtml) { S.chipsHtml = html; S.chipsEl.innerHTML = html; }
+  }
+  function refreshAbil() {
+    if (!S) return;
+    var h = hero(); if (!h) { S.abilEl.innerHTML = ''; return; }
+    var G = S.G, list = E.abilitiesFor(h), html = '';
+    list.forEach(function (a, i) {
+      var A = D.ABILITIES[a.id], st = G ? E.abilityState(G, a.id) : { ok: a.known }, cost = G ? E.abilityCost(G, a.id) : A.cost;
+      var cls = 'cr-ab' + (!a.known ? ' locked' : st.cd ? ' cd' : st.short ? ' short' : '') + (S.tgt && S.tgt.id === a.id ? ' on' : '');
+      html += '<button type="button" class="' + cls + '" data-act="ab" data-id="' + a.id + '" title="' + esc(A.name + ' — ' + A.desc) + '">' +
+        '<span class="cr-abk">' + (i + 1) + '</span><span class="cr-abi">' + (a.known ? A.icon : '🔒') + '</span>' +
+        '<span class="cr-abc">' + (!a.known ? 'Lv' + a.lvl : st.cd ? st.cd + 't' : cost ? cost : 'free') + '</span>' +
+        (st.cd ? '<span class="cr-abcd"></span>' : '') + '</button>';
+    });
+    var pots = h.cons.potion || 0;
+    html += '<button type="button" class="cr-ab pot' + (pots ? '' : ' short') + '" data-act="potion" title="Health Potion (Q)"><span class="cr-abk">Q</span><span class="cr-abi">🧪</span><span class="cr-abc">×' + pots + '</span></button>';
+    if (html !== S.abilHtml) { S.abilHtml = html; S.abilEl.innerHTML = html; }
+  }
+  function addLog(s, c) {
+    if (!S) return;
+    S.logLines.push({ s: s, c: c || '' }); if (S.logLines.length > 150) S.logLines.shift();
+    var el = document.createElement('div');
+    el.className = 'cr-ln ' + String(c || '').replace(/[^a-z:]/g, '').replace(':', ' r-');
+    el.textContent = s;
+    S.logEl.appendChild(el);
+    while (S.logEl.children.length > 4) S.logEl.removeChild(S.logEl.firstChild);
+    setTimeout(function () { el.classList.add('old'); }, 5000);
+  }
+
+  // ===========================================================================
+  //  actions — every player turn goes through here
+  // ===========================================================================
+  function doAct(a) {
+    if (!S || !S.G || S.G.over || S.G.modal) return false;
+    S.snd.ensure();
+    var hpBefore = S.G.p.hp;
+    var ok = E.act(S.G, a);
+    afterAct();
+    if (S && S.auto && S.G && S.G.p.hp < hpBefore) stopAuto();
+    return ok;
+  }
+  function afterAct() {
+    if (!S || !S.G) return;
+    S.tilesDirty = true;
+    drainEvents();
+    if (!S.G) return;
+    refreshHud();
+    if (S.G.over) { finishRun(); return; }
+    if (S.G.modal) { stopAuto(); showModal(); }
+    saveRunSoon();
+  }
+  function move(dx, dy) {
+    if (S.tgt) { moveCursor(dx, dy); return; }
+    stopAuto();
+    doAct({ t: 'move', dx: dx, dy: dy });
+  }
+  function useKey() { if (S.tgt) { confirmTarget(); return; } stopAuto(); doAct({ t: 'use' }); }
+  function restKey() {
+    if (S.tgt) { confirmTarget(); return; }
+    if (S.auto) { stopAuto(); return; }
+    var G = S.G; if (!G) return;
+    if (E.hostilesVisible(G).length) { doAct({ t: 'wait' }); return; }
+    var s = E.stats(G.hero, G), cr = D.CLASSES[G.hero.cls].res;
+    var resFull = cr.decay ? true : G.p.res >= s.maxRes;
+    if (G.p.hp >= s.maxHp && resFull) { doAct({ t: 'wait' }); return; }
+    S.auto = { k: 'rest', n: 0, next: 0 };
+    addLog('You rest… (any key to stop)', 'info');
+  }
+  function usePotion() { stopAuto(); if (S.G) doAct({ t: 'cons', id: 'potion' }); }
+
+  // ---- auto: travel / explore / rest -------------------------------------------------
+  function stopAuto(why) { if (S && S.auto) { S.auto = null; } }
+  function startTravel(x, y) {
+    var path = E.travelPath(S.G, x, y);
+    if (!path || !path.length) return false;
+    S.auto = { k: 'path', path: path, next: 0 };
+    return true;
+  }
+  function startExplore() {
+    var G = S.G; if (!G) return;
+    var near = E.hostilesVisible(G).filter(function (m) { return !m.asleep && Math.max(Math.abs(m.x - G.p.x), Math.abs(m.y - G.p.y)) <= 8; });
+    if (near.length) { addLog('Not with ' + E.displayName(near[0]).toLowerCase() + ' in sight.', 'warn'); return; }
+    S.auto = { k: 'explore', next: 0 };
+  }
+  function tickAuto(t) {
+    var A = S.auto, G = S.G;
+    if (!A || !G) return;
+    if (G.over || G.modal || S.ovlOpen || S.screen) { S.auto = null; return; }
+    if (t < A.next) return;
+    A.next = t + (A.k === 'rest' ? 28 : 72);
+    if (A.k === 'rest') {
+      var s = E.stats(G.hero, G), cr = D.CLASSES[G.hero.cls].res;
+      if (E.hostilesVisible(G).length || A.n++ > 150) { S.auto = null; return; }
+      if (G.p.hp >= s.maxHp && (cr.decay || G.p.res >= s.maxRes)) { S.auto = null; addLog('You feel rested.', 'good'); return; }
+      doAct({ t: 'wait' }); return;
+    }
+    if (A.k === 'explore') {
+      var path = E.explorePath(G);
+      if (!path || !path.length) {
+        S.auto = null;
+        addLog(G.stairs && G.seen[G.stairs[1] * G.w + G.stairs[0]] ? 'Nothing left to explore here. The stairs are on your map.' : 'Nothing more to explore that you can reach.', 'info');
+        if (G.stairs && G.seen[G.stairs[1] * G.w + G.stairs[0]]) startTravel(G.stairs[0], G.stairs[1]);
         return;
       }
-      // tap → travel/interact at tile
-      var rect = canvas.getBoundingClientRect();
-      var lx = (e.clientX - rect.left) / rect.width * CW;
-      var ly = (e.clientY - rect.top) / rect.height * CH;
-      var cam = camera();                       // cam.x/y are floats now
-      var tx = Math.floor(lx / TILE + cam.x), ty = Math.floor(ly / TILE + cam.y);
-      if (tx < 0 || ty < 0 || tx >= MW || ty >= MH) return;
-      var p = world.player;
-      if (cheb(tx, ty, p.x, p.y) <= 1) {
-        if (tx === p.x && ty === p.y) { interact(); }
-        else {
-          // collapse a diagonal tap to one cardinal step (movement is 4-dir)
-          var ddx = tx - p.x, ddy = ty - p.y;
-          if (ddx !== 0 && ddy !== 0) { if (Math.abs(ddx) >= Math.abs(ddy)) ddy = 0; else ddx = 0; }
-          cancelTravel(); tryMove(sgn(ddx), sgn(ddy));
-        }
-      } else {
-        startTravel(tx, ty);
-      }
+      var st = path[0];
+      if (!doAct({ t: 'move', dx: st[0] - G.p.x, dy: st[1] - G.p.y })) S.auto = null;
+      return;
+    }
+    if (A.k === 'path') {
+      var q = A.path.shift();
+      if (!q) { S.auto = null; return; }
+      if (Math.abs(q[0] - G.p.x) + Math.abs(q[1] - G.p.y) !== 1) { S.auto = null; return; }
+      var last = !A.path.length;
+      var ok = doAct({ t: 'move', dx: q[0] - G.p.x, dy: q[1] - G.p.y });
+      if (!ok || last) S.auto = null;
+    }
+  }
+
+  // ---- abilities & targeting ---------------------------------------------------------
+  function abilityPress(id) {
+    var G = S.G; if (!G) return;
+    stopAuto();
+    if (S.tgt && S.tgt.id === id) { confirmTarget(); return; }
+    var st = E.abilityState(G, id);
+    if (!st.ok) { addLog(st.why, 'info'); S.snd.play('bad'); return; }
+    var A = D.ABILITIES[id];
+    if (A.target === 'self') { doAct({ t: 'ability', id: id }); return; }
+    var tg = E.abilityTargets(G, id);
+    if (!tg.list.length) { addLog(A.target === 'corpse' ? 'No corpse within reach.' : A.target === 'enemy' ? 'No target in range.' : 'Nowhere to aim.', 'info'); S.snd.play('bad'); return; }
+    if (A.target === 'enemy' && S.set.quick && tg.def) { doAct({ t: 'ability', id: id, x: tg.def.x, y: tg.def.y }); return; }
+    S.tgt = { id: id, list: tg.list, cur: tg.def || tg.list[0], radius: A.target === 'tile' || A.target === 'corpse' ? (id === 'corpseboom' ? (A.radius || 1) : (A.radius || 0)) : 0, line: A.target === 'line', range: E.abilityRange(G, id), enemy: A.target === 'enemy' };
+    showTgtBar(A.name);
+    refreshAbil();
+  }
+  function bombPress() {
+    var G = S.G; if (!G || !G.hero.cons.bomb) { addLog('No bombs.', 'info'); return; }
+    var list = [];
+    for (var y = G.p.y - 4; y <= G.p.y + 4; y++) for (var x = G.p.x - 4; x <= G.p.x + 4; x++) if (E.visible(G, x, y) && !E.OPAQUE[E.tile(G, x, y)]) list.push({ x: x, y: y });
+    var foes = E.hostilesVisible(G).filter(function (m) { return Math.max(Math.abs(m.x - G.p.x), Math.abs(m.y - G.p.y)) <= 4; });
+    S.tgt = { id: 'bomb', list: list, cur: foes[0] ? { x: foes[0].x, y: foes[0].y } : list[0], radius: 1 };
+    showTgtBar('Fire Bomb');
+  }
+  function showTgtBar(name) {
+    S.tgtEl.hidden = false;
+    S.tgtEl.innerHTML = '<span>◎ <b>' + esc(name) + '</b> — ' + (S.coarse ? 'tap a target' : 'arrows aim · Enter casts') + '</span><button type="button" data-act="tgtgo">Cast</button><button type="button" data-act="tgtx">✕</button>';
+  }
+  function cancelTarget() { S.tgt = null; S.tgtEl.hidden = true; refreshAbil(); }
+  function confirmTarget(x, y) {
+    var tg = S.tgt; if (!tg) return;
+    if (x != null) tg.cur = { x: x, y: y };
+    var ok = tg.cur && tg.list.some(function (q) { return q.x === tg.cur.x && q.y === tg.cur.y; });
+    if (!ok) { addLog('Out of range.', 'info'); S.snd.play('bad'); return; }
+    var id = tg.id, cx = tg.cur.x, cy = tg.cur.y;
+    cancelTarget();
+    if (id === 'bomb') doAct({ t: 'cons', id: 'bomb', x: cx, y: cy });
+    else doAct({ t: 'ability', id: id, x: cx, y: cy });
+  }
+  function moveCursor(dx, dy) {
+    var tg = S.tgt; if (!tg || !tg.cur) return;
+    if (tg.enemy) {
+      // jump to the nearest valid target in that direction
+      var best = null, bd = 1e9;
+      tg.list.forEach(function (q) { var vx = q.x - tg.cur.x, vy = q.y - tg.cur.y; if (vx * dx + vy * dy <= 0) return; var d = Math.abs(vx) + Math.abs(vy) + Math.abs(dx ? vy : vx) * 2; if (d < bd) { bd = d; best = q; } });
+      if (best) tg.cur = best;
+      return;
+    }
+    for (var k = 1; k <= 3; k++) {
+      var nx = tg.cur.x + dx * k, ny = tg.cur.y + dy * k;
+      if (tg.list.some(function (q) { return q.x === nx && q.y === ny; })) { tg.cur = { x: nx, y: ny }; return; }
+    }
+  }
+  function cycleTarget() {
+    var G = S.G; if (!G) return;
+    if (S.tgt && S.tgt.enemy) { var l = S.tgt.list, i = 0; for (var k = 0; k < l.length; k++) if (l[k].x === S.tgt.cur.x && l[k].y === S.tgt.cur.y) i = k; S.tgt.cur = l[(i + 1) % l.length]; return; }
+    var hv = E.hostilesVisible(G); if (!hv.length) return;
+    hv.sort(function (a, b) { return Math.abs(a.x - G.p.x) + Math.abs(a.y - G.p.y) - Math.abs(b.x - G.p.x) - Math.abs(b.y - G.p.y); });
+    var ix = 0; for (var j = 0; j < hv.length; j++) if (hv[j].id === G.p.target) ix = j + 1;
+    G.p.target = hv[ix % hv.length].id;
+  }
+
+  // ===========================================================================
+  //  screens (full panel) and overlays (modal cards)
+  // ===========================================================================
+  function B(act, label, extra, cls) { return '<button type="button" class="' + (cls || 'cr-b') + '" data-act="' + act + '"' + (extra || '') + '>' + label + '</button>'; }
+  function dat(k, v) { return ' data-' + k + '="' + esc(v) + '"'; }
+  function tok(col, ch, big) { return '<span class="cr-tok' + (big ? ' big' : '') + '" style="--c:' + col + '">' + esc(ch) + '</span>'; }
+  function actName(h) {
+    if (h.story.ended) return 'Story complete' + (h.story.ng ? ' · NG+' + h.story.ng : '');
+    return 'Act ' + ['I', 'II', 'III', 'IV', 'V'][Math.min(4, h.story.cleared)] + (h.story.ng ? ' · NG+' + h.story.ng : '');
+  }
+  function heroChip(h, extra) {
+    var c = D.CLASSES[h.cls];
+    return '<div class="cr-hchip">' + tok(c.color, h.needsClass ? '?' : '@', true) + '<div><b>' + esc(h.name) + '</b><span>' +
+      (h.needsClass ? 'Lv ' + h.level + ' Veteran' : 'Lv ' + h.level + ' ' + c.name) + ' · ' + actName(h) + ' · deepest B' + (h.story.deepest || 0) + ' · ' + D.DIFFICULTIES[h.difficulty].name + '</span>' + (extra || '') + '</div></div>';
+  }
+  function showScreen(name) { var was = S.screen; S.screen = name; S.scrEl.hidden = false; if (was !== name) S.scrEl.scrollTop = 0; S.ovlOpen = false; S.ovlEl.hidden = true; S.ov = null; renderScreen(); }
+  function hideScreen() { S.screen = null; S.scrEl.hidden = true; S.scrEl.innerHTML = ''; S.sceneCv = null; }
+  function renderScreen() {
+    if (!S || !S.screen) return;
+    var fk = focusKey(S.scrEl), html = '';
+    switch (S.screen) {
+      case 'loading': html = '<div class="cr-card"><pre class="cr-art">' + esc(ART) + '</pre><p class="cr-p cr-c">Lighting the torches…</p></div>'; break;
+      case 'error': html = '<div class="cr-card"><p class="cr-p">Couldn\'t load the dungeon (offline before it was ever cached?).</p>' + B('retry', 'Try again', '', 'cr-go') + '</div>'; break;
+      case 'title': html = scrTitle(); break;
+      case 'roster': html = scrRoster(); break;
+      case 'create': html = scrCreate(); break;
+      case 'town': html = scrTown(); break;
+      case 'death': html = scrDeath(); break;
+      case 'daily': html = scrDaily(); break;
+      case 'dailyover': html = scrDailyOver(); break;
+      case 'ending': html = scrEnding(); break;
+    }
+    S.scrEl.innerHTML = html;
+    S.sceneCv = S.scrEl.querySelector('.cr-scene');
+    if (S.sceneCv) sizeScene();
+    restoreFocus(S.scrEl, fk);
+  }
+  function sizeScene() {
+    var cv = S.sceneCv, w = Math.max(200, S.scrEl.clientWidth - 24), h = Math.round(Math.min(150, w * 0.36));
+    cv.style.width = w + 'px'; cv.style.height = h + 'px'; cv.width = Math.round(w * S.dpr); cv.height = Math.round(h * S.dpr);
+  }
+  function focusKey(root) { var a = document.activeElement; return a && root.contains(a) ? (a.getAttribute('data-act') || '') + '|' + (a.getAttribute('data-id') || a.getAttribute('data-uid') || a.getAttribute('data-i') || a.getAttribute('data-t') || '') : null; }
+  function restoreFocus(root, fk) {
+    if (!S.kbd) return;
+    var els = root.querySelectorAll('button:not([disabled])'), pick = null;
+    if (fk) for (var i = 0; i < els.length; i++) { var e = els[i], k = (e.getAttribute('data-act') || '') + '|' + (e.getAttribute('data-id') || e.getAttribute('data-uid') || e.getAttribute('data-i') || e.getAttribute('data-t') || ''); if (k === fk) { pick = e; break; } }
+    if (!pick) pick = root.querySelector('.cr-go:not([disabled])') || els[0];
+    if (pick) try { pick.focus({ preventScroll: false }); } catch (e2) {}
+  }
+  function openOvl(k, o) { S.ov = o || {}; S.ov.k = k; S.ovlOpen = true; S.ovlEl.hidden = false; stopAuto(); if (S.tgt) cancelTarget(); renderOvl(true); }
+  function closeOvl() {
+    if (!S.ovlOpen) return;
+    var ov = S.ov; S.ovlOpen = false; S.ovlEl.hidden = true; S.ovlEl.innerHTML = ''; S.ov = null;
+    if (ov && ov.onClose) ov.onClose();
+    if (S.screen) { renderScreen(); }
+    else { refreshHud(); try { S.cv.focus({ preventScroll: true }); } catch (e) {} if (S.G && S.G.modal) showModal(); }
+  }
+  function renderOvl(first) {
+    if (!S.ovlOpen || !S.ov) return;
+    var fk = first ? null : focusKey(S.ovlEl), k = S.ov.k, html;
+    if (k.indexOf('npc:') === 0) html = ovNpc(k.slice(4));
+    else html = ({ sheet: ovSheet, event: ovEvent, dialog: ovDialog, tablet: ovTablet, lore: ovLore, found: ovFound, dshop: ovDShop, map: ovMap, log: ovLog, menu: ovMenu, help: ovHelp, stash: ovStash, prologue: ovPrologue, msg: ovMsg }[k] || ovMsg)();
+    var scroll = S.ovlEl.firstChild ? S.ovlEl.firstChild.scrollTop : 0;
+    S.ovlEl.innerHTML = '<div class="cr-card cr-ovc' + (S.ov.wide ? ' wide' : '') + '">' + html + '</div>';
+    if (!first && S.ovlEl.firstChild) S.ovlEl.firstChild.scrollTop = scroll;
+    if (k === 'map') drawBigMap();
+    restoreFocus(S.ovlEl, fk);
+  }
+  function msg(title, text, onClose) { openOvl('msg', { title: title, text: text, onClose: onClose }); }
+  function ovMsg() { return '<div class="cr-title">' + esc(S.ov.title || '') + '</div><div class="cr-p">' + S.ov.text + '</div>' + B('close', 'Continue', '', 'cr-go'); }
+
+  // ---- title ------------------------------------------------------------------------
+  function runSnapFor(h) {
+    var s = jget(K_RUN + h.id); if (!s || s.heroId !== h.id) return null;
+    if (h.client && h.client !== S.client && (h.updated || 0) > (s.savedAt || 0)) return null;   // another device played on since
+    return s;
+  }
+  function setRow() {
+    var st = S.set;
+    return '<div class="cr-sets">' + B('set', (st.sound ? '🔊' : '🔇') + ' Sound', dat('k', 'sound'), 'cr-chipb' + (st.sound ? ' on' : '')) +
+      B('set', '⚡ Quick-cast', dat('k', 'quick'), 'cr-chipb' + (st.quick ? ' on' : '')) + B('set', '▦ Minimap', dat('k', 'mini'), 'cr-chipb' + (st.mini ? ' on' : '')) + '</div>';
+  }
+  function scrTitle() {
+    var R = S.R, h = R.slots[R.active], html = '<div class="cr-card cr-titlec"><canvas class="cr-scene"></canvas><pre class="cr-art">' + esc(ART) + '</pre><div class="cr-sub">— the descent beneath Lanternfall —</div>';
+    if (h) {
+      var snap = runSnapFor(h);
+      html += heroChip(h) + B('continue', h.needsClass ? '▶ A veteran returns — choose a calling' : snap ? '▶ Resume the delve — floor ' + snap.depth : '▶ Enter Lanternfall', '', 'cr-go');
+    } else html += '<p class="cr-p cr-c">Six callings. Five acts. One hollow king.</p>' + B('new', '▶ Create your hero', '', 'cr-go');
+    var dinfo = E.dailyInfo(today()), dd = R.daily.days[today()];
+    html += '<div class="cr-row">' + B('heroes', '⇄ Heroes ' + R.order.length + '/' + E.ROSTER_MAX) + B('daily', '☀ Daily' + (dd ? ' · ' + dd.best : '')) + B('help', '? How to play') + '</div>';
+    html += setRow() + '<div class="cr-note">Heroes sync across devices when Cade.txt cloud sync is on.</div></div>';
+    return html;
+  }
+  // ---- roster -------------------------------------------------------------------------
+  function scrRoster() {
+    var R = S.R, html = '<div class="cr-card"><div class="cr-title">HEROES</div>';
+    if (!R.order.length) html += '<p class="cr-p cr-c">No heroes yet.</p>';
+    R.order.forEach(function (id) {
+      var h = R.slots[id], armed = S.delArm === id;
+      html += '<div class="cr-slot' + (id === R.active ? ' on' : '') + '">' + heroChip(h) + '<div class="cr-row">' + B('pick', id === R.active ? 'Selected ▶' : 'Play ▶', dat('id', id), 'cr-b pri') +
+        B('del', armed ? 'Really delete?' : 'Delete', dat('id', id), 'cr-b' + (armed ? ' danger' : '')) + '</div></div>';
     });
-    canvas.style.touchAction = 'none';
+    if (R.order.length < E.ROSTER_MAX) html += B('new', '+ New hero', '', 'cr-go');
+    html += '<div class="cr-note">Up to ' + E.ROSTER_MAX + ' heroes. They share one stash in Lanternfall.</div>' + B('back', '← Back') + '</div>';
+    return html;
+  }
+  // ---- create -------------------------------------------------------------------------
+  function scrCreate() {
+    var cr = S.create, vet = cr.vet, html = '<div class="cr-card"><div class="cr-title">' + (vet ? 'A VETERAN RETURNS' : 'CHOOSE A CALLING') + '</div>';
+    if (vet) html += '<p class="cr-p">' + esc(vet.name) + ' (level ' + vet.level + ') has delved before — but the Deep has changed, and so must they. Choose a calling; your old gear is reforged to match it.</p>';
+    html += '<div class="cr-classes">';
+    D.CLASS_ORDER.forEach(function (k) { var c = D.CLASSES[k]; html += '<button type="button" class="cr-cls' + (cr.cls === k ? ' on' : '') + '" data-act="cls" data-id="' + k + '" style="--c:' + c.color + '"><span class="cr-clsi">' + c.icon + '</span><b>' + c.name + '</b><i>' + c.res.name + '</i></button>'; });
+    html += '</div>';
+    var C = D.CLASSES[cr.cls];
+    if (C) {
+      var tmp = E.newHero(cr.cls, 'x', 'normal', E.rng(1)), st = E.stats(tmp);
+      html += '<div class="cr-clsinfo" style="--c:' + C.color + '"><p class="cr-p"><b>' + C.name + '.</b> ' + esc(C.blurb) + '</p><p class="cr-p">' + esc(C.play) + '</p>' +
+        '<div class="cr-kv"><span>Health <b>' + st.maxHp + '</b></span><span>Power <b>' + Math.round(st.pow) + '</b></span><span>Armor <b>' + Math.round(st.arm) + '</b></span><span>' + C.res.name + ' <b>' + st.maxRes + '</b></span></div><ul class="cr-abl">';
+      C.abilities.forEach(function (id, i) { var A = D.ABILITIES[id]; html += '<li><span>' + A.icon + '</span><b>' + A.name + '</b> <i>Lv ' + D.ABILITY_LEVELS[i] + '</i> — ' + esc(A.desc) + '</li>'; });
+      html += '</ul></div>';
+    }
+    if (!vet) {
+      html += '<div class="cr-h">Name</div><div class="cr-namebox">' + (cr.typing ? '<input class="cr-in" maxlength="18" value="' + esc(cr.name) + '" aria-label="Hero name">' : '<b>' + esc(cr.name) + '</b>') +
+        B('rname', '🎲', ' title="Random name"', 'cr-sq') + (cr.typing ? '' : B('tname', '✎', ' title="Type a name"', 'cr-sq')) + '</div>';
+      html += '<div class="cr-h">Difficulty</div><div class="cr-sets">';
+      D.DIFF_ORDER.forEach(function (k) { html += B('diff', D.DIFFICULTIES[k].name, dat('id', k), 'cr-chipb' + (cr.diff === k ? ' on' : '')); });
+      html += '</div><p class="cr-note">' + esc(D.DIFFICULTIES[cr.diff].desc) + '</p>';
+    }
+    html += '<div class="cr-row">' + B('back', '← Back') + B('begin', vet ? 'Choose this calling ▶' : 'Begin the descent ▶', C ? '' : ' disabled', 'cr-go') + '</div></div>';
+    return html;
+  }
+  // ---- town ---------------------------------------------------------------------------
+  var SUN = ['The Sunstone gutters, barely brighter than a candle.', 'The Sunstone flickers — a little steadier tonight.', 'The Sunstone burns amber over the rooftops.', 'The Sunstone is bright enough to read by.', 'The Sunstone blazes; the shaft below has gone quiet.', 'The Sunstone burns white. Lanternfall sleeps.', 'The Sunstone burns white. The Deep, patient, dreams again.'];
+  function placeBadge(h, id) {
+    if (id === 'board') return h.quests.board.some(function (b) { return b.done; }) ? '<i class="cr-bdg">!</i>' : '';
+    var sq = E.sideOffers(h, id);
+    if (sq.some(function (q) { return q.state === 'new' || q.state === 'found'; })) return '<i class="cr-bdg">!</i>';
+    return '';
+  }
+  function scrTown() {
+    var h = S.hero, st = E.storyStage(h), html = '<div class="cr-town"><canvas class="cr-scene"></canvas>';
+    html += '<div class="cr-townh"><b>LANTERNFALL</b><span>' + esc(SUN[st]) + '</span></div>';
+    html += heroChip(h, '<span class="cr-mats">◆ ' + h.gold + 'g · ⚙ ' + h.mats.scrap + ' · ✨ ' + h.mats.dust + ' · 🔥 ' + h.mats.soul + '</span>');
+    html += '<div class="cr-places">';
+    D.TOWN_ORDER.forEach(function (id) { var N = D.NPCS[id]; html += '<button type="button" class="cr-place" data-act="place" data-id="' + id + '"><span class="cr-pi">' + N.icon + '</span><b>' + esc(N.place) + '</b><i>' + esc(id === 'board' ? N.role : N.name + ', ' + N.role) + '</i>' + placeBadge(h, id) + '</button>'; });
+    html += '<button type="button" class="cr-place" data-act="place" data-id="stash"><span class="cr-pi">🧰</span><b>Shared Stash</b><i>' + S.R.stash.length + '/' + E.STASH_MAX + ' items</i></button>';
+    html += '<button type="button" class="cr-place" data-act="sheet"><span class="cr-pi">🎒</span><b>' + esc(h.name) + '</b><i>gear, talents, journal</i>' + (E.talentPoints(h) ? '<i class="cr-bdg">★</i>' : '') + '</button>';
+    html += '</div><div class="cr-desc"><div class="cr-h">The Deepdelve</div><div class="cr-sets">';
+    var wps = h.story.waypoints.slice();
+    if (S.wp == null || wps.indexOf(S.wp) < 0) S.wp = wps[wps.length - 1];
+    wps.forEach(function (w) { html += B('wp', 'B' + w + ' · ' + D.BIOMES[E.biomeAt(w)].short, dat('id', w), 'cr-chipb' + (S.wp === w ? ' on' : '')); });
+    html += '</div>';
+    var b = D.BIOMES[E.biomeAt(S.wp)];
+    html += B('descend', '⬇ Descend — floor ' + S.wp + ' · ' + b.name, '', 'cr-go');
+    if (h.story.ended && !h.story.ng && false) html += '';
+    if (h.story.ended) html += '<div class="cr-row">' + B('ngplus', S.ngArm ? 'Really begin New Game+?' : '✦ New Game+', '', 'cr-b' + (S.ngArm ? ' danger' : '')) + '</div><div class="cr-note">The Endless Descent continues past floor 25 (waypoints every 5 floors). New Game+ restarts the story with far deadlier foes — and far better loot.</div>';
+    html += '</div><div class="cr-row">' + B('heroes', '⇄ Heroes') + B('daily', '☀ Daily') + B('help', '? Help') + '</div></div>';
+    return html;
+  }
+  // ---- NPCs -----------------------------------------------------------------------------
+  function npcHead(id) {
+    var N = D.NPCS[id], h = S.hero;
+    if (!S.ov.line) S.ov.line = E.npcLine(h, id, E.rng(Date.now() & 0xffff));
+    return '<div class="cr-npc">' + tok(N.col, N.ch, true) + '<div><b>' + esc(N.name) + '</b><i>' + esc(N.role) + '</i></div>' + B('close', '✕', ' aria-label="Close"', 'cr-x') + '</div><p class="cr-quote">' + esc(S.ov.line) + '</p>';
+  }
+  function sideBox(id) {
+    var h = S.hero, out = '';
+    E.sideOffers(h, id).forEach(function (q) {
+      var SQ = D.SIDEQUESTS[q.id];
+      if (q.state === 'new') out += '<div class="cr-quest"><b>' + esc(SQ.name) + '</b><p>' + esc(SQ.text) + '</p>' + B('sq-accept', 'Accept', dat('id', q.id), 'cr-b pri') + '</div>';
+      else if (q.state === 'active') out += '<div class="cr-quest dim"><b>' + esc(SQ.name) + '</b><p>Find the ' + esc(SQ.item) + ' in ' + D.BIOMES[D.BIOME_ORDER[SQ.act - 1]].name + '.</p></div>';
+      else if (q.state === 'found') out += '<div class="cr-quest"><b>' + esc(SQ.name) + '</b><p>You have the ' + esc(SQ.item) + '.</p>' + B('sq-turn', 'Hand it over', dat('id', q.id), 'cr-b pri') + '</div>';
+    });
+    return out;
+  }
+  function tabs(list, cur) { return '<div class="cr-tabs">' + list.map(function (t) { return B('otab', t[1], dat('t', t[0]), cur === t[0] ? 'on' : ''); }).join('') + '</div>'; }
+  function itemRow(it, opts) {
+    opts = opts || {};
+    var R = D.RARITIES[it.rarity], B_ = D.BASES[it.base], main = B_.main ? Math.round(E.mainValue(it)) + (B_.main === 'pow' ? ' pow' : ' arm') : '';
+    var sel = S.ov && S.ov.sel === it.uid;
+    return '<button type="button" class="cr-it r-' + it.rarity + (sel ? ' on' : '') + '" data-act="' + (opts.act || 'isel') + '" data-uid="' + it.uid + '">' +
+      '<span class="cr-iti">' + ({ weapon: '/', armor: '[', helm: '^', charm: '"' }[it.slot]) + '</span><span class="cr-itn">' + esc(it.name) + (it.plus ? ' +' + it.plus : '') + (it.fresh ? ' <em>new</em>' : '') + '</span>' +
+      '<span class="cr-itm">' + (opts.right != null ? opts.right : main + ' · i' + it.ilvl) + '</span></button>';
+  }
+  function compareLines(it, h) {
+    var cur = h.equip[it.slot]; if (!cur || cur === it) return '';
+    var a = E.itemStats(it), b = E.itemStats(cur), keys = {}, out = [];
+    for (var k in a) keys[k] = 1; for (k in b) keys[k] = 1;
+    for (k in keys) {
+      var d = (a[k] || 0) - (b[k] || 0); if (Math.abs(d) < 0.005) continue;
+      var A = D.AFFIXES[k], txt;
+      if (k === 'pow' || k === 'arm') txt = (d > 0 ? '+' : '') + Math.round(d) + ' ' + (k === 'pow' ? 'power' : 'armor');
+      else if (A && A.pct) txt = (d > 0 ? '+' : '') + Math.round(d * 100) + '% ' + A.name.toLowerCase();
+      else txt = (d > 0 ? '+' : '') + Math.round(d) + ' ' + (A ? A.name.toLowerCase() : k);
+      out.push('<span class="' + (d > 0 ? 'up' : 'dn') + '">' + txt + '</span>');
+    }
+    var ds = E.itemScore(it, h.cls) - E.itemScore(cur, h.cls);
+    return '<div class="cr-cmp"><i>vs ' + esc(cur.name) + ':</i> ' + (out.join(' ') || 'same stats') + ' <b class="' + (ds >= 0 ? 'up' : 'dn') + '">' + (ds >= 0 ? '▲' : '▼') + '</b></div>';
+  }
+  function itemDetail(it, h, actions) {
+    var R = D.RARITIES[it.rarity], lines = E.itemLines(it), extra = '';
+    if (it.uq) extra = '<p class="cr-lore">' + esc(D.UNIQUES[it.uq].lore) + '</p>';
+    if (it.set) { var Sx = D.SETS[it.set], n = E.setCounts(h)[it.set] || 0; extra = '<p class="cr-set">' + esc(Sx.name) + ' (' + n + '/3 worn) — 2: ' + esc(Sx.b2.desc) + ' · 3: ' + esc(Sx.b3.desc) + '</p>'; }
+    var warn = it.slot === 'weapon' && !E.canWield(h, it) ? '<p class="cr-warn">Your class can\'t wield this.</p>' : '';
+    return '<div class="cr-idet r-' + it.rarity + '"><b>' + esc(it.name) + (it.plus ? ' +' + it.plus : '') + '</b><i>' + R.name + ' ' + D.SLOT_NAMES[it.slot].toLowerCase() + ' · item level ' + it.ilvl + ' · worth ' + E.itemValue(it) + 'g</i><ul>' +
+      lines.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' + extra + warn + compareLines(it, h) + '<div class="cr-row">' + (actions || '') + '</div></div>';
+  }
+  function ovNpc(id) {
+    var h = S.hero, ov = S.ov, html;
+    if (id === 'stash') return ovStash();
+    html = npcHead(id) + sideBox(id);
+    if (id === 'maren') {
+      html += '<div class="cr-row">' + B('story', '📖 The story so far') + B('rest', '🛏 Rest (free)') + '</div>';
+      if (ov.story) html += '<div class="cr-story">' + storyRecap(h) + '</div>';
+      if (ov.rested) html += '<p class="cr-note">You sleep like the dead. (Fully restored — you always are, back in town.)</p>';
+    } else if (id === 'torvald') {
+      ov.tab = ov.tab || 'up';
+      html += tabs([['up', 'Upgrade'], ['ref', 'Reforge'], ['salv', 'Salvage'], ['craft', 'Craft']], ov.tab);
+      html += '<div class="cr-note">◆ ' + h.gold + 'g · ⚙ ' + h.mats.scrap + ' scrap · ✨ ' + h.mats.dust + ' dust · 🔥 ' + h.mats.soul + ' soul embers</div>';
+      if (ov.flash) html += '<p class="cr-flash">' + esc(ov.flash) + '</p>';
+      var items = D.SLOTS.map(function (s) { return h.equip[s]; }).filter(Boolean).concat(h.bag);
+      if (ov.tab === 'craft') {
+        html += '<p class="cr-p">Torvald forges a random piece at your deepest item level.</p>';
+        ['rare', 'epic'].forEach(function (kind) {
+          var c = E.craftCost(kind), costTxt = c.gold + 'g ' + Object.keys(c.mats).map(function (m) { return c.mats[m] + ' ' + D.MATERIALS[m].name; }).join(', ');
+          html += '<div class="cr-h">' + (kind === 'rare' ? 'Rare' : 'Epic') + ' piece — ' + costTxt + '</div><div class="cr-row">';
+          D.SLOTS.forEach(function (sl) { html += B('craft', D.SLOT_NAMES[sl], dat('id', sl) + dat('t', kind) + (E.hasMats(h, c) && h.bag.length < E.BAG_MAX ? '' : ' disabled')); });
+          html += '</div>';
+        });
+      } else {
+        items.forEach(function (it) {
+          var right, ok = true;
+          if (ov.tab === 'up') { var c = E.upgradeCost(h, it); if ((it.plus || 0) >= E.maxPlus(h)) { right = 'max +' + E.maxPlus(h); ok = false; } else { right = c.gold + 'g ' + matTxt(c.mats); ok = E.hasMats(h, c); } }
+          else if (ov.tab === 'ref') { if (it.uq || it.rarity === 'common') { right = '—'; ok = false; } else { var c2 = E.reforgeCost(h, it); right = c2.gold + 'g ' + matTxt(c2.mats); ok = E.hasMats(h, c2); } }
+          else { if (D.SLOTS.some(function (s) { return h.equip[s] === it; })) { right = 'equipped'; ok = false; } else right = '→ ' + matTxt(E.salvageYield(it)); }
+          html += itemRow(it, { right: right });
+          if (ov.sel === it.uid) html += itemDetail(it, h, ok ? B(ov.tab === 'up' ? 'up' : ov.tab === 'ref' ? 'ref' : 'salv', ov.tab === 'up' ? '⚒ Upgrade to +' + ((it.plus || 0) + 1) : ov.tab === 'ref' ? '🔮 Reforge affixes' : '♻ Salvage', dat('uid', it.uid), 'cr-b pri') : '');
+        });
+      }
+    } else if (id === 'pip') {
+      ov.tab = ov.tab || 'buy';
+      if (!S.stock) S.stock = E.shopStock(h);
+      html += tabs([['buy', 'Buy'], ['sell', 'Sell']], ov.tab) + '<div class="cr-note">◆ ' + h.gold + ' gold · pack ' + h.bag.length + '/' + E.BAG_MAX + '</div>';
+      if (ov.flash) html += '<p class="cr-flash">' + esc(ov.flash) + '</p>';
+      if (ov.tab === 'buy') {
+        S.stock.cons.forEach(function (e, i) { var C_ = D.CONSUMABLES[e.cons]; html += '<div class="cr-cons"><span>' + C_.icon + '</span><div><b>' + C_.name + '</b> <i>×' + (h.cons[e.cons] || 0) + '</i><p>' + esc(C_.desc) + '</p></div>' + B('buy', e.price + 'g', dat('i', 'c' + i) + (h.gold >= e.price ? '' : ' disabled'), 'cr-b pri') + '</div>'; });
+        html += '<div class="cr-h">Wares</div>';
+        S.stock.items.forEach(function (e, i) {
+          if (e.sold) return;
+          html += itemRow(e.it, { right: e.price + 'g' });
+          if (ov.sel === e.it.uid) html += itemDetail(e.it, h, B('buy', 'Buy for ' + e.price + 'g', dat('i', 'i' + i) + (h.gold >= e.price ? '' : ' disabled'), 'cr-b pri'));
+        });
+      } else {
+        if (!h.bag.length) html += '<p class="cr-p">Your pack is empty.</p>';
+        else html += B('sellcommons', 'Sell all Common items', '', 'cr-b');
+        h.bag.forEach(function (it) { html += itemRow(it, { right: E.itemValue(it) + 'g' }); if (ov.sel === it.uid) html += itemDetail(it, h, B('sell', 'Sell for ' + E.itemValue(it) + 'g', dat('uid', it.uid), 'cr-b pri')); });
+      }
+    } else if (id === 'ilse') {
+      var tc = E.templeCosts(h), curses = (h.bless || []).filter(function (b) { return !D.BLESSINGS[b.id].good; });
+      if (ov.flash) html += '<p class="cr-flash">' + esc(ov.flash) + '</p>';
+      html += '<div class="cr-h">Curses</div>' + (curses.length ? curses.map(function (b) { return '<p class="cr-p">' + D.BLESSINGS[b.id].icon + ' ' + esc(D.BLESSINGS[b.id].name) + ' — ' + esc(D.BLESSINGS[b.id].desc) + ' (' + b.n + ' floors)</p>'; }).join('') + B('uncurse', 'Lift all curses — ' + tc.uncurse + 'g', h.gold >= tc.uncurse ? '' : ' disabled', 'cr-b pri') : '<p class="cr-note">You carry no curses.</p>');
+      html += '<div class="cr-h">Blessings for your next descent (3 floors) — ' + tc.bless + 'g</div><div class="cr-row wrap">';
+      ['might', 'ward', 'fortune', 'vigor', 'swift', 'clarity'].forEach(function (b) { var Bl = D.BLESSINGS[b]; html += B('bless', Bl.icon + ' ' + Bl.desc, dat('id', b) + (h.gold >= tc.bless ? '' : ' disabled')); });
+      html += '</div><div class="cr-h">Retrace your path</div><p class="cr-note">Forget every talent you have chosen and choose again. ' + tc.respec + 'g</p>' + B('respec', S.respecArm ? 'Really forget all talents?' : 'Respec talents — ' + tc.respec + 'g', h.gold >= tc.respec && h.talents.some(Boolean) ? '' : ' disabled', 'cr-b' + (S.respecArm ? ' danger' : ''));
+    } else if (id === 'odo') {
+      ov.tab = ov.tab || 'lore';
+      html += tabs([['lore', 'Lore ' + h.lore.length + '/' + D.LORE.length], ['beast', 'Bestiary'], ['rec', 'Records']], ov.tab);
+      if (ov.tab === 'lore') {
+        for (var a = 1; a <= 5; a++) {
+          html += '<div class="cr-h">' + D.STORY.acts[a - 1].name + '</div>';
+          D.LORE.forEach(function (L, i) {
+            if (L.act !== a) return;
+            if (h.lore.indexOf(i) < 0) { html += '<p class="cr-note">— a missing page —</p>'; return; }
+            html += B('lore', '📜 ' + esc(L.title), dat('i', i), 'cr-lnk');
+            if (ov.page === i) html += '<p class="cr-lore">' + esc(L.text) + '</p>';
+          });
+        }
+      } else if (ov.tab === 'beast') {
+        var seen = Object.keys(h.bestiary);
+        if (!seen.length) html += '<p class="cr-note">Nothing recorded yet. Go and meet something.</p>';
+        seen.sort(function (a2, b2) { return h.bestiary[b2] - h.bestiary[a2]; }).forEach(function (k) {
+          var isB = k.indexOf('boss:') === 0, M = isB ? D.BOSSES[k.slice(5)] : D.MONSTERS[k]; if (!M) return;
+          html += '<div class="cr-beast">' + tok(M.col, M.ch) + '<b>' + esc(M.name) + '</b><i>' + (isB ? 'defeated ' : 'slain ') + h.bestiary[k] + '×</i></div>';
+        });
+      } else {
+        var s = h.stats;
+        html += '<div class="cr-kv col"><span>Kills <b>' + s.kills + '</b></span><span>Elites <b>' + s.elites + '</b></span><span>Bosses <b>' + s.bosses + '</b></span><span>Deaths <b>' + s.deaths + '</b></span><span>Floors <b>' + s.floors + '</b></span><span>Delves <b>' + s.runs + '</b></span><span>Puzzles <b>' + s.puzzles + '</b></span><span>Shrines <b>' + s.events + '</b></span><span>Gold found <b>' + s.gold + '</b></span><span>Bounties <b>' + h.quests.done + '</b></span><span>Turns <b>' + s.turns + '</b></span><span>Deepest <b>B' + h.story.deepest + '</b></span></div>';
+      }
+    } else if (id === 'board') {
+      if (ov.flash) html += '<p class="cr-flash">' + esc(ov.flash) + '</p>';
+      h.quests.board.forEach(function (b) {
+        html += '<div class="cr-quest' + (b.done ? ' done' : '') + '"><b>' + esc(b.name) + '</b><p>' + esc(b.text) + '</p><div class="cr-prog"><i style="width:' + Math.round(b.have / b.need * 100) + '%"></i><span>' + (b.tpl === 'depth' ? (b.done ? 'done' : 'not yet') : b.have + '/' + b.need) + '</span></div>' +
+          '<p class="cr-note">Reward: ' + b.reward.gold + 'g, ' + b.reward.xp + ' XP</p>' + (b.done ? B('claim', 'Claim reward', dat('id', b.id), 'cr-b pri') : '') + '</div>';
+      });
+      var sides = Object.keys(h.quests.side).filter(function (q) { return h.quests.side[q] !== 'done'; });
+      if (sides.length) { html += '<div class="cr-h">Errands</div>'; sides.forEach(function (q) { var SQ = D.SIDEQUESTS[q]; html += '<p class="cr-p">' + esc(SQ.name) + ' — ' + (h.quests.side[q] === 'found' ? 'return to ' + D.NPCS[SQ.giver].name : 'search ' + D.BIOMES[D.BIOME_ORDER[SQ.act - 1]].name) + '</p>'; }); }
+    }
+    html += B('close', 'Leave', '', 'cr-b');
+    return html;
+  }
+  function matTxt(m) { var o = []; for (var k in m) if (m[k]) o.push(m[k] + D.MATERIALS[k].icon); return o.join(' '); }
+  function storyRecap(h) {
+    var out = D.STORY.prologue.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('');
+    for (var a = 1; a <= h.story.cleared; a++) out += '<div class="cr-h">' + esc(D.STORY.acts[a - 1].name) + '</div>' + (D.STORY.cleared[a] || []).map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('');
+    if (h.story.ended) out += D.STORY.ending.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('');
+    return out;
+  }
+  function ovStash() {
+    var h = S.hero, R = S.R, html = '<div class="cr-npc">' + tok('#c0a070', '▤', true) + '<div><b>Shared Stash</b><i>every hero in your roster can use it</i></div>' + B('close', '✕', ' aria-label="Close"', 'cr-x') + '</div>';
+    html += '<div class="cr-h">Your pack ' + h.bag.length + '/' + E.BAG_MAX + ' — tap to store</div>';
+    if (!h.bag.length) html += '<p class="cr-note">Empty.</p>';
+    h.bag.forEach(function (it) { html += itemRow(it, { act: 'stash-put', right: R.stash.length < E.STASH_MAX ? '→ stash' : 'full' }); });
+    html += '<div class="cr-h">Stash ' + R.stash.length + '/' + E.STASH_MAX + ' — tap to take</div>';
+    if (!R.stash.length) html += '<p class="cr-note">Empty.</p>';
+    R.stash.forEach(function (it) { html += itemRow(it, { act: 'stash-take', right: h.bag.length < E.BAG_MAX ? '→ pack' : 'pack full' }); });
+    return html + B('close', 'Done', '', 'cr-b');
   }
 
-  function bindButton(el, fn) {
-    if (!el) return;
-    var handler = function (e) { e.preventDefault(); Cade.haptic(6); fn(); };
-    el.addEventListener('click', handler);
+  // ---- the hero sheet: gear / talents / skills / stats / journal -------------------------
+  function ovSheet() {
+    var h = hero(), ov = S.ov, G = S.G, s = E.stats(h, G), c = D.CLASSES[h.cls];
+    ov.tab = ov.tab || 'gear';
+    var tp = E.talentPoints(h);
+    var html = '<div class="cr-npc">' + tok(c.color, '@', true) + '<div><b>' + esc(h.name) + '</b><i>Level ' + h.level + ' ' + c.name + ' · ' + h.xp + '/' + E.xpForLevel(h.level) + ' XP</i></div>' + B('close', '✕', ' aria-label="Close"', 'cr-x') + '</div>';
+    html += tabs([['gear', 'Gear'], ['tal', 'Talents' + (tp ? ' ★' : '')], ['skills', 'Skills'], ['stats', 'Stats'], ['jour', 'Journal']], ov.tab);
+    if (ov.flash) html += '<p class="cr-flash">' + esc(ov.flash) + '</p>';
+    if (ov.tab === 'gear') {
+      D.SLOTS.forEach(function (sl) {
+        var it = h.equip[sl];
+        if (!it) { html += '<div class="cr-it empty"><span class="cr-iti">·</span><span class="cr-itn">' + D.SLOT_NAMES[sl] + ' — empty</span></div>'; return; }
+        html += itemRow(it);
+        if (ov.sel === it.uid) html += itemDetail(it, h, sl === 'helm' || sl === 'charm' ? B('unequip', 'Take off', dat('id', sl)) : '');
+      });
+      html += '<div class="cr-h">Pack ' + h.bag.length + '/' + E.BAG_MAX + (G ? ' · ◆ ' + h.gold + 'g' : '') + '</div>';
+      if (!h.bag.length) html += '<p class="cr-note">Nothing in your pack. Monsters, chests and vaults drop gear.</p>';
+      var bag = h.bag.slice().sort(function (a, b) { return D.SLOTS.indexOf(a.slot) - D.SLOTS.indexOf(b.slot) || E.itemScore(b, h.cls) - E.itemScore(a, h.cls); });
+      bag.forEach(function (it) {
+        var better = E.canWield(h, it) && E.itemScore(it, h.cls) > E.itemScore(h.equip[it.slot], h.cls);
+        html += itemRow(it, { right: (better ? '▲ ' : '') + (D.BASES[it.base].main ? Math.round(E.mainValue(it)) + (D.BASES[it.base].main === 'pow' ? ' pow' : ' arm') : '') + ' · i' + it.ilvl });
+        if (ov.sel === it.uid) html += itemDetail(it, h, (E.canWield(h, it) ? B('equip', 'Equip', dat('uid', it.uid), 'cr-b pri') : '') + B('drop', S.dropArm === it.uid ? 'Really discard?' : 'Discard', dat('uid', it.uid), 'cr-b' + (S.dropArm === it.uid ? ' danger' : '')));
+      });
+      var cons = D.CONS_ORDER.filter(function (k) { return h.cons[k]; });
+      if (cons.length) { html += '<div class="cr-h">Consumables</div><div class="cr-row wrap">'; cons.forEach(function (k) { var C_ = D.CONSUMABLES[k]; html += G ? B('usecons', C_.icon + ' ' + C_.name + ' ×' + h.cons[k], dat('id', k) + ' title="' + esc(C_.desc) + '"') : '<span class="cr-pill" title="' + esc(C_.desc) + '">' + C_.icon + ' ' + C_.name + ' ×' + h.cons[k] + '</span>'; }); html += '</div>'; }
+      html += '<div class="cr-note">Materials: ⚙ ' + h.mats.scrap + ' · ✨ ' + h.mats.dust + ' · 🔥 ' + h.mats.soul + '</div>';
+    } else if (ov.tab === 'tal') {
+      html += '<p class="cr-note">One talent per tier. Choices are permanent — Sister Ilse in Lanternfall can help you respec.</p>';
+      D.TALENTS[h.cls].forEach(function (tier, ti) {
+        var lv = D.TALENT_LEVELS[ti], chosen = h.talents[ti], open = h.level >= lv;
+        html += '<div class="cr-h">Tier ' + (ti + 1) + ' · level ' + lv + (open && !chosen ? ' — choose one!' : '') + '</div><div class="cr-tal">';
+        tier.forEach(function (t) {
+          var on = chosen === t.id, armed = S.talArm === t.id;
+          html += '<button type="button" class="cr-talb' + (on ? ' on' : '') + (chosen && !on ? ' off' : '') + '" data-act="talent" data-i="' + ti + '" data-id="' + t.id + '"' + (open && !chosen ? '' : ' disabled') + '><b>' + esc(t.name) + (armed ? ' — tap again' : '') + '</b><span>' + esc(t.desc) + '</span></button>';
+        });
+        html += '</div>';
+      });
+    } else if (ov.tab === 'skills') {
+      E.abilitiesFor(h).forEach(function (a, i) {
+        var A = D.ABILITIES[a.id];
+        html += '<div class="cr-skill' + (a.known ? '' : ' dim') + '"><span class="cr-ski">' + A.icon + '</span><div><b>' + (i + 1) + '. ' + A.name + '</b> <i>' + (a.known ? (A.cost ? A.cost + ' ' + c.res.name.toLowerCase() : 'free') + (A.cd ? ' · ' + A.cd + ' turn cooldown' : '') : 'unlocks at level ' + a.lvl) + '</i><p>' + esc(A.desc) + '</p></div></div>';
+      });
+      html += '<p class="cr-note">' + esc(c.res.name) + ': ' + esc(resHelp(h.cls)) + '</p>';
+    } else if (ov.tab === 'stats') {
+      var row = function (k, v) { return '<span>' + k + ' <b>' + v + '</b></span>'; }, pc = function (v) { return Math.round(v * 100) + '%'; };
+      html += '<div class="cr-kv col">' + row('Health', s.maxHp) + row('Power', Math.round(s.pow)) + row('Armor', Math.round(s.arm)) + row(c.res.name, s.maxRes) + row('Crit chance', pc(s.crit)) + row('Crit damage', '+' + pc(0.5 + s.critDmg)) +
+        row('Dodge', pc(s.dodge)) + (s.block ? row('Block', pc(s.block)) : '') + (s.lifesteal ? row('Lifesteal', pc(s.lifesteal)) : '') + (s.regen ? row('Regen', s.regen + '/4t') : '') + row(c.res.name + ' regen', s.resRegen + '/t') +
+        (s.thorns ? row('Thorns', pc(s.thorns)) : '') + (s.abilPct ? row('Ability dmg', '+' + pc(s.abilPct)) : '') + (s.goldFind ? row('Gold find', '+' + pc(s.goldFind)) : '') + (s.magicFind ? row('Magic find', '+' + pc(s.magicFind)) : '') +
+        (s.resist ? row('Resilience', pc(s.resist)) : '') + (s.elite ? row('vs elites', '+' + pc(s.elite)) : '') + row('Light', (D.BIOMES[G ? G.biome : 'crypt'].light + s.light)) + '</div>';
+      var sc = E.setCounts(h); for (var sid in sc) html += '<p class="cr-set">' + esc(D.SETS[sid].name) + ' ' + sc[sid] + '/3</p>';
+    } else {
+      html += '<div class="cr-h">Story</div><p class="cr-p">' + esc(actName(h)) + '. ' + (h.story.ended ? 'The Hollow King has fallen.' : 'Next: ' + D.BOSSES[D.BIOMES[D.BIOME_ORDER[Math.min(4, h.story.cleared)]].boss].name + ', at the bottom of ' + D.BIOMES[D.BIOME_ORDER[Math.min(4, h.story.cleared)]].name + ' (floor ' + (Math.min(4, h.story.cleared) + 1) * 5 + ').') + '</p>';
+      html += '<div class="cr-h">Bounties</div>';
+      h.quests.board.forEach(function (b) { html += '<p class="cr-p">' + (b.done ? '✔ ' : '· ') + esc(b.name) + ' — ' + esc(b.text) + ' <i>' + (b.tpl === 'depth' ? '' : b.have + '/' + b.need) + '</i></p>'; });
+      var sides = Object.keys(h.quests.side).filter(function (q) { return h.quests.side[q] !== 'done'; });
+      if (sides.length) { html += '<div class="cr-h">Errands</div>'; sides.forEach(function (q) { var SQ = D.SIDEQUESTS[q]; html += '<p class="cr-p">' + esc(SQ.name) + ' — ' + (h.quests.side[q] === 'found' ? 'bring the ' + SQ.item + ' to ' + D.NPCS[SQ.giver].name : 'find the ' + SQ.item + ' in ' + D.BIOMES[D.BIOME_ORDER[SQ.act - 1]].name) + '</p>'; }); }
+      var bl = h.bless || [];
+      if (bl.length) { html += '<div class="cr-h">Blessings & curses</div>'; bl.forEach(function (b) { var Bl = D.BLESSINGS[b.id]; html += '<p class="cr-p">' + Bl.icon + ' ' + esc(Bl.name) + ' — ' + esc(Bl.desc) + ' <i>(' + b.n + ' floors)</i></p>'; }); }
+    }
+    return html + B('close', 'Close', '', 'cr-b');
+  }
+  function resHelp(cls) {
+    return { warrior: 'builds as you hit and get hit; drains away when no enemy is in sight.', rogue: 'refills quickly every turn.', mage: 'trickles back slowly; kills and tonics restore it.', ranger: 'builds each turn, much faster when you stand your ground.', cleric: 'builds each turn and with every blow you land.', necro: 'flows in when anything dies near you.' }[cls];
   }
 
-  // =========================================================================
-  //  open / close lifecycle
-  // =========================================================================
-  function state_teardown() {
-    if (raf) { cancelAnimationFrame(raf); raf = 0; }
-    lastFrame = 0;
+  // ---- dungeon modals ---------------------------------------------------------------------
+  function showModal() {
+    var G = S.G, md = G && G.modal; if (!md || S.ovlOpen) return;
+    stopAuto(); if (S.tgt) cancelTarget();
+    if (md.k === 'event') openOvl('event', { id: md.id });
+    else if (md.k === 'dialog') openOvl('dialog', { who: md.who, lines: md.lines, i: 0, ending: md.ending, onClose: function () { E.closeModal(G); if (md.ending) toEnding(); } });
+    else if (md.k === 'tablet') openOvl('tablet', { pz: md.pz, onClose: function () { E.closeModal(G); } });
+    else if (md.k === 'lore') openOvl('lore', { idx: md.idx, onClose: function () { E.closeModal(G); } });
+    else if (md.k === 'found') openOvl('found', { q: md.q, onClose: function () { E.closeModal(G); } });
+    else if (md.k === 'shop') openOvl('dshop', { onClose: function () { E.closeModal(G); } });
   }
-  // If you bail out while alive in a dungeon (closing the panel rather than
-  // using the 🏠 recall), flag it so reopening costs you — no quit-to-escape.
-  function markFled() { if (hero && world && world.mode === 'dungeon') hero._fled = world.depth; }
-  function close() {
-    markFled();
-    saveNow();
-    state_teardown();
-    detachFbListener();
-    if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
-    if (ui && ui.onKey) document.removeEventListener('keydown', ui.onKey, true);
-    if (ui && ui.onResize) window.removeEventListener('resize', ui.onResize);
-    closeOverlay();
-    var p = document.getElementById('crawler-panel'); if (p) p.remove();
-    // null out heavy state so nothing lingers in memory
-    world = null; ui = null;
-    try { Cade.editor.focus(); } catch (e) {}
+  function ovEvent() {
+    var ov = S.ov, EV = D.EVENTS[ov.id], html = '<div class="cr-npc">' + tok(EV.col, EV.ch, true) + '<div><b>' + esc(EV.name) + '</b><i>' + esc(D.BIOMES[S.G.biome].name) + '</i></div></div>';
+    if (ov.result) {
+      html += '<p class="cr-quote">' + esc(ov.result.text) + '</p>';
+      if (ov.result.gains && ov.result.gains.length) html += '<p class="cr-gain">' + ov.result.gains.map(esc).join(' · ') + '</p>';
+      return html + B('evdone', 'Continue', '', 'cr-go');
+    }
+    html += '<p class="cr-quote">' + esc(EV.text) + '</p>';
+    if (ov.err) html += '<p class="cr-warn">' + esc(ov.err) + '</p>';
+    EV.choices.forEach(function (ch, i) {
+      var cost = ch.ops && ch.ops.pay ? ' (' + Math.round(ch.ops.pay * (1 + 0.3 * (S.G.ml - 1))) + 'g)' : '';
+      html += B('evc', esc(ch.label) + cost, dat('i', i), 'cr-choice');
+    });
+    return html;
+  }
+  function ovDialog() {
+    var ov = S.ov, who = ov.who, Bs = D.BOSSES[who], N = D.NPCS[who], name = Bs ? Bs.name : N ? N.name : (ov.name || ''), col = Bs ? Bs.col : N ? N.col : '#c0c0c0', ch = Bs ? Bs.ch : N ? N.ch : '?';
+    var html = '<div class="cr-npc">' + tok(col, ch, true) + '<div><b>' + esc(name) + '</b><i>' + esc(Bs ? Bs.title : '') + '</i></div></div>';
+    html += '<p class="cr-quote big">' + esc(ov.lines[ov.i] || '') + '</p><div class="cr-dots">' + ov.lines.map(function (_, i) { return '<i class="' + (i === ov.i ? 'on' : '') + '"></i>'; }).join('') + '</div>';
+    return html + B('dlgnext', ov.i < ov.lines.length - 1 ? 'Continue ▸' : (ov.ending ? 'The end…' : 'Face it'), '', 'cr-go');
+  }
+  function ovTablet() {
+    var P = S.G.pz[S.ov.pz];
+    return '<div class="cr-title">RUNE TABLET</div><p class="cr-quote">Four glyphs are carved here, worn but legible. Beneath them: <i>“Walk the order, or burn.”</i></p><div class="cr-runes">' +
+      (P ? P.order.map(function (s) { return '<span>' + RUNE_SYM[s] + '</span>'; }).join('<b>→</b>') : '') + '</div><p class="cr-note">Step on the floor runes in this order. A wrong step resets them — painfully.</p>' + B('close', 'Got it', '', 'cr-go');
+  }
+  function ovLore() { var L = D.LORE[S.ov.idx]; return '<div class="cr-title">LORE</div><div class="cr-h">' + esc(L.title) + '</div><p class="cr-lore big">' + esc(L.text) + '</p><p class="cr-note">Added to Odo\'s archive (' + hero().lore.length + '/' + D.LORE.length + ').</p>' + B('close', 'Continue', '', 'cr-go'); }
+  function ovFound() { var SQ = D.SIDEQUESTS[S.ov.q]; return '<div class="cr-title">FOUND</div><p class="cr-quote">' + esc(SQ.ch) + ' ' + esc(SQ.item) + '</p><p class="cr-p">Bring it back to ' + esc(D.NPCS[SQ.giver].name) + ' in Lanternfall.</p>' + B('close', 'Continue', '', 'cr-go'); }
+  function ovDShop() {
+    var G = S.G, md = G.modal, h = G.hero, html = '<div class="cr-npc">' + tok('#f0d060', '$', true) + '<div><b>Wandering Peddler</b><i>“Prices are steep down here.”</i></div>' + B('close', '✕', ' aria-label="Close"', 'cr-x') + '</div><div class="cr-note">◆ ' + h.gold + ' gold</div>';
+    if (S.ov.flash) html += '<p class="cr-flash">' + esc(S.ov.flash) + '</p>';
+    (md && md.stock || []).forEach(function (e, i) {
+      if (e.sold) return;
+      if (e.it) { html += itemRow(e.it, { right: e.price + 'g' }); if (S.ov.sel === e.it.uid) html += itemDetail(e.it, h, B('dbuy', 'Buy for ' + e.price + 'g', dat('i', i) + (h.gold >= e.price ? '' : ' disabled'), 'cr-b pri')); }
+      else { var C_ = D.CONSUMABLES[e.cons]; html += '<div class="cr-cons"><span>' + C_.icon + '</span><div><b>' + C_.name + '</b><p>' + esc(C_.desc) + '</p></div>' + B('dbuy', e.price + 'g', dat('i', i) + (h.gold >= e.price ? '' : ' disabled'), 'cr-b pri') + '</div>'; }
+    });
+    return html + B('close', 'Leave', '', 'cr-b');
+  }
+  function ovMap() { return '<div class="cr-title">FLOOR ' + S.G.depth + ' — ' + esc(D.BIOMES[S.G.biome].name.toUpperCase()) + '</div><canvas class="cr-bigmap"></canvas><p class="cr-note">◆ you · red: foes · gold: stairs / chests · violet: shrines · cyan: levers</p>' + B('close', 'Close', '', 'cr-go'); }
+  function drawBigMap() {
+    var cv = S.ovlEl.querySelector('.cr-bigmap'); if (!cv || !S.G) return;
+    var G = S.G, w = Math.min(S.cw - 40, 520), cell = Math.max(3, Math.floor(w / G.w)), W = cell * G.w, H = cell * G.h;
+    cv.width = W * S.dpr; cv.height = H * S.dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    var c = cv.getContext('2d'); c.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
+    c.fillStyle = S.th.dark ? '#08080c' : rgb(mix(S.th.bg, [0, 0, 0], 0.06)); c.fillRect(0, 0, W, H);
+    var fl = S.th.dark ? 'rgba(200,190,170,0.5)' : 'rgba(80,70,60,0.4)';
+    for (var y = 0; y < G.h; y++) for (var x = 0; x < G.w; x++) {
+      var i = y * G.w + x; if (!G.seen[i]) continue; var t = G.t[i];
+      if (t === T.WALL || t === T.CRACK) { c.fillStyle = S.th.dark ? 'rgba(120,110,100,0.35)' : 'rgba(60,50,40,0.25)'; }
+      else c.fillStyle = t === T.STAIRS ? '#ffd040' : t === T.WATER || t === T.DEEP ? '#4a90d0' : t === T.LAVA ? '#ff6a2a' : t === T.CHASM ? '#000' : t === T.GATE ? '#c0c0c8' : t === T.PORTAL ? '#9fd0ff' : fl;
+      c.fillRect(x * cell, y * cell, cell, cell);
+    }
+    G.objs.forEach(function (o) { if (!G.seen[o.y * G.w + o.x]) return; var col = o.k === 'chest' ? '#c9a23a' : o.k === 'event' && !o.used ? '#c070ff' : o.k === 'lever' && !o.on ? '#70d0ff' : o.k === 'lore' || o.k === 'quest' ? '#ffe08a' : o.k === 'item' ? rarCol(o.it.rarity) : null; if (col) { c.fillStyle = col; c.fillRect(o.x * cell, o.y * cell, cell, cell); } });
+    G.mons.forEach(function (m) { if (E.monVisible(G, m)) { c.fillStyle = m.ally ? '#7fe0a0' : '#e05050'; c.fillRect(m.x * cell, m.y * cell, cell, cell); } });
+    c.fillStyle = rgb(S.th.accent); c.beginPath(); c.arc(G.p.x * cell + cell / 2, G.p.y * cell + cell / 2, cell, 0, 7); c.fill();
+  }
+  function ovLog() { return '<div class="cr-title">LOG</div><div class="cr-logall">' + S.logLines.slice(-80).map(function (l) { return '<div class="cr-ln ' + esc(String(l.c).replace(/[^a-z:]/g, '').replace(':', ' r-')) + '">' + esc(l.s) + '</div>'; }).join('') + '</div>' + B('close', 'Close', '', 'cr-go'); }
+  function ovMenu() {
+    var G = S.G, h = hero(), html = '<div class="cr-title">PAUSED</div>';
+    html += B('close', '▶ Resume', '', 'cr-go');
+    html += '<div class="cr-row wrap">' + B('m-sheet', '🎒 Hero (C)') + B('m-map', '🗺 Map (M)') + B('m-log', '📜 Log (L)') + B('help', '? Help') + '</div>';
+    if (G && G.mode === 'story') html += B('m-recall', '📜 Read a Recall Scroll (' + (h.cons.recall || 0) + ') — back to town', h.cons.recall ? '' : ' disabled');
+    if (G && G.mode === 'daily') html += B('m-abandon', S.abArm ? 'Really end the challenge?' : '☀ End the daily challenge', '', 'cr-b' + (S.abArm ? ' danger' : ''));
+    html += setRow();
+    html += B('m-title', '⏏ Save & quit to title') + '<p class="cr-note">Your delve is saved — you\'ll resume right here.</p>';
+    return html;
+  }
+  function ovHelp() {
+    return '<div class="cr-title">HOW TO PLAY</div>' +
+      '<p class="cr-p">Descend beneath Lanternfall, floor by floor. Every fifth floor holds a boss; beat it to open a portal home and unlock a waypoint. Monsters move when you move — the game is turn-based, so think.</p>' +
+      '<div class="cr-keys"><span><b>Arrows / WASD / D-pad / swipe</b> move &amp; attack (bump)</span><span><b>Tap a tile</b> travel there · <b>tap a foe</b> target it (tap again to attack)</span><span><b>Enter / E / ✋</b> use: stairs, levers, chests, shrines</span><span><b>Space / ⏳</b> wait a turn — with no foes in sight, rest until healed</span><span><b>1–5</b> abilities · <b>Q</b> potion · <b>B</b> bomb · <b>Tab</b> cycle target</span><span><b>X / 🧭</b> auto-explore · <b>C</b> hero · <b>M</b> map · <b>L</b> log · <b>Esc</b> menu</span></div>' +
+      '<div class="cr-h">Read the danger</div><p class="cr-p">Red tiles are an attack winding up — it lands next turn. Step out! A number on the tiles means more turns of warning. Stunning or freezing a monster interrupts it. Glowing vents burst on a rhythm.</p>' +
+      '<div class="cr-h">Elites</div><p class="cr-p">Ringed monsters are champions with affixes (vampiric, shielded, splitting, hasted…). They hit harder and always drop loot.</p>' +
+      '<div class="cr-h">Puzzles</div><p class="cr-p">Sealed gates open with levers somewhere on the floor, boulders pushed onto plates (a red-knobbed lever resets them), or runes stepped in the order shown on a nearby tablet. Every puzzle is solvable.</p>' +
+      '<div class="cr-h">Death</div><p class="cr-p">You wake in Lanternfall, lighter of purse; unequipped loot found that trip is lost (except on Relaxed). Read a Recall Scroll to bring everything home safely.</p>' +
+      B('close', 'Got it', '', 'cr-go');
+  }
+  function ovPrologue() {
+    var ov = S.ov, lines = D.STORY.prologue;
+    return '<div class="cr-title">' + (ov.i === 0 ? 'LANTERNFALL' : '…') + '</div><p class="cr-quote big">' + esc(lines[ov.i]) + '</p><div class="cr-dots">' + lines.map(function (_, i) { return '<i class="' + (i === ov.i ? 'on' : '') + '"></i>'; }).join('') + '</div>' + B('prolnext', ov.i < lines.length - 1 ? 'Continue ▸' : 'Enter Lanternfall', '', 'cr-go');
   }
 
-  function layoutCanvas() {
-    if (!ui || !ui.canvas) return;
-    ui.dpr = Math.min(2, window.devicePixelRatio || 1);
-    ui.canvas.width = CW * ui.dpr; ui.canvas.height = CH * ui.dpr;
-    ui.canvas.style.aspectRatio = CW + ' / ' + CH;
+  // ---- end-of-run screens -----------------------------------------------------------------
+  function scrDeath() {
+    var d = S.death || {}, html = '<div class="cr-card"><pre class="cr-art red">  YOU HAVE FALLEN  </pre><p class="cr-quote">Slain by ' + esc(d.killer || 'the Deep') + ' on floor ' + d.depth + '.</p>';
+    html += '<div class="cr-kv col"><span>Kills <b>' + d.kills + '</b></span><span>Gold found <b>' + d.gold + '</b></span><span>Floors <b>' + d.floors + '</b></span></div>';
+    html += '<p class="cr-p">You wake in the Lantern Inn, aching. ' + (d.lost.gold ? 'Your purse is ' + d.lost.gold + ' gold lighter. ' : '') + (d.lost.items.length ? 'Lost in the dark: ' + d.lost.items.map(esc).join(', ') + '.' : 'Your pack made it back with you.') + '</p>';
+    return html + B('totown', 'Return to Lanternfall', '', 'cr-go') + '</div>';
+  }
+  function scrDaily() {
+    var info = E.dailyInfo(today()), R = S.R, dd = R.daily.days[info.date], C_ = D.CLASSES[info.cls], M = D.DAILY_MODS[info.mod], snap = jget(K_RUN + 'daily');
+    var html = '<div class="cr-card"><div class="cr-title">DAILY CHALLENGE</div><p class="cr-quote">' + info.date + ' — the same dungeon for everyone today.</p>';
+    html += '<div class="cr-hchip">' + tok(C_.color, '@', true) + '<div><b>' + C_.name + '</b><span>level 3 · starting kit</span></div></div>';
+    html += '<div class="cr-h">Today\'s twist: ' + esc(M.name) + '</div><p class="cr-p">' + esc(M.desc) + '</p>';
+    html += '<p class="cr-p">Dive as deep as you can. Score = depth, kills, elites, bosses and gold. Death ends the run.</p>';
+    html += '<div class="cr-kv col"><span>Best today <b>' + (dd ? dd.best : '—') + '</b></span><span>Tries <b>' + (dd ? dd.tries : 0) + '</b></span><span>All-time <b>' + (R.daily.best ? R.daily.best.score + ' (' + R.daily.best.date + ')' : '—') + '</b></span></div>';
+    if (snap && snap.daily && snap.daily.date === info.date) html += B('dresume', '▶ Resume today\'s run — floor ' + snap.depth, '', 'cr-go');
+    html += B('dstart', snap && snap.daily && snap.daily.date === info.date ? 'Start over' : '▶ Begin', '', snap && snap.daily && snap.daily.date === info.date ? 'cr-b' : 'cr-go');
+    return html + B('back', '← Back') + '</div>';
+  }
+  function scrDailyOver() {
+    var d = S.dres || {}, html = '<div class="cr-card"><div class="cr-title">CHALLENGE OVER</div><div class="cr-big">' + d.score + '</div><p class="cr-quote">' + esc(d.why) + ' on floor ' + d.depth + '.</p>';
+    if (d.rec && d.rec.allTime) html += '<p class="cr-new">★ New all-time best!</p>'; else if (d.rec && d.rec.best) html += '<p class="cr-new">★ New best today!</p>';
+    html += '<div class="cr-kv col"><span>Kills <b>' + d.kills + '</b></span><span>Elites <b>' + d.elites + '</b></span><span>Bosses <b>' + d.bosses + '</b></span><span>Gold <b>' + d.gold + '</b></span></div>';
+    return html + B('totitle', 'Back to the title', '', 'cr-go') + '</div>';
+  }
+  function scrEnding() {
+    var h = S.hero, html = '<div class="cr-card"><canvas class="cr-scene"></canvas><div class="cr-title">THE SUNSTONE BURNS</div>';
+    D.STORY.ending.forEach(function (l) { html += '<p class="cr-p">' + esc(l) + '</p>'; });
+    html += '<div class="cr-kv col"><span>Level <b>' + h.level + '</b></span><span>Kills <b>' + h.stats.kills + '</b></span><span>Deaths <b>' + h.stats.deaths + '</b></span><span>Lore <b>' + h.lore.length + '/' + D.LORE.length + '</b></span></div>';
+    return html + B('totown', 'Return to Lanternfall', '', 'cr-go') + '<p class="cr-note">From town: keep descending past floor 25 (the Endless Descent), or begin New Game+.</p></div>';
   }
 
+  // ===========================================================================
+  //  flows: town ⇄ dungeon
+  // ===========================================================================
+  function setMode(dungeon) {
+    S.root.classList.toggle('in-town', !dungeon);
+    if (dungeon) { layout(); }
+    refreshHud();
+  }
+  function goTown(opts) {
+    opts = opts || {};
+    S.G = null; S.tgt = null; S.auto = null; S.stock = null;
+    S.hero = S.R.slots[S.R.active];
+    if (!S.hero) { showScreen('title'); return; }
+    if (S.hero.needsClass) { S.create = { vet: S.hero, cls: null }; showScreen('create'); return; }
+    if (opts.arrive) E.townArrive(S.hero);
+    setMode(false);
+    showScreen('town');
+    markDirty();
+  }
+  function startDelve(depth) {
+    var h = S.hero; if (!h) return;
+    S.snd.ensure();
+    clearRun('story', h.id);
+    S.G = E.startRun(h, depth);
+    enterDungeon();
+    markDirty();
+  }
+  function enterDungeon() {
+    hideScreen(); S.vis = {}; S.snapCam = true; S.tilesDirty = true; S.logEl.innerHTML = ''; S.logLines = []; S.fx = newFx();
+    setMode(true);
+    (S.G.log || []).slice(-3).forEach(function (l) { addLog(l.s, l.c); });
+    S.G.ev = S.G.ev.filter(function (e) { return e.t !== 'log'; });
+    drainEvents(); refreshHud();
+    if (S.G.modal) showModal();
+    try { S.cv.focus({ preventScroll: true }); } catch (e) {}
+    if (S.set.hints && !S.hintShown && S.G.depth === 1 && S.hero && S.hero.stats.runs <= 1) { S.hintShown = true; addLog('Tip: tap a tile to walk there, tap a foe to target it. 🧭 explores for you.', 'info'); }
+  }
+  function resumeRun(h) {
+    var snap = runSnapFor(h); if (!snap) return false;
+    var G = E.loadRun(snap, h); if (!G) { clearRun('story', h.id); return false; }
+    S.G = G; S.hero = h; enterDungeon(); addLog('You pick up where you left off.', 'info');
+    return true;
+  }
+  function finishRun() {
+    var G = S.G, h = G.hero;
+    saveNowRun(false);
+    if (G.mode === 'daily') {
+      var info = G.daily, score = E.dailyScore(G), rec = E.recordDaily(S.R, info, score, G.depth);
+      S.dres = { score: score, rec: rec, depth: G.depth, kills: G.run.kills, elites: G.run.elites, bosses: G.run.bosses, gold: G.run.gold, why: G.over === 'dead' ? 'Slain by ' + (G.killer || 'the Deep') : 'You walked away' };
+      clearRun('daily'); S.G = null; markDirty(); setMode(false); S.snd.play(G.over === 'dead' ? 'death' : 'solve');
+      setTimeout(function () { if (S) showScreen('dailyover'); }, G.over === 'dead' ? 900 : 0);
+      return;
+    }
+    E.syncHero(G);
+    clearRun('story', h.id);
+    if (G.over === 'dead') {
+      var lost = E.applyDeath(G);
+      S.death = { killer: G.killer, depth: G.depth, kills: G.run.kills, gold: G.run.gold, floors: G.run.floors, lost: lost };
+      S.snd.play('death');
+      E.townArrive(h); S.G = null; markDirty();
+      setTimeout(function () { if (S) { setMode(false); showScreen('death'); } }, 1000);
+      return;
+    }
+    // recall / portal: safe return with everything
+    var ended = !!G.ending;
+    S.snd.play('stairs');
+    S.G = null; E.townArrive(h); markDirty();
+    if (ended) { setMode(false); showScreen('ending'); return; }
+    goTown();
+    var got = G.run.items ? G.run.items + ' item' + (G.run.items > 1 ? 's' : '') + ', ' : '';
+    setTimeout(function () { if (S && S.screen === 'town') msg('BACK IN LANTERNFALL', 'You return with ' + got + G.run.gold + ' gold and ' + G.run.kills + ' kills from ' + (G.run.floors + 1) + ' floor' + (G.run.floors ? 's' : '') + '. You are fully restored.'); }, 50);
+  }
+  function saveNowRun(keep) { if (S.runT) { clearTimeout(S.runT); S.runT = 0; } if (keep !== false) saveRunNow(); }
+  function toEnding() { /* the outro dialog closed: the portal still has to be used — just nudge */ addLog('A portal home shimmers in the arena. Use it to return to Lanternfall.', 'good'); }
+
+  // ===========================================================================
+  //  clicks (all buttons delegate here)
+  // ===========================================================================
+  function onClick(e) {
+    var b = e.target.closest ? e.target.closest('[data-act]') : null;
+    if (!b || !S || !S.root.contains(b) || b.disabled) return;
+    S.snd.ensure();
+    var a = b.getAttribute('data-act'), id = b.getAttribute('data-id'), uid = b.getAttribute('data-uid'), ix = b.getAttribute('data-i'), tt = b.getAttribute('data-t');
+    if (a !== 'd' && a !== 'ab' && a !== 'potion') S.snd.play('ui');
+    var h = S.hero, R = S.R, ov = S.ov;
+    if (a !== 'del') S.delArm = null;
+    if (a !== 'drop') S.dropArm = null;
+    if (a !== 'talent') S.talArm = null;
+    if (a !== 'respec') S.respecArm = false;
+    if (a !== 'ngplus') S.ngArm = false;
+    if (a !== 'm-abandon') S.abArm = false;
+    switch (a) {
+      // --- title / roster / create
+      case 'retry': boot(); break;
+      case 'continue':
+        if (!h) break;
+        if (h.needsClass) { S.create = { vet: h, cls: null }; showScreen('create'); break; }
+        if (!resumeRun(h)) goTown();
+        break;
+      case 'heroes': S.G = null; showScreen('roster'); break;
+      case 'new': S.create = { cls: null, name: E.randomName(E.rng(Date.now() & 0xffffff)), diff: 'normal' }; showScreen('create'); break;
+      case 'pick': R.active = id; S.hero = R.slots[id]; markDirty(); showScreen('title'); break;
+      case 'del':
+        if (S.delArm !== id) { S.delArm = id; renderScreen(); break; }
+        S.delArm = null; delete R.slots[id]; R.deleted[id] = Date.now(); R.order = R.order.filter(function (x) { return x !== id; });
+        clearRun('story', id); if (R.active === id) R.active = R.order[0] || null; S.hero = R.slots[R.active] || null; markDirty(); renderScreen(); break;
+      case 'back': showScreen(S.screen === 'create' && S.create && S.create.vet ? 'title' : S.screen === 'daily' ? 'title' : S.screen === 'create' ? 'title' : 'title'); break;
+      case 'cls': S.create.cls = id; renderScreen(); break;
+      case 'diff': S.create.diff = id; renderScreen(); break;
+      case 'rname': S.create.name = E.randomName(E.rng((Date.now() ^ (Math.random() * 1e9)) >>> 0)); S.create.typing = false; renderScreen(); break;
+      case 'tname': S.create.typing = true; renderScreen(); var inp = S.scrEl.querySelector('.cr-in'); if (inp) { inp.focus(); inp.select(); inp.addEventListener('input', function () { S.create.name = inp.value; }); inp.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); S.create.name = E.cleanName(inp.value); S.create.typing = false; renderScreen(); } }); } break;
+      case 'begin':
+        var cr = S.create; if (!cr || !cr.cls) break;
+        if (cr.vet) { E.setClass(cr.vet, cr.cls); S.hero = cr.vet; markDirty(); goTown({ arrive: true }); msg('WELCOME BACK', 'The Deep has changed since your last descent — and so have you. Your old gear has been reforged for a ' + D.CLASSES[cr.cls].name + ' (check your pack), your progress carried over as waypoints. Lanternfall remembers you.'); break; }
+        var nh = E.newHero(cr.cls, E.cleanName(cr.name), cr.diff, E.rng((Date.now() ^ (Math.random() * 1e9)) >>> 0));
+        R.slots[nh.id] = nh; R.order.push(nh.id); R.active = nh.id; S.hero = nh; markDirty();
+        goTown({ arrive: true }); openOvl('prologue', { i: 0 }); break;
+      case 'prolnext': if (ov.i < D.STORY.prologue.length - 1) { ov.i++; renderOvl(); } else closeOvl(); break;
+      case 'set':
+        S.set[id || b.getAttribute('data-k')] = !S.set[id || b.getAttribute('data-k')]; saveSettings();
+        if ((id || b.getAttribute('data-k')) === 'sound') { S.snd.on = S.set.sound; S.snd.ensure(); syncHead(); }
+        if (S.mini) S.mini.hidden = !S.set.mini;
+        if (S.ovlOpen) renderOvl(); else renderScreen(); break;
+      case 'help': openOvl('help'); break;
+      case 'daily': S.G = null; showScreen('daily'); break;
+      case 'dstart': var info = E.dailyInfo(today()), dh = E.dailyHero(info); clearRun('daily'); S.G = E.startRun(dh, 1, { daily: info, seed: info.seed }); S.G.daily = info; enterDungeon(); addLog('Daily twist: ' + D.DAILY_MODS[info.mod].name + ' — ' + D.DAILY_MODS[info.mod].desc, 'warn'); break;
+      case 'dresume': var snap = jget(K_RUN + 'daily'), G2 = snap && E.loadRun(snap, null); if (G2) { S.G = G2; enterDungeon(); } else { clearRun('daily'); renderScreen(); } break;
+      case 'totitle': showScreen('title'); break;
+      case 'totown': goTown(); break;
+      // --- town
+      case 'wp': S.wp = +id; renderScreen(); break;
+      case 'descend': startDelve(S.wp || 1); break;
+      case 'ngplus': if (!S.ngArm) { S.ngArm = true; renderScreen(); break; } S.ngArm = false; E.newGamePlus(h); S.wp = 1; markDirty(); renderScreen(); msg('NEW GAME+', 'The Deep remembers you — and it has been preparing. Every foe is far deadlier now; every treasure far richer. Begin again at floor 1.'); break;
+      case 'place': if (id === 'stash') openOvl('stash', { wide: true }); else openOvl('npc:' + id, { wide: true }); break;
+      case 'sheet': openOvl('sheet', { wide: true, tab: E.talentPoints(hero()) ? 'tal' : 'gear' }); break;
+      case 'close': closeOvl(); break;
+      case 'otab': ov.tab = tt; ov.sel = null; ov.flash = null; renderOvl(); break;
+      case 'tab': ov.tab = tt; renderOvl(); break;
+      case 'story': ov.story = !ov.story; renderOvl(); break;
+      case 'rest': ov.rested = true; S.snd.play('heal'); renderOvl(); break;
+      case 'sq-accept': E.acceptSide(h, id); ov.line = D.SIDEQUESTS[id].text; markDirty(); renderOvl(); break;
+      case 'sq-turn': var got = E.turnInSide(h, id); if (got) { ov.line = D.SIDEQUESTS[id].done; ov.flash = 'Reward: ' + got.join(', '); S.snd.play('solve'); markDirty(); } renderOvl(); refreshHud(); break;
+      case 'isel': ov.sel = ov.sel === uid ? null : uid; renderOvl(); break;
+      case 'up': var ur = E.upgradeItem(h, uid); ov.flash = ur.ok ? ur.it.name + ' is now +' + ur.it.plus + '!' : ur.msg; if (ur.ok) { S.snd.play('solve'); markDirty(); } renderOvl(); break;
+      case 'ref': var rf = E.reforgeItem(h, uid, E.rng((Date.now() ^ (Math.random() * 1e9)) >>> 0)); ov.flash = rf.ok ? 'Reforged into ' + rf.it.name + '.' : rf.msg; if (rf.ok) { S.snd.play('rare'); markDirty(); } renderOvl(); break;
+      case 'salv': var y = E.salvageItem(h, uid); if (y) { ov.flash = 'Salvaged for ' + matTxt(y) + '.'; ov.sel = null; S.snd.play('chest'); markDirty(); } renderOvl(); break;
+      case 'craft': var ci = E.craftItem(h, id, tt, E.rng((Date.now() ^ (Math.random() * 1e9)) >>> 0)); ov.flash = ci ? 'Torvald hands you: ' + ci.name + '.' : 'Not enough materials.'; if (ci) { S.snd.play('rare'); markDirty(); } renderOvl(); break;
+      case 'buy':
+        if (!S.stock) break;
+        var entry = ix.charAt(0) === 'c' ? S.stock.cons[+ix.slice(1)] : S.stock.items[+ix.slice(1)], br = E.buy(h, entry);
+        ov.flash = br.ok ? 'Bought ' + (entry.it ? entry.it.name : D.CONSUMABLES[entry.cons].name) + '.' : br.msg; if (br.ok) { S.snd.play('gold'); ov.sel = null; markDirty(); } renderOvl(); break;
+      case 'sell': var v = E.sellItem(h, uid); if (v) { ov.flash = 'Sold for ' + v + 'g.'; ov.sel = null; S.snd.play('gold'); markDirty(); } renderOvl(); break;
+      case 'sellcommons': var tot = 0; h.bag.slice().forEach(function (it) { if (it.rarity === 'common') tot += E.sellItem(h, it.uid); }); ov.flash = tot ? 'Sold the junk for ' + tot + 'g.' : 'No common items to sell.'; if (tot) { S.snd.play('gold'); markDirty(); } renderOvl(); break;
+      case 'uncurse': if (E.uncurse(h)) { ov.flash = 'The curses lift.'; S.snd.play('holy'); markDirty(); } renderOvl(); break;
+      case 'bless': if (E.buyBlessing(h, id)) { ov.flash = D.BLESSINGS[id].name + ' — it will last your next 3 floors.'; S.snd.play('holy'); markDirty(); } renderOvl(); break;
+      case 'respec': if (!S.respecArm) { S.respecArm = true; renderOvl(); break; } S.respecArm = false; if (E.respec(h)) { ov.flash = 'Your talents are yours to choose again.'; markDirty(); } renderOvl(); break;
+      case 'lore': ov.page = ov.page === +ix ? null : +ix; renderOvl(); break;
+      case 'claim': var rw = E.claimBounty(h, id); if (rw) { ov.flash = 'Claimed ' + rw.gold + 'g and ' + rw.xp + ' XP.'; S.snd.play('gold'); markDirty(); } renderOvl(); break;
+      case 'stash-put': if (E.stashPut(R, h, uid)) { markDirty(); S.snd.play('pick'); } renderOvl(); break;
+      case 'stash-take': if (E.stashTake(R, h, uid)) { markDirty(); S.snd.play('pick'); } renderOvl(); break;
+      // --- hero sheet
+      case 'equip': if (E.equip(hero(), uid)) { ov.sel = null; S.snd.play('pick'); markDirty(); if (S.G) S.G._ps = null; } renderOvl(); refreshHud(); break;
+      case 'unequip': if (E.unequip(hero(), id)) { markDirty(); } else ov.flash = 'Your pack is full.'; renderOvl(); refreshHud(); break;
+      case 'drop': if (S.dropArm !== uid) { S.dropArm = uid; renderOvl(); break; } var hf = E.findItem(hero(), uid); if (hf && hf.where === 'bag') hero().bag.splice(hf.idx, 1); S.dropArm = null; ov.sel = null; markDirty(); renderOvl(); break;
+      case 'talent': if (S.talArm !== id) { S.talArm = id; renderOvl(); break; } S.talArm = null; if (E.chooseTalent(hero(), +ix, id)) { S.snd.play('level'); ov.flash = 'Talent learned.'; if (S.G) S.G._ps = null; markDirty(); } renderOvl(); refreshHud(); break;
+      case 'usecons': closeOvl(); if (id === 'bomb') bombPress(); else doAct({ t: 'cons', id: id }); break;
+      // --- dungeon
+      case 'ab': abilityPress(id); break;
+      case 'potion': usePotion(); break;
+      case 'tgtgo': confirmTarget(); break;
+      case 'tgtx': cancelTarget(); break;
+      case 'pad': padAction(id); break;
+      case 'evc':
+        var res = E.eventChoice(S.G, +ix);
+        if (!res) break;
+        if (res.shop) { closeOvlQuiet(); showModal(); break; }
+        if (!res.ok) { ov.err = res.text; renderOvl(); break; }
+        if (!res.done) { closeOvlQuiet(); afterAct(); break; }
+        ov.result = res; S.tilesDirty = true; drainEvents(); refreshHud(); renderOvl(); markDirty(); break;
+      case 'evdone': closeOvlQuiet(); afterAct(); break;
+      case 'dlgnext': if (ov.i < ov.lines.length - 1) { ov.i++; renderOvl(); } else closeOvl(); break;
+      case 'dbuy':
+        var md = S.G.modal, en = md && md.stock[+ix];
+        if (en) { var bb = E.buy(hero(), en); if (bb.ok && en.cons) en.sold = true; ov.flash = bb.ok ? 'Bought.' : bb.msg; if (bb.ok) { S.snd.play('gold'); markDirty(); } }
+        renderOvl(); refreshHud(); break;
+      case 'm-sheet': S.ov = null; openOvl('sheet', { wide: true }); break;
+      case 'm-map': openOvl('map', { wide: true }); break;
+      case 'm-log': openOvl('log'); break;
+      case 'm-recall': closeOvlQuiet(); doAct({ t: 'cons', id: 'recall' }); break;
+      case 'm-abandon': if (!S.abArm) { S.abArm = true; renderOvl(); break; } S.abArm = false; closeOvlQuiet(); S.G.over = 'quit'; finishRun(); break;
+      case 'm-title': closeOvlQuiet(); saveNowRun(); saveNow(); S.G = null; setMode(false); showScreen('title'); break;
+    }
+  }
+  function closeOvlQuiet() { S.ovlOpen = false; S.ovlEl.hidden = true; S.ovlEl.innerHTML = ''; S.ov = null; }
+  function padAction(id) {
+    if (!S.G) return;
+    if (id === 'use') useKey();
+    else if (id === 'rest') restKey();
+    else if (id === 'explore') { stopAuto(); if (S.tgt) cancelTarget(); startExplore(); }
+    else if (id === 'sheet') openOvl('sheet', { wide: true, tab: E.talentPoints(hero()) ? 'tal' : 'gear' });
+    else if (id === 'map') openOvl('map', { wide: true });
+    else if (id === 'menu') openOvl('menu');
+  }
+
+  // ===========================================================================
+  //  input
+  // ===========================================================================
+  function isTyping(e) {
+    var t = e.target; if (!t || !t.tagName) return false;
+    if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return true;
+    return !!(t.closest && t.closest('.cm-editor'));
+  }
+  var DIR = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1], a: [-1, 0], d: [1, 0], w: [0, -1], s: [0, 1], h: [-1, 0], l: [1, 0], k: [0, -1], j: [0, 1] };
+  function onKey(e) {
+    if (!S || !S.panel.isConnected) return;
+    if (Cade.isMinimized && Cade.isMinimized(S.panel)) return;
+    if (isTyping(e)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    var k = e.key;
+    S.kbd = true; S.snd.ensure();
+    if (S.ovlOpen || S.screen) { navKey(e, S.ovlOpen ? S.ovlEl : S.scrEl); return; }
+    if (!S.G) return;
+    var kl = k.length === 1 ? k.toLowerCase() : k;
+    if (S.tgt) {
+      var dd = DIR[k] || (k.length === 1 && 'wasd'.indexOf(kl) >= 0 ? DIR[kl] : null);
+      if (dd) { e.preventDefault(); moveCursor(dd[0], dd[1]); return; }
+      if (k === 'Enter' || k === ' ' || kl === 'e') { e.preventDefault(); confirmTarget(); return; }
+      if (k === 'Escape') { e.preventDefault(); cancelTarget(); return; }
+      if (k === 'Tab') { e.preventDefault(); cycleTarget(); return; }
+      if (k >= '1' && k <= '5') { e.preventDefault(); var ab0 = E.abilitiesFor(S.G.hero)[+k - 1]; if (ab0) abilityPress(ab0.id); return; }
+      if (kl === 'b' && S.tgt.id === 'bomb') { e.preventDefault(); confirmTarget(); return; }
+      return;
+    }
+    var handled = true;
+    if (S.auto && k !== 'Shift') { stopAuto(); if (k === ' ' || k === 'x') { e.preventDefault(); return; } }
+    var dir = DIR[k] || ('wasd'.indexOf(kl) >= 0 && kl.length === 1 ? DIR[kl] : null);
+    if (dir) move(dir[0], dir[1]);
+    else if (k === 'Enter' || kl === 'e' || kl === 'g') useKey();
+    else if (k === ' ' || k === '.') restKey();
+    else if (k >= '1' && k <= '5') { var ab = E.abilitiesFor(S.G.hero)[+k - 1]; if (ab) abilityPress(ab.id); }
+    else if (kl === 'q') usePotion();
+    else if (kl === 'b') bombPress();
+    else if (kl === 'c' || kl === 'i') padAction('sheet');
+    else if (kl === 'm') padAction('map');
+    else if (kl === 'l') openOvl('log');
+    else if (kl === 'x') padAction('explore');
+    else if (kl === 'r') { if (S.G.hero.cons.tonic) doAct({ t: 'cons', id: 'tonic' }); }
+    else if (k === 'Tab') cycleTarget();
+    else if (k === 'Escape' || kl === 'p') padAction('menu');
+    else if (k === '?') openOvl('help');
+    else handled = false;
+    if (handled) e.preventDefault();
+  }
+  function navKey(e, root) {
+    var k = e.key;
+    if (e.target && e.target.classList && e.target.classList.contains('cr-in')) return;
+    var els = Array.prototype.filter.call(root.querySelectorAll('button:not([disabled])'), function (b) { return b.offsetParent !== null; });
+    if (!els.length) return;
+    var cur = els.indexOf(document.activeElement) >= 0 ? document.activeElement : null;
+    var d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[k];
+    if (d) {
+      e.preventDefault();
+      if (!cur) { focusEl(root.querySelector('.cr-go:not([disabled])') || els[0]); return; }
+      var r0 = cur.getBoundingClientRect(), x0 = r0.left + r0.width / 2, y0 = r0.top + r0.height / 2, best = null, bd = 1e9;
+      els.forEach(function (b) {
+        if (b === cur) return;
+        var r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, vx = x - x0, vy = y - y0;
+        var along = vx * d[0] + vy * d[1]; if (along <= 4) return;
+        var across = Math.abs(vx * d[1]) + Math.abs(vy * d[0]), sc = along + across * 2.2;
+        if (sc < bd) { bd = sc; best = b; }
+      });
+      if (best) focusEl(best);
+      return;
+    }
+    if (k === 'Enter' || k === ' ') {
+      e.preventDefault();
+      var tgt = cur || root.querySelector('.cr-go:not([disabled])') || els[0];
+      if (tgt) tgt.click();
+      return;
+    }
+    if (k === 'Tab') { e.preventDefault(); var i = cur ? els.indexOf(cur) : -1; focusEl(els[(i + (e.shiftKey ? -1 : 1) + els.length) % els.length]); return; }
+    if (k === 'Escape') {
+      e.preventDefault();
+      if (S.ovlOpen) { if (S.ov && (S.ov.k === 'event' && !S.ov.result)) return; if (S.ov && S.ov.k === 'dialog') { root.querySelector('[data-act="dlgnext"]').click(); return; } if (S.ov && S.ov.k === 'prologue') { closeOvl(); return; } if (S.ov && S.ov.k === 'event') { root.querySelector('[data-act="evdone"]').click(); return; } closeOvl(); return; }
+      if (S.screen === 'roster' || S.screen === 'daily' || S.screen === 'create') showScreen('title');
+    }
+  }
+  function focusEl(b) { if (!b) return; try { b.focus({ preventScroll: true }); b.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
+  function screenToTile(cx, cy) {
+    var r = S.cv.getBoundingClientRect(), lx = (cx - r.left) * (S.cw / r.width), ly = (cy - r.top) * (S.chh / r.height);
+    return { x: Math.floor((lx - S.ox) / S.ts), y: Math.floor((ly - S.oy) / S.ts) };
+  }
+  function tapTile(tx, ty) {
+    var G = S.G; if (!G || tx < 0 || ty < 0 || tx >= G.w || ty >= G.h) return;
+    stopAuto();
+    var p = G.p, dx = tx - p.x, dy = ty - p.y, md = Math.abs(dx) + Math.abs(dy);
+    if (!md) { useKey(); return; }
+    var m = E.monAt(G, tx, ty);
+    if (m && !m.ally && E.monVisible(G, m) && !m.disguised) {
+      if (md === 1) { doAct({ t: 'move', dx: dx, dy: dy }); return; }
+      if (G.p.target !== m.id) {
+        G.p.target = m.id;
+        addLog('◎ ' + E.displayName(m) + ' — ' + m.hp + '/' + m.maxHp + ' HP' + (m.elite ? ' · ' + m.elite.map(function (a) { return D.ELITE[a].desc; }).join(', ') : '') + (m.asleep ? ' · asleep' : '') + '. Tap again to close in.', 'info');
+        refreshAbil(); return;
+      }
+      if (!startTravel(tx, ty)) addLog('No clear path.', 'info');
+      return;
+    }
+    if (md === 1) { doAct({ t: 'move', dx: dx, dy: dy }); return; }
+    if (!G.seen[ty * G.w + tx]) { addLog('You don\'t know the way there yet.', 'info'); return; }
+    if (!startTravel(tx, ty)) addLog('No safe path there.', 'info');
+  }
+  function bindCanvas() {
+    var cv = S.cv, st = null;
+    cv.addEventListener('pointerdown', function (e) {
+      if (!S || !S.G) return;
+      e.preventDefault(); S.snd.ensure();
+      try { cv.setPointerCapture(e.pointerId); } catch (er) {}
+      st = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      S.kbd = false;
+    });
+    cv.addEventListener('pointerup', function (e) {
+      if (!S || !st || st.id !== e.pointerId) return;
+      var dx = e.clientX - st.x, dy = e.clientY - st.y; st = null;
+      if (!S.G || S.screen || S.ovlOpen) return;
+      if (Math.abs(dx) > 26 || Math.abs(dy) > 26) {
+        var d = Math.abs(dx) > Math.abs(dy) ? [dx > 0 ? 1 : -1, 0] : [0, dy > 0 ? 1 : -1];
+        move(d[0], d[1]); return;
+      }
+      var t = screenToTile(e.clientX, e.clientY);
+      if (S.tgt) {
+        if (S.tgt.list.some(function (q) { return q.x === t.x && q.y === t.y; })) confirmTarget(t.x, t.y);
+        else { S.tgt.cur = { x: t.x, y: t.y }; addLog('Out of range — tap a highlighted tile.', 'info'); }
+        return;
+      }
+      tapTile(t.x, t.y);
+    });
+    cv.addEventListener('pointercancel', function () { st = null; });
+    cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  }
+  function bindPad() {
+    var dp = S.padEl.querySelector('.cr-dpad');
+    function dirAct(id) {
+      if (!S || !S.G || S.screen || S.ovlOpen) return;
+      if (id === 'w') { restKey(); return; }
+      var d = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] }[id];
+      if (d) move(d[0], d[1]);
+    }
+    function stop() { if (S && S.hold) { clearTimeout(S.hold.t); clearInterval(S.hold.iv); S.hold = null; } }
+    dp.addEventListener('pointerdown', function (e) {
+      var b = e.target.closest('[data-act="d"]'); if (!b) return;
+      e.preventDefault(); S.snd.ensure(); S.kbd = false;
+      try { b.setPointerCapture(e.pointerId); } catch (er) {}
+      stop();
+      var id = b.getAttribute('data-id');
+      Cade.haptic && Cade.haptic(5);
+      dirAct(id);
+      if (id !== 'w') S.hold = { t: setTimeout(function () { if (S && S.hold) S.hold.iv = setInterval(function () { dirAct(id); }, 150); }, 320) };
+    });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (ev) { dp.addEventListener(ev, stop); });
+  }
+  function syncHead() {
+    if (!S) return;
+    var b = S.head.querySelector('[data-h="sound"]');
+    b.innerHTML = S.set.sound ? IC_SND_ON : IC_SND_OFF; b.title = S.set.sound ? 'Sound on' : 'Sound off'; b.classList.toggle('on', S.set.sound);
+  }
+
+  // ===========================================================================
+  //  open / close
+  // ===========================================================================
+  function newFx() { return { parts: [], texts: [], projs: [], rings: [], areas: [], ghosts: [], banner: null, flash: null }; }
+  function teardown() {
+    if (!S) return;
+    try { if (S.G && !S.G.over) saveRunNow(); if (S.R) saveNow(true); } catch (e) {}
+    clearTimeout(S.fbT);
+    detachFb();
+    var s = S; S = null;
+    if (s.raf) cancelAnimationFrame(s.raf);
+    clearTimeout(s.saveT); clearTimeout(s.runT); clearTimeout(s.resizeT);
+    if (s.hold) { clearTimeout(s.hold.t); clearInterval(s.hold.iv); }
+    document.removeEventListener('keydown', s.onKey, true);
+    document.removeEventListener('visibilitychange', s.onVis);
+    window.removeEventListener('resize', s.onResize);
+    window.removeEventListener('orientationchange', s.onResize);
+    if (window.visualViewport) window.visualViewport.removeEventListener('resize', s.onResize);
+    if (s.ro) s.ro.disconnect();
+    if (s.themeObs) s.themeObs.disconnect();
+    s.snd.close();
+    [s.cv, s.layer, s.mini].forEach(function (c) { if (c) { c.width = 0; c.height = 0; } });
+  }
+  function closePanel() {
+    var p = document.getElementById(PANEL_ID);
+    teardown();
+    if (p) p.remove();
+    try { if (!(window.matchMedia && matchMedia('(pointer: coarse)').matches)) Cade.editor.focus(); } catch (e) {}
+  }
+  function boot() {
+    showScreen('loading');
+    loadAll().then(function () {
+      if (!S) return;
+      T = E.T;
+      loadRoster(function (R) {
+        if (!S) return;
+        S.R = R; S.hero = R.slots[R.active] || null;
+        sset(K_ROSTER, JSON.stringify(R));
+        attachFb();
+        showScreen('title');
+      });
+    }).catch(function () { if (S) showScreen('error'); });
+  }
   function open() {
     Cade.closeAllMenus();
-    if (document.getElementById('crawler-panel')) { close(); return; }
-
-    var body =
-      '<div class="cr-wrap">' +
-        '<div class="cr-topbar">' +
-          '<div id="cr-bars" class="cr-bars"></div>' +
-          '<div class="cr-tbtns">' +
-            '<button id="cr-home" class="cr-tbtn" title="Return to town">🏠</button>' +
-            '<button id="cr-map" class="cr-tbtn" title="World map">🗺</button>' +
-            '<button id="cr-char" class="cr-tbtn" title="Character (C)">🎒</button>' +
-            '<button id="cr-opts" class="cr-tbtn" title="Options">⚙</button>' +
-          '</div>' +
-        '</div>' +
-        '<div id="cr-hud" class="cr-hud"></div>' +
-        '<div class="cr-stage"><canvas id="crawler-canvas" class="cr-canvas" tabindex="0"></canvas>' +
-          '<div id="cr-log" class="cr-log"></div></div>' +
-        '<div id="cr-items" class="cr-items"></div>' +
-        '<div id="cr-abil" class="cr-abil"></div>' +
-        '<div class="cr-controls">' +
-          '<div class="cr-dpad">' +
-            '<button class="cr-d cr-up" data-dir="up">▲</button>' +
-            '<button class="cr-d cr-left" data-dir="left">◀</button>' +
-            '<button class="cr-d cr-mid" data-dir="wait">•</button>' +
-            '<button class="cr-d cr-right" data-dir="right">▶</button>' +
-            '<button class="cr-d cr-down" data-dir="down">▼</button>' +
-          '</div>' +
-          '<div class="cr-actcol">' +
-            '<button id="cr-act" class="cr-act" title="Interact (E)">✋</button>' +
-          '</div>' +
-        '</div>' +
-        '<div class="cr-help">Move: swipe / D-pad / WASD · Tap a tile to travel · ✋ interact · 🎒 gear</div>' +
-      '</div>';
-
-    var panel = Cade.mkPanel('crawler-panel', '⚔ Deepdelve', body);
-    var canvas = document.getElementById('crawler-canvas');
-    ui = {
-      wrap: panel.querySelector('.cr-wrap'), canvas: canvas, ctx: canvas.getContext('2d'),
-      bars: document.getElementById('cr-bars'), hud: document.getElementById('cr-hud'),
-      log: document.getElementById('cr-log'), items: document.getElementById('cr-items'),
-      abil: document.getElementById('cr-abil'), dpr: 1, onKey: null, onResize: null
+    var ex = document.getElementById(PANEL_ID);
+    if (ex) {
+      if (Cade.isMinimized && Cade.isMinimized(ex) && Cade.restorePanel) { Cade.restorePanel(ex); return; }
+      closePanel(); return;
+    }
+    var pad = '<div class="cr-dpad">' +
+      '<button type="button" class="cr-d u" data-act="d" data-id="u" aria-label="Up">▲</button><button type="button" class="cr-d l" data-act="d" data-id="l" aria-label="Left">◀</button>' +
+      '<button type="button" class="cr-d w" data-act="d" data-id="w" aria-label="Wait">⏳</button><button type="button" class="cr-d r" data-act="d" data-id="r" aria-label="Right">▶</button>' +
+      '<button type="button" class="cr-d dn" data-act="d" data-id="d" aria-label="Down">▼</button></div>' +
+      '<div class="cr-acts">' + [['use', '✋', 'Use'], ['explore', '🧭', 'Explore'], ['sheet', '🎒', 'Hero'], ['rest', '💤', 'Rest'], ['map', '🗺', 'Map'], ['menu', '☰', 'Menu']].map(function (a) {
+        return '<button type="button" class="cr-pa' + (a[0] === 'use' ? ' main' : '') + '" data-act="pad" data-id="' + a[0] + '"><span>' + a[1] + '</span><i>' + a[2] + '</i></button>';
+      }).join('') + '</div>';
+    var body = '<div class="cr in-town">' +
+      '<div class="cr-hud"><div class="cr-bars"><div class="cr-bar cr-hpb"><i></i><span></span></div><div class="cr-bar cr-resb"><i></i><span></span></div><div class="cr-xpb"><i></i></div></div>' +
+      '<div class="cr-meta"><b class="cr-where"></b><span class="cr-gold"></span></div></div>' +
+      '<div class="cr-stage"><canvas class="cr-cv" tabindex="0" aria-label="Dungeon"></canvas><canvas class="cr-mini" aria-hidden="true"></canvas><div class="cr-chips"></div>' +
+      '<div class="cr-bossb" hidden><b></b><div><i></i></div></div><div class="cr-log" aria-live="polite"></div><div class="cr-tgtbar" hidden></div></div>' +
+      '<div class="cr-abil"></div><div class="cr-pad">' + pad + '</div>' +
+      '<div class="cr-scr" hidden></div><div class="cr-ovl" hidden></div></div>';
+    var p = Cade.mkPanel(PANEL_ID, '⚔ Dungeon Crawler', body);
+    if (Cade.markGamePanel) Cade.markGamePanel(p);
+    else { try { Cade.editor.contentDOM.blur(); } catch (e) {} }
+    var head = p.querySelector('.cade-panel-head'), hb = document.createElement('div');
+    hb.className = 'cr-hb';
+    hb.innerHTML = '<button type="button" data-h="help" title="How to play" aria-label="How to play">' + IC_HELP + '</button><button type="button" data-h="sound"></button><button type="button" data-h="menu" title="Menu (Esc)" aria-label="Menu">' + IC_MENU + '</button>';
+    if (head) head.insertBefore(hb, p.querySelector('.cade-panel-popbtn') || p.querySelector('.cade-panel-minbtn') || p.querySelector('.cade-panel-x'));
+    var set = loadSettings(), mm = window.matchMedia;
+    S = {
+      panel: p, head: hb, root: p.querySelector('.cr'), hudEl: p.querySelector('.cr-hud'), stage: p.querySelector('.cr-stage'), cv: p.querySelector('.cr-cv'), mini: p.querySelector('.cr-mini'),
+      chipsEl: p.querySelector('.cr-chips'), bossEl: p.querySelector('.cr-bossb'), logEl: p.querySelector('.cr-log'), tgtEl: p.querySelector('.cr-tgtbar'), abilEl: p.querySelector('.cr-abil'), padEl: p.querySelector('.cr-pad'),
+      scrEl: p.querySelector('.cr-scr'), ovlEl: p.querySelector('.cr-ovl'),
+      hpEl: p.querySelector('.cr-hpb'), hpFill: p.querySelector('.cr-hpb i'), hpLbl: p.querySelector('.cr-hpb span'), resFill: p.querySelector('.cr-resb i'), resLbl: p.querySelector('.cr-resb span'), xpFill: p.querySelector('.cr-xpb i'),
+      whereEl: p.querySelector('.cr-where'), goldEl: p.querySelector('.cr-gold'), bossName: p.querySelector('.cr-bossb b'), bossFill: p.querySelector('.cr-bossb i'),
+      set: set, snd: new Snd(set.sound), client: clientId(), coarse: !!(mm && mm('(pointer: coarse)').matches),
+      R: null, hero: null, G: null, screen: null, ov: null, ovlOpen: false, vis: {}, lunge: {}, flash: {}, fx: newFx(), shake: 0, logLines: [], tgt: null, auto: null, kbd: false,
+      ts: 32, cw: 360, chh: 400, dpr: 1, ox: 0, oy: 0, layerKey: '', tilesDirty: true, tilesSig: ''
     };
-    layoutCanvas();
-
-    // input
-    ui.onKey = onKey;
-    document.addEventListener('keydown', ui.onKey, true);
-    // Minimized to the dock: freeze the loop (drawing, auto-travel); restore picks up again.
-    panel.addEventListener('cade-panel-minimize', function () { state_teardown(); });
-    panel.addEventListener('cade-panel-restore', function () { if (ui && world && !raf) raf = requestAnimationFrame(render); });
-    ui.onResize = function () { layoutCanvas(); };
-    window.addEventListener('resize', ui.onResize);
-    bindCanvasInput(canvas);
-
-    // d-pad
-    var dpad = panel.querySelectorAll('.cr-d');
-    for (var i = 0; i < dpad.length; i++) (function (btn) {
-      var dir = btn.getAttribute('data-dir');
-      var act = function (e) { e.preventDefault(); cancelTravel(); Cade.haptic(5);
-        if (world && world.mode === 'dead') { enter(0); return; }
-        if (dir === 'up') tryMove(0, -1); else if (dir === 'down') tryMove(0, 1);
-        else if (dir === 'left') tryMove(-1, 0); else if (dir === 'right') tryMove(1, 0);
-        else rest(); };
-      btn.addEventListener('click', act);
-    })(dpad[i]);
-    bindButton(document.getElementById('cr-act'), function () { if (world && world.mode === 'dead') { enter(0); return; } interact(); });
-    bindButton(document.getElementById('cr-char'), openCharacter);
-    bindButton(document.getElementById('cr-home'), recall);
-    bindButton(document.getElementById('cr-opts'), openOptions);
-    bindButton(document.getElementById('cr-map'), openWorldMap);
-
-    panel._onClose = function () {
-      markFled(); saveNow(); state_teardown(); detachFbListener();
-      if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
-      if (ui && ui.onKey) document.removeEventListener('keydown', ui.onKey, true);
-      if (ui && ui.onResize) window.removeEventListener('resize', ui.onResize);
-      closeOverlay();
-      world = null; ui = null;
+    S.ctx = S.cv.getContext('2d');
+    S.mini.hidden = !set.mini;
+    p._onClose = teardown;
+    readTheme();
+    layout();
+    syncHead();
+    S.onKey = onKey;
+    document.addEventListener('keydown', S.onKey, true);
+    S.onVis = function () { if (!S) return; if (document.hidden) { if (S.G) saveRunNow(); saveNow(true); } else startLoop(); };
+    document.addEventListener('visibilitychange', S.onVis);
+    S.onResize = function () {
+      if (!S) return; clearTimeout(S.resizeT);
+      S.resizeT = setTimeout(function () { if (S && !(Cade.isMinimized && Cade.isMinimized(S.panel))) { layout(); if (S.sceneCv) sizeScene(); if (S.ovlOpen && S.ov && S.ov.k === 'map') drawBigMap(); } }, 120);
     };
-
-    // boot: load the enduring hero, then enter town
-    Cade.showToast('Loading your delver…', 'info', 1200);
-    loadHero(function () {
-      if (!ui) return; // closed during async load
-      buildAbilityBar();
-      // resume into town (always a safe hub); if dead-state somehow, fix
-      enter(0);
-      // flee penalty: if we bailed mid-dungeon last session, pay for it now
-      if (hero._fled) {
-        var fd = hero._fled; hero._fled = 0;
-        var loss = Math.floor(hero.gold * 0.1);
-        hero.gold = Math.max(0, hero.gold - loss);
-        logMsg('die', 'You abandoned floor ' + fd + ' — you stumble back to town' + (loss ? ', ' + loss + ' gold lighter.' : '.'));
-        Cade.showToast('You fled floor ' + fd + (loss ? ' — lost ' + loss + ' gold' : ''), 'error', 2800);
-        markDirty();
-      }
-      refreshAll();
-      try { ui.canvas.focus(); } catch (e) {}   // so desktop keys drive the game immediately
-      raf = requestAnimationFrame(render);
+    window.addEventListener('resize', S.onResize);
+    window.addEventListener('orientationchange', S.onResize);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', S.onResize);
+    try { S.ro = new ResizeObserver(function () { if (S && S.panel === p) requestAnimationFrame(relayoutIfMoved); }); S.ro.observe(S.hudEl); S.ro.observe(S.padEl); S.ro.observe(S.abilEl); } catch (e) {}
+    try { S.themeObs = new MutationObserver(function () { if (S) { readTheme(); if (S.screen) renderScreen(); } }); S.themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] }); } catch (e) {}
+    p.addEventListener('cade-panel-minimize', function () { if (!S || S.panel !== p) return; stopAuto(); if (S.G) saveRunNow(); saveNow(); });
+    p.addEventListener('cade-panel-restore', function () { if (!S || S.panel !== p) return; requestAnimationFrame(function () { if (!S) return; readTheme(); layout(); startLoop(); }); });
+    S.root.addEventListener('click', onClick);
+    hb.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+    hb.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('button') : null; if (!b || !S) return;
+      var hh = b.getAttribute('data-h');
+      if (hh === 'sound') { S.set.sound = !S.set.sound; S.snd.on = S.set.sound; saveSettings(); S.snd.ensure(); S.snd.play('ui'); syncHead(); if (S.screen) renderScreen(); }
+      else if (hh === 'help') openOvl('help');
+      else if (hh === 'menu') { if (S.G && !S.screen) openOvl('menu'); else if (S.R) { if (S.ovlOpen) closeOvl(); showScreen('title'); } }
     });
+    bindCanvas(); bindPad();
+    startLoop();
+    boot();
   }
 
   Cade.registerWidget({
     name: 'Dungeon Crawler',
-    description: 'Deepdelve — a puzzle-action roguelite with an enduring, synced character',
+    description: 'Deepdelve — a story roguelite: 6 classes, 5 acts and bosses, loot, puzzles, a daily challenge, synced heroes',
     icon: '⚔',
-    tags: 'game,roguelike,dungeon,crawler,rpg,adventure,puzzle,action,deepdelve,fun',
+    tags: 'game,roguelike,dungeon,crawler,rpg,adventure,puzzle,action,deepdelve,classes,loot,boss,daily,story,train,fun',
     open: open
   });
 })();

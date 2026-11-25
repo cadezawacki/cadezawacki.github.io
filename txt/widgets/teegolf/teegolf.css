@@ -1,0 +1,220 @@
+/* Tee Time Golf widget styles (loaded on demand via Cade.loadCSS). */
+#teegolf-panel { top: calc(var(--menubar-h, 36px) + 12px); right: 12px; max-width: calc(100vw - 24px); }
+#teegolf-panel .cade-panel-body { padding: 10px; overflow: hidden; overscroll-behavior: contain; }
+#teegolf-panel .cade-panel-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Swings are dragged hard and fast: nothing in the panel may select, magnify,
+   open a callout or zoom. The course and the held pad buttons take no browser
+   gestures at all; other buttons only plain taps; cards scroll (pan-y). */
+#teegolf-panel, #teegolf-panel * {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+#teegolf-panel { touch-action: manipulation; }
+#teegolf-panel .tg-stage, #teegolf-panel .tg-cv, #teegolf-panel .tg-pb { touch-action: none; }
+#teegolf-panel button { touch-action: manipulation; }
+#teegolf-panel .tg-pb { touch-action: none; }
+#teegolf-panel .tg-ovl { touch-action: pan-y; }
+
+/* help / scorecard / sound / pause in the panel header */
+.tg-hb { display: inline-flex; flex: none; gap: 4px; cursor: default; }
+.tg-hb button {
+  width: 30px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--radius-md, 6px); background: var(--surface-2); color: var(--text-muted); cursor: pointer;
+}
+.tg-hb button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.tg-hb button.on { color: var(--accent); }
+.tg-hb button:disabled { opacity: 0.35; cursor: default; }
+.tg-hb button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.tg { display: flex; flex-direction: column; gap: 8px; width: var(--tg-w, auto); margin: 0 auto; }
+
+/* the HUD: hole, par, length, every player's score to par, the stroke / tour position */
+.tg-hud {
+  display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; min-height: 22px;
+  font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+.tg-hud.off { visibility: hidden; }
+.tg-h1 { color: var(--text); font-weight: 700; letter-spacing: 0.08em; }
+.tg-h1 i { font-style: normal; color: var(--text-faint); font-weight: 500; }
+.tg-par { letter-spacing: 0.06em; }
+.tg-pls { display: inline-flex; gap: 4px; flex-wrap: wrap; flex: 1 1 auto; justify-content: center; }
+.tg-pl { padding: 1px 6px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap; }
+.tg-pl b { font-weight: 700; color: inherit; }
+.tg-pl i { font-style: normal; opacity: 0.75; }
+.tg-pl.on { border-color: currentColor; }
+.tg-st { margin-left: auto; letter-spacing: 0.06em; white-space: nowrap; }
+.tg-st b { color: var(--text); }
+.tg-st i { font-style: normal; color: var(--text-faint); }
+
+.tg-stage { position: relative; margin: 0 auto; line-height: 0; }
+.tg-cv { display: block; width: 100%; height: 100%; cursor: ns-resize; border-radius: 8px; background: var(--bg); box-shadow: 0 0 0 1px var(--border); }
+.tg-stage.dim::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1;
+  background: var(--bg); opacity: 0.45; border-radius: 8px; pointer-events: none;
+}
+.tg-ovl {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center; padding: 10px;
+  overflow: auto; overscroll-behavior: contain; line-height: 1.35; border-radius: 8px;
+}
+.tg-card {
+  display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 420px; margin: auto; padding: 12px;
+  color: var(--text); font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md, 6px); box-shadow: var(--shadow-lg);
+}
+.tg-res { max-width: 560px; }
+.tg-card p { margin: 0; color: var(--text-muted); line-height: 1.45; }
+.tg-card p b { color: var(--text); }
+.tg-title { font-weight: 700; font-size: 15px; letter-spacing: 0.16em; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tg-title::before, .tg-title::after { content: '--'; color: var(--accent); letter-spacing: 0; margin: 0 0.5em; font-weight: 500; }
+.tg-sub { text-align: center; color: var(--text-muted); }
+.tg-sub b { color: var(--text); }
+.tg-big { text-align: center; font-size: 24px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.15; letter-spacing: 0.06em; }
+.tg-big small { font-size: 14px; color: var(--text-muted); }
+.tg-new { text-align: center; color: var(--accent); font-weight: 700; font-size: 11px; letter-spacing: 0.04em; }
+.tg-art { margin: 0 auto; font: inherit; font-weight: 700; line-height: 1.2; white-space: pre; color: var(--accent); }
+.tg-tab { margin: 0; font: inherit; line-height: 1.5; white-space: pre; color: var(--text-muted); font-variant-numeric: tabular-nums; max-width: 100%; overflow-x: auto; }
+.tg-tab b { color: var(--text); font-weight: 700; }
+.tg-board { font-size: 11px; margin: 0 auto; }
+.tg-keys { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: var(--radius-md, 6px); color: var(--text-muted); }
+.tg-keys b { color: var(--text); }
+.tg-tip { font-size: 11px; }
+.tg-go {
+  font: inherit; font-weight: 700; padding: 9px 12px; border-radius: var(--radius-md, 6px); cursor: pointer;
+  border: 1px solid var(--accent); background: transparent; color: var(--accent);
+}
+.tg-go:hover, .tg-go:focus-visible { background: var(--accent); color: #fff; outline: none; }
+.tg-go.alt { border-color: var(--border); color: var(--text-muted); }
+.tg-go.alt:hover, .tg-go.alt:focus-visible { background: var(--surface-2); color: var(--text); }
+.tg-btns { display: flex; gap: 8px; }
+.tg-btns .tg-go { flex: 1; }
+
+/* the menu */
+.tg-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.tg-brand { font-weight: 700; letter-spacing: 0.14em; white-space: nowrap; }
+.tg-brand::before { content: '|> '; color: var(--accent); letter-spacing: 0; }
+.tg-meta { color: var(--text-faint); font-size: 11px; white-space: nowrap; }
+.tg-tabs { display: flex; gap: 2px; padding: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.tg-tabs button {
+  flex: 1 1 0; min-width: 0; font: inherit; font-size: 11px; font-weight: 600; color: var(--text-muted); background: transparent; border: 0; border-radius: 6px;
+  padding: 4px 2px; min-height: 28px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tg-tabs button:hover:not(.on) { color: var(--text); }
+.tg-tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14); }
+[data-theme="dark"] .tg-tabs button.on { background: var(--surface-hover); }
+.tg-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tg-sec { display: flex; flex-direction: column; gap: 4px; }
+.tg-h { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); }
+.tg-h i { font-style: normal; font-weight: 500; letter-spacing: 0.02em; text-transform: none; margin-left: 6px; }
+.tg-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: space-between; }
+.tg-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.tg-chip {
+  display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 11px; padding: 3px 8px; min-height: 28px;
+  border-radius: 999px; cursor: pointer; color: var(--text); border: 1px solid var(--border); background: var(--surface-2);
+}
+.tg-chip:hover:not(:disabled) { border-color: var(--accent); }
+.tg-chip.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.tg-chip:disabled { opacity: 0.45; cursor: default; }
+.tg-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tg-chip i { font-style: normal; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.tg-seat { font-weight: 700; }
+.tg-seat.cpu { border-style: dashed; }
+.tg-add { min-width: 32px; justify-content: center; font-weight: 700; font-size: 14px; }
+.tg-resume {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; font: inherit; padding: 8px 10px; cursor: pointer;
+  border: 1px solid var(--accent); border-radius: var(--radius-md, 6px); background: transparent; color: var(--text);
+}
+.tg-resume b { color: var(--accent); letter-spacing: 0.06em; }
+.tg-resume span { color: var(--text-muted); font-size: 11px; }
+.tg-resume:hover, .tg-resume:focus-visible { background: var(--surface-2); outline: none; }
+.tg-foot { display: flex; align-items: center; justify-content: space-between; gap: 4px 8px; flex-wrap: wrap; color: var(--text-faint); font-size: 11px; }
+.tg-lnk {
+  font: inherit; font-size: 11px; color: var(--text-muted); background: none; border: 0; padding: 3px 2px; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.tg-lnk:hover { color: var(--accent); }
+.tg-lnk.danger { color: var(--error, #dc2626); font-weight: 700; }
+.tg-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+.tg-lv { color: var(--accent); letter-spacing: 0.1em; }
+.tg-what { color: var(--text-muted); font-size: 11px; }
+
+/* the scorecard */
+.tg-scw { display: flex; flex-direction: column; gap: 6px; max-width: 100%; overflow-x: auto; }
+.tg-sc { border-collapse: collapse; font-variant-numeric: tabular-nums; margin: 0 auto; font-size: 12px; }
+.tg-sc th, .tg-sc td { padding: 2px 4px; text-align: center; border-bottom: 1px solid var(--border); min-width: 1.5em; }
+.tg-sc th:first-child, .tg-sc td:first-child { text-align: left; padding-left: 0; white-space: nowrap; max-width: 7em; overflow: hidden; text-overflow: ellipsis; }
+.tg-sc th { color: var(--text-faint); font-weight: 700; }
+.tg-sc th.now { color: var(--accent); }
+.tg-sc tr.par td { color: var(--text-muted); }
+.tg-sc td.t { font-weight: 700; color: var(--text); }
+.tg-sc td.e { color: var(--text-faint); }
+.tg-sc td.under { color: var(--accent); font-weight: 700; }
+.tg-sc td.over { color: var(--text-muted); }
+.tg-sc td.ace { color: #fff; background: var(--accent); font-weight: 700; border-radius: 4px; }
+.tg-tots { display: flex; gap: 6px 14px; flex-wrap: wrap; justify-content: center; }
+.tg-tots i { font-style: normal; color: var(--text-muted); }
+
+/* the players' colors — the same hues the canvas rings their balls with */
+.p1, .tg-sc tr.p1 td:first-child b { color: var(--accent); }
+.p2, .tg-sc tr.p2 td:first-child b { color: #cf3f3f; }
+.p3, .tg-sc tr.p3 td:first-child b { color: #b07d06; }
+.p4, .tg-sc tr.p4 td:first-child b { color: #7351c4; }
+[data-theme="dark"] .p2, [data-theme="dark"] .tg-sc tr.p2 td:first-child b { color: #f06a6a; }
+[data-theme="dark"] .p3, [data-theme="dark"] .tg-sc tr.p3 td:first-child b { color: #f2c544; }
+[data-theme="dark"] .p4, [data-theme="dark"] .tg-sc tr.p4 td:first-child b { color: #b79cf5; }
+
+/* the pad under the course: aim, club and SWING, spin in flight, or the flow buttons */
+.tg-pad { display: flex; gap: 6px; align-items: stretch; align-content: center; flex-wrap: nowrap; min-height: 50px; }
+.tg-pb, .tg-act, .tg-clubb {
+  height: 46px; display: flex; align-items: center; justify-content: center; gap: 6px;
+  font: inherit; font-family: var(--font-mono, ui-monospace, monospace); font-size: 16px; font-weight: 700; border-radius: 12px; cursor: pointer;
+}
+.tg-pb { flex: 0 1 46px; min-width: 38px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); transition: background-color 80ms, color 80ms, transform 80ms; }
+.tg-pb:hover { border-color: var(--accent); }
+.tg-pb.on, .tg-pb:active { background: var(--accent); border-color: var(--accent); color: #fff; transform: scale(0.97); }
+.tg-clubb { flex: 0 1 54px; min-width: 46px; flex-direction: column; gap: 0; border: 1px solid var(--border); background: var(--surface); color: var(--text); line-height: 1.05; }
+.tg-clubb b { font-size: 15px; }
+.tg-clubb small { font-size: 9px; font-weight: 500; color: var(--text-faint); letter-spacing: 0.06em; }
+.tg-act { flex: 1 1 0; min-width: 0; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+.tg-act.alt { flex: 0 0 auto; padding: 0 14px; border-color: var(--border); background: var(--surface-2); color: var(--text-muted); letter-spacing: 0.06em; }
+.tg-act:hover { filter: brightness(1.08); }
+.tg-act:focus-visible, .tg-pb:focus-visible, .tg-clubb:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.tg-act small { font-size: 10px; font-weight: 500; letter-spacing: 0.04em; text-transform: none; opacity: 0.75; }
+.tg-spinl { align-self: center; font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); padding: 0 4px; }
+.tg-pad .tg-spinl ~ .tg-pb { flex: 1 1 0; }
+.tg-wait {
+  flex: 1; display: flex; align-items: center; justify-content: center; min-height: 46px; border: 1px dashed var(--border); border-radius: 12px;
+  font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; color: var(--text-muted); letter-spacing: 0.04em;
+}
+.tg-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 560px) {
+  #teegolf-panel { left: 8px !important; right: 8px; max-width: none; top: calc(var(--menubar-h, 36px) + 6px); }
+  #teegolf-panel .cade-panel-body { padding: 8px 8px max(8px, env(safe-area-inset-bottom)); }
+  .tg-ovl { padding: 6px; }
+  .tg-card { padding: 10px; }
+  .tg-pad { gap: 5px; }
+  .tg-pb { flex: 1 1 0; min-width: 0; }
+  .tg-act[data-act="swing"] { flex: 1.8 1 0; letter-spacing: 0.06em; }
+  .tg-hud { font-size: 11px; gap: 3px 8px; }
+  .tg-sc { font-size: 11px; }
+  .tg-sc th, .tg-sc td { padding: 2px 2px; }
+}
+@media (pointer: coarse) {
+  .tg-hb button { width: 38px; height: 34px; }
+  .tg-pb, .tg-act, .tg-clubb { height: 52px; }
+  .tg-tabs button { min-height: 40px; }
+  .tg-chip { min-height: 38px; }
+  .tg-lnk { min-height: 38px; padding: 0 6px; }
+  .tg-go { padding: 12px; }
+}
+
+/* a phone on its side: a slimmer HUD and pad so the course keeps its height */
+@media (max-height: 500px) and (orientation: landscape) {
+  #teegolf-panel { top: calc(var(--menubar-h, 36px) + 4px); }
+  #teegolf-panel .cade-panel-body { padding: 6px 8px max(6px, env(safe-area-inset-bottom)); }
+  .tg { gap: 5px; }
+  .tg-hud { font-size: 11px; min-height: 18px; }
+  .tg-pad { min-height: 40px; }
+  .tg-pb, .tg-act, .tg-clubb, .tg-wait { height: 40px; min-height: 40px; }
+}

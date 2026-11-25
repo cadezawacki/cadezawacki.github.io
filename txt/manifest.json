@@ -1,16 +1,20 @@
 {
   "schema": 1,
-  "version": "2026.11.04-1",
+  "version": "2026.11.25-4",
   "modules": [
     {
       "id": "crawler",
       "type": "widget",
       "name": "Dungeon Crawler",
-      "description": "Deepdelve — a puzzle-action roguelite with an enduring, synced character",
+      "description": "Deepdelve — a story roguelite: 6 classes, 5 acts and bosses, loot, puzzles, a daily challenge, synced heroes",
       "icon": "⚔",
-      "tags": "game,roguelike,dungeon,crawler,rpg,adventure,puzzle,action,deepdelve,train,fun",
+      "tags": "game,roguelike,dungeon,crawler,rpg,adventure,puzzle,action,deepdelve,classes,loot,boss,daily,story,train,fun",
       "entry": "widgets/crawler/crawler.js",
-      "css": "widgets/crawler/crawler.css"
+      "css": "widgets/crawler/crawler.css",
+      "precache": [
+        "widgets/crawler/crawler-data.js",
+        "widgets/crawler/crawler-engine.js"
+      ]
     },
     {
       "id": "g2048",
@@ -4088,6 +4092,69 @@
           }
         ]
       }
+    },
+    {
+      "id": "bubbles",
+      "type": "widget",
+      "name": "Bubble Burst",
+      "description": "Aim, bank and pop matching bubbles — generative stages with stars, an endless rising ceiling, powerups and hazards",
+      "icon": "🫧",
+      "tags": "game,arcade,puzzle,bubble,shooter,match 3,endless,powerups,fun",
+      "entry": "widgets/bubbles/bubbles.js",
+      "css": "widgets/bubbles/bubbles.css"
+    },
+    {
+      "id": "povracer",
+      "type": "widget",
+      "name": "Apex Rush",
+      "description": "Behind-the-wheel pseudo-3D racer — endless highway, checkpoints, traffic and a career of tracks",
+      "icon": "🏎",
+      "tags": "game,arcade,racing,driving,car,endless,career,retro,fun",
+      "entry": "widgets/povracer/povracer.js",
+      "css": "widgets/povracer/povracer.css"
+    },
+    {
+      "id": "etch",
+      "type": "widget",
+      "name": "Etch Pad",
+      "description": "Twin-knob line drawing toy — turn the dials, shake to erase, save your sketches",
+      "icon": "✏",
+      "tags": "toy,drawing,sketch,etch,knobs,relax,doodle,fun",
+      "entry": "widgets/etch/etch.js",
+      "css": "widgets/etch/etch.css"
+    },
+    {
+      "id": "teegolf",
+      "type": "widget",
+      "name": "Tee Time Golf",
+      "description": "Arcade 3D golf — swipe-swing power and spin, wind, procedural 18-hole courses and a pro tour career",
+      "icon": "🏌",
+      "tags": "game,sport,golf,arcade,career,swing,course,2 player,cpu,fun",
+      "entry": "widgets/teegolf/teegolf.js",
+      "css": "widgets/teegolf/teegolf.css"
+    },
+    {
+      "id": "wheel",
+      "type": "widget",
+      "name": "Spin & Solve",
+      "description": "Spin the wheel, call letters, buy vowels and solve the puzzle — 1-4 players or vs CPU",
+      "icon": "🎡",
+      "tags": "game,word,party,puzzle,wheel,phrase,multiplayer,pass and play,cpu,2 player,fun",
+      "entry": "widgets/wheel/wheel.js",
+      "css": "widgets/wheel/wheel.css",
+      "precache": [
+        "widgets/wheel/wheel-data.js"
+      ]
+    },
+    {
+      "id": "fishing",
+      "type": "widget",
+      "name": "Reel Deep",
+      "description": "Cast, lure and land fish across generated lakes, rivers and seas — tension-line fights, a fish journal, gear upgrades and an angler career",
+      "icon": "🎣",
+      "tags": "game,sport,fishing,fish,relax,career,collection,fun",
+      "entry": "widgets/fishing/fishing.js",
+      "css": "widgets/fishing/fishing.css"
     }
   ]
 }
