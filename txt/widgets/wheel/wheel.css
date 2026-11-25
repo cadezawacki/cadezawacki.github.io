@@ -308,3 +308,8 @@ span.wh-kind { border: 1px dashed var(--border); border-radius: 8px; }
   .wh-lights i, .wh-pl.on::after, .wh-t.lit, .wh-t.cur { animation: none !important; }
   .wh-t.flip { animation-duration: 0.01s; }
 }
+
+/* a short phone: the wheel and the keyboard share one spot — the wheel while
+   spinning, the keyboard while calling letters or solving */
+#wheel-panel.wh-swap .wh[data-kb="1"] .wh-wst { display: none; }
+#wheel-panel.wh-swap .wh:not([data-kb="1"]) .wh-kb { display: none; }

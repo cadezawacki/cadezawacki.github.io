@@ -421,7 +421,7 @@
     if (p.drafting && !wasDr) g.ev.push({ t: 'draft' });
     // nitro
     var wasN = p.nosOn;
-    if (inp.nos && p.nos > 0.01 && p.v > st.top * 0.12 && p.spin <= 0) {
+    if (inp.nos && p.nos > (wasN ? 0 : 0.12) && p.v > st.top * 0.12 && p.spin <= 0) {     // needs a little in the tank to light up
       p.nosOn = 1; p.nos = Math.max(0, p.nos - dt / st.nosCap); top *= 1.3; acc *= 2.1;
     } else { p.nosOn = 0; p.nos = Math.min(1, p.nos + dt * st.nosRe * (1 + p.drift * 3)); }
     if (p.nosOn && !wasN) g.ev.push({ t: 'nos' });
@@ -838,7 +838,7 @@
   var PANEL_ID = 'povracer-panel', NAME = 'Apex Rush';
   var KEY = 'cade-povracer-', SAVE_KEY = KEY + 'save', SOUND_KEY = KEY + 'sound';
   var S = null;
-  if (window.__CADE_UNIT__) window.__CADE_UNIT__.povracer = { live: function () { return S; } };   // test-only peek
+  if (window.__CADE_UNIT__) window.__CADE_UNIT__.povracer = { live: function () { return S; }, E: ENGINE };   // test-only peek
 
   var FOGL = 16, NEAR = 30;
   var TUN_COL = { floor: [70, 70, 74], wall: [104, 100, 94], ceil: [52, 52, 56], light: [255, 226, 150], fog: [14, 14, 16], rock: [98, 90, 82] };
@@ -988,7 +988,7 @@
       road: [fogTab(R.road[0], fog), fogTab(R.road[1], fog)], lane: fogTab(R.lane, fog), rock: fogTab(mix(TUN_COL.rock, R.far[1], 0.3), fog),
       frame: fogTab([150, 146, 138], fog), cpA: fogTab([245, 245, 245], fog), cpB: fogTab([30, 30, 34], fog),
       tFloor: fogTab(TUN_COL.floor, TUN_COL.fog), tWall: fogTab(TUN_COL.wall, TUN_COL.fog), tWall2: fogTab(shade(TUN_COL.wall, 0.8), TUN_COL.fog),
-      tCeil: fogTab(TUN_COL.ceil, TUN_COL.fog), tLight: fogTab(TUN_COL.light, [60, 54, 40]), tRoad: [fogTab(shade(R.road[0], n ? 2.2 : 0.9), TUN_COL.fog), fogTab(shade(R.road[1], n ? 2.2 : 0.9), TUN_COL.fog)],
+      tCeil: fogTab(TUN_COL.ceil, TUN_COL.fog), tLight: fogTab(TUN_COL.light, [60, 54, 40]), tRoad: [fogTab([84, 84, 88], TUN_COL.fog), fogTab([78, 78, 82], TUN_COL.fog)],
       tLane: fogTab([236, 220, 120], TUN_COL.fog),
       sky: null, layers: null, stars: null
     };
@@ -1065,8 +1065,8 @@
       }
       if (b === 0) {                     // a lighthouse on the headland
         c.fillStyle = rgb(P.night ? [200, 200, 210] : [246, 246, 240]);
-        c.fillRect(w * 0.3, h * 0.38, 4, h * 0.3);
-        c.fillStyle = rgb(P.night ? [255, 230, 150] : [200, 60, 50]); c.fillRect(w * 0.3 - 1, h * 0.34, 6, 5);
+        c.fillRect(w * 0.3, h * 0.66, 3, h * 0.3);
+        c.fillStyle = rgb(P.night ? [255, 230, 150] : [200, 60, 50]); c.fillRect(w * 0.3 - 1, h * 0.63, 5, 4);
       }
       return cv;
     }
@@ -1355,8 +1355,10 @@
     var W = S.W, H = S.H, portrait = H > W * 0.9;
     var top = Math.round(H * (portrait ? 0.79 : 0.77)), dh = H - top;
     var gr = Math.max(22, Math.min(dh * 0.44, W * (portrait ? 0.115 : 0.085)));
+    var fs = Math.max(13, Math.min(24, dh * 0.26)), wr = Math.min(W * (portrait ? 0.27 : 0.17), dh * 1.7);
+    // the wheel sits low enough to leave the digital readout clear above its rim
     return { top: top, dh: dh, hood: Math.round(top - H * 0.07), gr: gr, gx1: Math.max(gr + 6, W * (portrait ? 0.14 : 0.2)), gx2: Math.min(W - gr - 6, W * (portrait ? 0.86 : 0.8)), gy: top + dh * 0.52,
-      wr: Math.min(W * (portrait ? 0.27 : 0.17), dh * 1.7), wy: H + Math.min(W * (portrait ? 0.27 : 0.17), dh * 1.7) * 0.28 };
+      fs: fs, wr: wr, wy: Math.max(H + wr * 0.28, top + dh * 0.06 + fs * 1.7 + 8 + wr) };
   }
   function dashCv() {
     var key = S.W + 'x' + S.H + S.save.set.units + S.dk + paintCol().join(',') + (S.th.dark ? 1 : 0);
@@ -1481,7 +1483,7 @@
       if (y2 < y1 || s.tun) {
         if (y1 > -50 && y2 < H + 50) {
           c.fillStyle = P.grass[alt][f];
-          c.fillRect(0, Math.floor(y2), W, Math.ceil(y1 - y2) + 1);
+          c.fillRect(0, Math.ceil(y2), W, Math.ceil(y1 - y2) + 1);
           if (s.tun) {
             if (lastTun < 0) { lastTun = n; tunnelFar(P, n + 1); }
             tunnelSeg(P, s, n, f, alt);
@@ -1521,6 +1523,7 @@
   }
   function quad(c, x1, y1, w1, x2, y2, w2, col) {
     c.fillStyle = col;
+    y2 -= 0.6;                     // overlap the farther segment: no anti-aliased seams
     c.beginPath(); c.moveTo(x1 - w1, y1); c.lineTo(x2 - w2, y2); c.lineTo(x2 + w2, y2); c.lineTo(x1 + w1, y1); c.closePath(); c.fill();
   }
   function poly4(c, ax, ay, bx, by, cx, cy, dx, dy, col) {
@@ -1588,7 +1591,10 @@
       var cv = spriteCv(sp.k, sp.v, sp.f, P.night);
       // a lamp's pole stands at the offset, its arm over the road
       var lx = sp.k === 'lamp' ? (sp.f < 0 ? sx - dw * 0.86 : sx - dw * 0.14) : sx - dw / 2;
+      var mag = dw * S.dk > cv.width * 1.6;            // close up: crisp pixels rather than blur
+      if (mag) c.imageSmoothingEnabled = false;
       c.drawImage(cv, lx, y0 - dh, dw, dh);
+      if (mag) c.imageSmoothingEnabled = true;
     }
     c.globalAlpha = 1;
   }
@@ -1719,9 +1725,11 @@
       if (!S.lightC || S.lightK !== W + 'x' + H + pov) {
         var lc = S.lightC || document.createElement('canvas'), lw = Math.ceil(W * 0.5), lh = Math.ceil((H - S.cy) * 0.6);
         lc.width = lw; lc.height = lh;
-        var cc = lc.getContext('2d'), gr = cc.createRadialGradient(lw / 2, lh, 2, lw / 2, lh * 0.9, lw * 0.6);
-        gr.addColorStop(0, 'rgba(255,240,200,0.32)'); gr.addColorStop(1, 'rgba(255,240,200,0)');
-        cc.fillStyle = gr; cc.fillRect(0, 0, lw, lh);
+        var cc = lc.getContext('2d');
+        cc.scale(lw / (2 * lh), 1);                     // an ellipse that fades out inside the canvas
+        var gr = cc.createRadialGradient(lh, lh, 2, lh, lh, lh);
+        gr.addColorStop(0, 'rgba(255,240,200,0.34)'); gr.addColorStop(0.6, 'rgba(255,240,200,0.12)'); gr.addColorStop(1, 'rgba(255,240,200,0)');
+        cc.fillStyle = gr; cc.fillRect(0, 0, 2 * lh, lh);
         S.lightC = lc; S.lightK = W + 'x' + H + pov;
       }
       c.globalCompositeOperation = 'lighter';
@@ -1738,7 +1746,7 @@
     needle(c, G.gx1, G.gy + bump, G.gr, Math.min(1.02, spd / mx));
     needle(c, G.gx2, G.gy + bump, G.gr, Math.min(1.02, p.rpm * 8 / 9));
     // digital readout + gear + nitro bar in the middle of the dash
-    var fs = Math.max(13, Math.min(28, G.dh * 0.3)), cx = W / 2, ty = G.top + G.dh * 0.06 + bump;
+    var fs = G.fs, cx = W / 2, ty = G.top + G.dh * 0.06 + bump;
     c.textAlign = 'center'; c.textBaseline = 'top';
     c.font = '800 ' + Math.round(fs) + 'px ' + S.th.font; c.fillStyle = '#f2f2f2';
     c.fillText(String(Math.round(spd)), cx - fs * 0.5, ty);
@@ -1780,7 +1788,7 @@
     c.strokeStyle = S.th.hudBd; c.lineWidth = 1; c.stroke();
   }
   function drawHud(g) {
-    var c = S.ctx, W = S.W, H = S.H, p = g.p, th = S.th, small = W < 420, fs = small ? 11 : 13, big = small ? 18 : 22, pad = 8;
+    var c = S.ctx, W = S.W, H = S.H, p = g.p, th = S.th, small = W < 420 || H < 300, fs = small ? 11 : 13, big = small ? 18 : 22, pad = small ? 6 : 8;
     if (S.demo) return;
     c.textBaseline = 'top';
     var hy = 8, bh = big + fs + 10;
@@ -2009,7 +2017,7 @@
         var pts = cu.pts[d.id] || 0;
         h += '<div><b style="color:' + rgb(d.col) + '">■</b> ' + esc(d.name) + ' <i>' + esc(d.trait) + '</i><span>' + pts + '</span></div>';
       });
-      h += '<div class="you"><b>■</b> You <i>' + ord((st.filter(function (r) { return r.you; })[0] || { pos: 1 }).pos) + ' in cup</i><span>' + (cu.pts.you || 0) + '</span></div>';
+      h += '<div class="you"><b>■</b> You <i>' + (cu.race ? ord((st.filter(function (r) { return r.you; })[0] || { pos: 1 }).pos) + ' in cup' : 'cup points') + '</i><span>' + (cu.pts.you || 0) + '</span></div>';
       h += '</div>';
       h += '<div class="pr-btns"><button type="button" class="pr-go alt" data-act="cups">Back</button><button type="button" class="pr-go alt" data-act="garage">Garage</button><button type="button" class="pr-go" data-act="race" data-primary="1">START</button></div></div>';
     } else if (kind === 'pause') {

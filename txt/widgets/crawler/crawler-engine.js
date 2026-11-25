@@ -532,7 +532,7 @@
   function objsAt(G, x, y) { return G.objs.filter(function (o) { return o.x === x && o.y === y; }); }
   var BLOCKING = { chest: 1, boulder: 1, lever: 1, tablet: 1, event: 1, vent: 0 };
   function blocksObj(G, x, y) { for (var i = 0; i < G.objs.length; i++) { var o = G.objs[i]; if (o.x === x && o.y === y && BLOCKING[o.k]) return o; } return null; }
-  function addObj(G, o) { o.id = G.nid++; G.objs.push(o); return o; }
+  function addObj(G, o) { o.oid = G.nid++; G.objs.push(o); return o; }
   function freeFloor(G, room, r, opts) {
     opts = opts || {};
     for (var tries = 0; tries < 60; tries++) {
@@ -1046,11 +1046,1449 @@
   }
   function canEnter(G, m, x, y) {
     var t = tile(G, x, y);
-    if (m.ai === 'ghost' || m.boss === 'aurel' && G.mons.length < 0) return inb(G, x, y) && x > 0 && y > 0 && x < G.w - 1 && y < G.h - 1;
+    if (m.ai === 'ghost') return inb(G, x, y) && x > 0 && y > 0 && x < G.w - 1 && y < G.h - 1;
     if (m.k === 'lurker') return t === T.WATER || t === T.DEEP;
     if (!WALKABLE[t]) return false;
     if (t === T.CHASM) return false;
     if (t === T.LAVA && !m.fireproof && !(MON[m.k] && MON[m.k].fireproof)) return false;
     if (blocksObj(G, x, y)) return false;
     return true;
+  }
+
+  // ===========================================================================
+  //  events + log (the UI drains G.ev each frame)
+  // ===========================================================================
+  function emit(G, e) { G.ev.push(e); }
+  function log(G, s, c) { G.log.push({ s: s, c: c || '', t: G.turn }); if (G.log.length > 120) G.log.splice(0, G.log.length - 120); emit(G, { t: 'log', s: s, c: c || '' }); }
+  function nameOf(G, a) { return a === G.p ? 'You' : displayName(a); }
+
+  // ===========================================================================
+  //  statuses
+  // ===========================================================================
+  var DOTS = { poison: 1, burn: 1, bleed: 1 };
+  var CC = { stun: 1, frozen: 1, root: 1 };
+  function addStatus(G, a, key, t, v) {
+    if (!a || a.hp <= 0 || t <= 0) return;
+    var isP = a === G.p;
+    if (isP) {
+      var s = stats(G.hero, G);
+      if (a.st.inv && (DOTS[key] || CC[key] || key === 'weaken' || key === 'slow')) return;
+      if (key === 'burn' && (s.flags.u_ember || s.flags.s_ember)) return;
+      if (DOTS[key]) t = Math.max(1, Math.round(t * (1 - s.resist)));
+      if (CC[key]) t = Math.min(t, 2);
+    } else {
+      if (CC[key] && hasElite(a, 'warded')) return;
+      if (a.boss && CC[key]) { if (a.cd.cc > 0) return; t = 1; a.cd.cc = 5; }
+      if (key === 'burn' && (a.fireproof || (MON[a.k] && MON[a.k].fireproof))) return;
+      if (key === 'poison' && a.fam === 'construct') return;
+    }
+    if (DOTS[key]) {
+      var cur = a.st[key];
+      a.st[key] = { t: Math.max(cur ? cur.t : 0, t), d: Math.max(cur ? cur.d : 0, Math.max(1, Math.round(v || 1))) };
+    } else if (key === 'shield') a.st.shield = { v: Math.round(v), t: t };
+    else a.st[key] = Math.max(a.st[key] || 0, t);
+    if ((key === 'stun' || key === 'frozen') && !isP && a.intent && !a.boss) { a.intent = null; log(G, displayName(a) + '\'s attack is interrupted!', 'good'); }
+    if ((key === 'stun' || key === 'frozen') && a.boss && a.intent) { a.intent = null; log(G, displayName(a) + ' staggers!', 'good'); }
+    emit(G, { t: 'status', x: a.x, y: a.y, k: key });
+  }
+  function cleanse(a) { ['poison', 'burn', 'bleed', 'root', 'slow', 'weaken', 'dark'].forEach(function (k) { delete a.st[k]; }); }
+
+  // ===========================================================================
+  //  combat
+  // ===========================================================================
+  var UNDEADISH = { undead: 1, abyssal: 1 };
+  // strike(G, attacker, defender, opts) → damage dealt (0 = missed/blocked)
+  function strike(G, att, def, o) {
+    if (!def || def.hp <= 0) return 0;
+    o = o || {};
+    var h = G.hero, isP = att === G.p, defP = def === G.p, s = (isP || defP || (att && att.ally)) ? pstats(G) : null;
+    var r = G.r, kind = o.kind || 'melee';
+    var dmg, crit = false;
+    if (o.flat != null) dmg = o.flat;
+    else {
+      var pow = isP ? s.pow : att.ally ? att.pow : att.pow;
+      if (!isP && hasElite(att, 'berserk') && att.hp < att.maxHp * 0.5) pow *= 1.6;
+      if (att.st && att.st.weaken) pow *= 0.7;
+      dmg = pow * (o.mult == null ? 1 : o.mult) * (0.85 + rf(r) * 0.3);
+    }
+    if (isP) {
+      if (o.ability) dmg *= 1 + s.abilPct + (s.flags.archmage ? 0.2 : 0);
+      if (o.elem === 'fire' && s.flags.pyro) dmg *= 1.25;
+      if (def.elite || def.boss) dmg *= 1 + s.elite + (s.flags.wrath ? 0.3 : 0);
+      if (def.boss && s.flags.u_king) dmg *= 1.4;
+      if (UNDEADISH[def.fam] && s.flags.u_dawn) dmg *= 1.5;
+      if (def.fam === 'undead' && s.flags.s_lantern) dmg *= 1.25;
+      if (s.flags.pack && G.mons.some(function (m) { return m.ally && m.k === 'wolf' && cheb(m.x, m.y, def.x, def.y) <= 1; })) dmg *= 1.25;
+      if (G.p.st.unbreak && s.flags.avatar) dmg *= 1.35;
+      if (G.p.st.invis && s.flags.cloak && (kind === 'melee' || kind === 'ranged')) dmg *= 3;
+      if (G.daily && G.daily.mod === 'glass') dmg *= 1.5;
+    }
+    if (att && att.ally && s && s.flags.frenzy) dmg *= 1.5;
+    if (att && att.ally && att.k === 'skelally' && s && s.flags.u_gravecaller) dmg *= 1.5;
+    if (!defP) {
+      if (def.st.mark) dmg *= 1.25;
+      if (def.st.frozen && G.hero.cls === 'mage' && pstats(G).flags.shatter) dmg *= 1.5;
+      if (def.st.burn && pstats(G).flags.combust) dmg *= 1.25;
+      if (def.st.burn && pstats(G).flags.s_ember) dmg *= 1.3;
+    } else if (G.daily && G.daily.mod === 'glass') dmg *= 1.5;
+    // critical
+    if (o.flat == null) {
+      var cc = isP ? s.crit + (o.critBonus || 0) : att.ally ? 0.05 : ((MON[att.k] && MON[att.k].crit) || 0.05);
+      if (isP && s.flags.deadeye && (kind === 'ranged') && cheb(att.x, att.y, def.x, def.y) >= 4) cc += 0.25;
+      var force = o.forceCrit;
+      if (isP && G.p.st.critNext && kind !== 'dot') { force = true; delete G.p.st.critNext; }
+      if (isP && s.flags.u_whisper && !G.p.hitIds[def.id]) force = true;
+      if (force || rf(r) < cc) { crit = true; dmg *= 1.5 + (isP ? s.critDmg : 0); }
+      if (isP) G.p.hitIds[def.id] = 1;
+    }
+    // dodge / block (telegraphed and true damage can't be dodged — you dodge those by moving)
+    if (!o.noDodge && (kind === 'melee' || kind === 'ranged')) {
+      var dg = defP ? s.dodge : (def.k === 'shade' ? 0.15 : 0);
+      if (dg > 0 && rf(r) < dg) {
+        emit(G, { t: 'miss', x: def.x, y: def.y });
+        if (defP && s.flags.s_shadow) G.p.st.critNext = 1;
+        if (defP && kind === 'melee' && s.flags.riposte && att.hp > 0) { log(G, 'Riposte!', 'good'); strike(G, def, att, { mult: 1, kind: 'melee', noDodge: true, counter: true }); }
+        return 0;
+      }
+      if (defP && s.block > 0 && rf(r) < s.block) { emit(G, { t: 'block', x: def.x, y: def.y }); log(G, 'Blocked!', 'good'); return 0; }
+    }
+    // armor
+    if (kind !== 'true' && kind !== 'dot') {
+      var arm = defP ? s.arm : def.arm, lv = isP ? h.level : att.lvl || h.level;
+      if (def.st && def.st.frozen) arm *= 0.7;
+      dmg *= 1 - arm / (arm + 12 + 2 * lv);
+    }
+    dmg = Math.max(1, Math.round(dmg));
+    if (defP && G.p.st.inv) { emit(G, { t: 'immune', x: def.x, y: def.y }); return 0; }
+    if (defP && G.p.st.unbreak) dmg = Math.max(1, Math.round(dmg * 0.4));
+    // shield, mana shield
+    var absorbed = 0;
+    if (def.st.shield && def.st.shield.v > 0) {
+      absorbed = Math.min(def.st.shield.v, dmg); def.st.shield.v -= absorbed; dmg -= absorbed;
+      if (def.st.shield.v <= 0) { delete def.st.shield; emit(G, { t: 'fx', k: 'shieldbreak', x: def.x, y: def.y }); if (defP && s.flags.martyr) martyr(G); }
+    }
+    if (defP && dmg > 0 && s.flags.manashield && G.p.res > 0) { var take = Math.min(Math.round(dmg * 0.3), G.p.res); G.p.res -= take; dmg -= take; absorbed += take; }
+    def.hp -= dmg;
+    if (defP && G.p.st.unbreak && def.hp < 1) def.hp = 1;
+    emit(G, { t: 'dmg', x: def.x, y: def.y, n: dmg, ab: absorbed, crit: crit, p: defP, ally: !!def.ally, elem: o.elem || kind, from: att ? [att.x, att.y] : null });
+    if (!defP) { def.asleep = false; def.aware = true; if (def.disguised) def.disguised = false; }
+    // after-effects
+    if (isP && dmg > 0) {
+      if (s.lifesteal > 0) heal(G, G.p, dmg * s.lifesteal, true);
+      if (o.basic) {
+        var cr = C[h.cls].res;
+        if (cr.hit) gainRes(G, cr.hit * (s.flags.avatar && G.p.st.unbreak ? 2 : 1));
+        if (s.flags.crusader) gainRes(G, 6);
+        if (s.flags.spellblade) gainRes(G, 3);
+        if (s.flags.hitHeal) heal(G, G.p, s.maxHp * 0.03, true);
+      }
+      if (crit && s.flags.steady) gainRes(G, 10);
+      if (crit && s.flags.deathmark) addStatus(G, def, 'mark', 4);
+      if (o.basic || o.procs) {
+        if (s.burnOnHit && rf(r) < s.burnOnHit) addStatus(G, def, 'burn', 4, s.pow * 0.25);
+        if (s.poisonOnHit && rf(r) < s.poisonOnHit) addStatus(G, def, 'poison', 5, s.pow * 0.2 * (s.flags.virulence ? 1.5 : 1));
+        if (s.stunOnHit && rf(r) < s.stunOnHit) addStatus(G, def, 'stun', 1);
+        if (s.freezeOnHit && rf(r) < s.freezeOnHit) addStatus(G, def, 'frozen', 1);
+        if (s.flags.u_storm && rf(r) < 0.15) arcTo(G, def, s.pow * 0.6);
+      }
+    }
+    if (!isP && !(att && att.ally) && defP && dmg > 0 && att) {
+      var M = MON[att.k];
+      if (M && M.onHit) for (var k in M.onHit) if (rf(r) < M.onHit[k]) addStatus(G, def, k, k === 'root' ? 2 : k === 'weaken' ? 3 : 4, att.pow * 0.22);
+      if (hasElite(att, 'venomous') && rf(r) < 0.5) addStatus(G, def, 'poison', 4, att.pow * 0.25);
+      if (hasElite(att, 'molten') && rf(r) < 0.4) addStatus(G, def, 'burn', 3, att.pow * 0.25);
+      if (hasElite(att, 'vampiric')) heal(G, att, dmg * 0.6, true);
+      if (att.k === 'cutpurse' && !att.stolen && G.hero.gold > 0) {
+        var st = Math.min(G.hero.gold, Math.max(5, Math.round(G.hero.gold * 0.12)));
+        G.hero.gold -= st; att.stolen = st; att.fleeT = 0; log(G, 'The cutpurse snatches ' + st + ' gold!', 'bad'); emit(G, { t: 'fx', k: 'steal', x: def.x, y: def.y });
+      }
+      if (M && M.pull && def.hp > 0) pullToward(G, def, att);
+      gainRes(G, C[h.cls].res.hurt || 0);
+    }
+    if (defP && kind === 'melee' && att && att.hp > 0 && !o.counter) {
+      if (s.thorns > 0) strike(G, def, att, { flat: Math.max(1, Math.round(dmg * s.thorns)), kind: 'true', counter: true });
+      if (s.flags.retaliate && rf(r) < 0.25) { log(G, 'You retaliate!', 'good'); strike(G, def, att, { mult: 1, kind: 'melee', counter: true, noDodge: true }); }
+      if (s.flags.glacial && rf(r) < 0.3) addStatus(G, att, 'frozen', 1);
+    }
+    if (!defP && kind === 'melee' && hasElite(def, 'thorned') && isP && !o.counter) strike(G, def, att, { flat: Math.max(1, Math.round(dmg * 0.25)), kind: 'true', counter: true });
+    if (def.boss) bossPhaseCheck(G, def);
+    if (def.hp <= 0) { if (defP) playerDown(G, att); else killMon(G, def, att); }
+    else if (defP) lowHpCheck(G);
+    return dmg;
+  }
+  function pstats(G) { if (!G._ps) G._ps = stats(G.hero, G); return G._ps; }
+  function gainRes(G, n) { if (!n) return; var s = pstats(G); G.p.res = clamp(G.p.res + n, 0, s.maxRes); }
+  function heal(G, a, n, quiet) {
+    n = Math.round(n); if (n <= 0 || a.hp <= 0) return 0;
+    var mx = a === G.p ? pstats(G).maxHp : a.maxHp, before = a.hp;
+    a.hp = Math.min(mx, a.hp + n);
+    var got = a.hp - before;
+    if (got > 0) emit(G, { t: 'heal', x: a.x, y: a.y, n: got, quiet: !!quiet });
+    return got;
+  }
+  function arcTo(G, from, d) {
+    var best = null;
+    G.mons.forEach(function (m) { if (m !== from && !m.ally && m.hp > 0 && cheb(m.x, m.y, from.x, from.y) <= 3 && (!best || cheb(m.x, m.y, from.x, from.y) < cheb(best.x, best.y, from.x, from.y))) best = m; });
+    if (best) { emit(G, { t: 'proj', k: 'zap', x0: from.x, y0: from.y, x1: best.x, y1: best.y }); strike(G, G.p, best, { flat: Math.round(d), kind: 'true', elem: 'shock' }); }
+  }
+  function pullToward(G, who, to) {
+    var dx = sgn(to.x - who.x), dy = sgn(to.y - who.y);
+    if (Math.abs(to.x - who.x) >= Math.abs(to.y - who.y)) dy = 0; else dx = 0;
+    var nx = who.x + dx, ny = who.y + dy;
+    if (WALKABLE[tile(G, nx, ny)] && !actorAt(G, nx, ny) && !blocksObj(G, nx, ny) && tile(G, nx, ny) !== T.CHASM) {
+      who.x = nx; who.y = ny; log(G, 'The siren\'s song drags you closer!', 'bad');
+      if (who === G.p) stepOn(G, true);
+    }
+  }
+  function martyr(G) {
+    var s = pstats(G);
+    emit(G, { t: 'fx', k: 'nova', x: G.p.x, y: G.p.y, r: 1, col: '#ffe08a' });
+    G.mons.slice().forEach(function (m) { if (!m.ally && m.hp > 0 && cheb(m.x, m.y, G.p.x, G.p.y) <= 1) strike(G, G.p, m, { mult: 1.5, kind: 'spell', elem: 'holy', ability: true, noDodge: true }); });
+  }
+  function lowHpCheck(G) {
+    var s = pstats(G), tf = talentFlags(G.hero);
+    for (var id in tf) {
+      var t = tf[id]; if (!t.lowhp || G.p.onceFloor[id]) continue;
+      if (G.p.hp < s.maxHp * (t.lowhp.at || 0.3)) {
+        G.p.onceFloor[id] = 1;
+        if (t.lowhp.heal) { heal(G, G.p, s.maxHp * t.lowhp.heal); log(G, t.name + '!', 'good'); }
+        if (t.lowhp.invis) { G.p.st.invis = t.lowhp.invis; loseTrack(G); log(G, t.name + ' — you vanish in smoke!', 'good'); emit(G, { t: 'fx', k: 'smoke', x: G.p.x, y: G.p.y }); }
+      }
+    }
+  }
+  function playerDown(G, killer) {
+    var s = pstats(G), tf = talentFlags(G.hero);
+    for (var id in tf) {
+      var t = tf[id]; if (!t.cheat || G.p.onceFloor[id]) continue;
+      G.p.onceFloor[id] = 1;
+      G.p.hp = Math.max(1, Math.round(s.maxHp * t.cheat.heal));
+      if (t.cheat.inv) G.p.st.inv = t.cheat.inv;
+      log(G, t.name + '! You refuse to fall.', 'good');
+      emit(G, { t: 'fx', k: 'revive', x: G.p.x, y: G.p.y });
+      return;
+    }
+    G.p.hp = 0;
+    G.over = 'dead';
+    G.killer = killer && killer !== G.p ? displayName(killer) : (G.lastHazard || 'the Deep');
+    emit(G, { t: 'death' });
+  }
+  function goldAmount(G, r, base) {
+    var s = stats(G.hero, G), d = difficulty(G.hero);
+    var g = base * (1 + 0.35 * (G.ml - 1)) * (0.7 + rf(r) * 0.6) * d.rew * (1 + s.goldFind);
+    if (G.daily && G.daily.mod === 'rich') g *= 2;
+    return Math.max(1, Math.round(g));
+  }
+  function dropNear(G, x, y, o) {
+    var spots = [[0, 0]].concat(DIRS8, [[2, 0], [-2, 0], [0, 2], [0, -2]]);
+    for (var i = 0; i < spots.length; i++) {
+      var nx = x + spots[i][0], ny = y + spots[i][1];
+      if (!WALKABLE[tile(G, nx, ny)] || tile(G, nx, ny) === T.CHASM || tile(G, nx, ny) === T.LAVA || tile(G, nx, ny) === T.STAIRS) continue;
+      if (G.objs.some(function (q) { return q.x === nx && q.y === ny && (BLOCKING[q.k] || q.k === 'item' || q.k === 'gold' || q.k === 'cons'); })) continue;
+      o.x = nx; o.y = ny; return addObj(G, o);
+    }
+    o.x = x; o.y = y; return addObj(G, o);
+  }
+  function lootItem(G, o) {
+    var s = pstats(G);
+    o = o || {};
+    return makeItem(G.r, { ilvl: G.ml, luck: (o.luck || 0) + s.magicFind, cls: chance(G.r, 0.7) ? G.hero.cls : null, minRarity: o.minRarity, act: clamp(actAt(((G.depth - 1) % 25) + 1) + (G.hero.story.ng || 0), 1, 5), slot: o.slot });
+  }
+  function dropLoot(G, m) {
+    var r = G.r, d = difficulty(G.hero);
+    if (m.stolen) dropNear(G, m.x, m.y, { k: 'gold', n: m.stolen });
+    if (chance(r, m.elite ? 1 : 0.45)) dropNear(G, m.x, m.y, { k: 'gold', n: goldAmount(G, r, m.gold) });
+    if (m.elite || chance(r, 0.07 * d.rew * (G.daily && G.daily.mod === 'elites' ? 1.5 : 1))) dropNear(G, m.x, m.y, { k: 'item', it: lootItem(G, { minRarity: m.elite ? 'magic' : null, luck: m.elite ? 0.4 : 0 }) });
+    if (chance(r, 0.05)) dropNear(G, m.x, m.y, { k: 'cons', id: pick(r, ['potion', 'potion', 'potion', 'tonic', 'elixir', 'bomb']), n: 1 });
+  }
+  function killMon(G, m, killer) {
+    m.hp = 0;
+    var i = G.mons.indexOf(m); if (i >= 0) G.mons.splice(i, 1);
+    emit(G, { t: 'die', id: m.id, x: m.x, y: m.y, ch: m.ch, col: m.col, boss: !!m.boss, ally: !!m.ally, elite: !!m.elite });
+    if (m.ally) { log(G, m.name + ' crumbles.', 'info'); return; }
+    var h = G.hero, s = pstats(G), r = G.r;
+    if (m.intent && m.intent.k === 'fuse') { m.intent.t = 0; resolveIntent(G, m, true); }
+    if (m.k === 'magmite' && !m.exploded) { m.exploded = true; explodeAt(G, m.x, m.y, 1, m.pow * 1.2, m, '#ff6a2a'); }
+    var xpMult = G.mode === 'daily' ? 2.5 : 1;
+    gainXp(G, h, m.xp * xpMult);
+    G.run.kills++; h.stats.kills++;
+    if (m.elite) { G.run.elites++; h.stats.elites++; }
+    if (m.k !== 'boss') h.bestiary[m.k] = (h.bestiary[m.k] || 0) + 1; else h.bestiary['boss:' + m.boss] = (h.bestiary['boss:' + m.boss] || 0) + 1;
+    bounty(G, 'kill', { fam: m.fam, elite: !!m.elite });
+    log(G, (killer === G.p ? 'You slay ' : '') + (killer === G.p ? 'the ' + displayName(m) : displayName(m) + ' dies') + '.', 'kill');
+    if (cheb(m.x, m.y, G.p.x, G.p.y) <= 6 && s.resKill) gainRes(G, s.resKill);
+    if (s.flags.rampage) { var rs = G.p.st.ramp || { n: 0, t: 0 }; G.p.st.ramp = { n: Math.min(5, rs.n + 1), t: 8 }; }
+    if (s.flags.harvest) G.p.harvest = Math.min(15, (G.p.harvest || 0) + 1);
+    if (s.flags.dance) gainRes(G, 15);
+    if (s.flags.u_blood) heal(G, G.p, s.maxHp * 0.05, true);
+    if (s.flags.s_lantern) heal(G, G.p, s.maxHp * 0.04, true);
+    G._ps = null;
+    var M = MON[m.k] || {};
+    var t = tile(G, m.x, m.y);
+    if (m.fam !== 'spirit' && m.fam !== 'elemental' && t !== T.CHASM && t !== T.LAVA && t !== T.DEEP && !m.boss && !m.small) {
+      var corpses = G.objs.filter(function (o) { return o.k === 'corpse'; });
+      if (corpses.length > 30) G.objs.splice(G.objs.indexOf(corpses[0]), 1);
+      addObj(G, { k: 'corpse', x: m.x, y: m.y, ch: m.ch, col: m.col, fam: m.fam });
+    }
+    if (s.flags.u_gravecaller && chance(r, 0.2)) raiseAt(G, m.x, m.y, 0);
+    if (M.deathGas) { gasAt(G, m.x, m.y, 1, 4, m.pow * 0.4); log(G, 'The sporeling bursts into a toxic cloud!', 'bad'); }
+    if ((M.splits || hasElite(m, 'splitting')) && !m.small) {
+      var n = 0;
+      for (var k = 0; k < 8 && n < 2; k++) {
+        var nx = m.x + DIRS8[k][0], ny = m.y + DIRS8[k][1];
+        if (!canEnter(G, { k: m.k, ai: 'melee' }, nx, ny) || actorAt(G, nx, ny)) continue;
+        var c = spawnMon(G, m.k, nx, ny, { aware: true, scale: 0.45, lvl: m.lvl }); c.small = true; c.name = 'Lesser ' + c.name; n++;
+      }
+      if (n) log(G, displayName(m) + ' splits apart!', 'bad');
+    }
+    if (hasElite(m, 'molten')) fireAt(G, m.x, m.y, 1, 4, m.pow * 0.3);
+    if (s.flags.plague && m.st.poison) G.mons.forEach(function (o) { if (!o.ally && cheb(o.x, o.y, m.x, m.y) <= 1) addStatus(G, o, 'poison', 5, m.st.poison.d); });
+    if (m.boss) bossDown(G, m);
+    else dropLoot(G, m);
+  }
+
+  // ---- area helpers ----------------------------------------------------------
+  function gasAt(G, x, y, rad, t, d) {
+    for (var yy = y - rad; yy <= y + rad; yy++) for (var xx = x - rad; xx <= x + rad; xx++) {
+      if (!inb(G, xx, yy) || !WALKABLE[tile(G, xx, yy)]) continue;
+      var k = yy * G.w + xx, cur = G.gas[k];
+      G.gas[k] = { t: Math.max(cur ? cur.t : 0, t), d: Math.max(cur ? cur.d : 0, Math.max(1, Math.round(d))) };
+    }
+  }
+  function fireAt(G, x, y, rad, t, d) {
+    for (var yy = y - rad; yy <= y + rad; yy++) for (var xx = x - rad; xx <= x + rad; xx++) {
+      if (!inb(G, xx, yy) || !WALKABLE[tile(G, xx, yy)]) continue;
+      var tt = tile(G, xx, yy); if (tt === T.WATER || tt === T.DEEP) continue;
+      var k = yy * G.w + xx; G.fire[k] = { t: t, d: Math.max(1, Math.round(d)) };
+    }
+  }
+  function explodeAt(G, x, y, rad, d, src, col) {
+    emit(G, { t: 'fx', k: 'boom', x: x, y: y, r: rad, col: col || '#ff8a3a' }); emit(G, { t: 'shake', n: 6 });
+    var hits = [];
+    for (var yy = y - rad; yy <= y + rad; yy++) for (var xx = x - rad; xx <= x + rad; xx++) {
+      var a = actorAt(G, xx, yy); if (a && a !== src) hits.push(a);
+      if (tile(G, xx, yy) === T.CRACK) { setT(G, xx, yy, T.FLOOR); log(G, 'The cracked wall crumbles!', 'info'); }
+    }
+    hits.forEach(function (a) { if (a.hp > 0) strike(G, src && src.hp > 0 ? src : null, a, { flat: Math.round(d), kind: 'true', elem: 'fire' }); });
+  }
+  function noise(G, x, y, rad) { G.mons.forEach(function (m) { if (!m.ally && m.asleep && cheb(m.x, m.y, x, y) <= rad && chance(G.r, 0.5)) { m.asleep = false; m.aware = true; } }); }
+  function loseTrack(G) { G.mons.forEach(function (m) { if (!m.ally && !m.boss) { m.aware = false; m.intent = null; m.lastSeen = [G.p.x, G.p.y]; } }); }
+
+  // ===========================================================================
+  //  player actions
+  // ===========================================================================
+  function hostilesVisible(G) { return G.mons.filter(function (m) { return !m.ally && m.hp > 0 && monVisible(G, m) && !m.disguised; }); }
+  function basicAttack(G, m) {
+    var h = G.hero, s = pstats(G), p = G.p;
+    var mult = h.cls === 'ranger' ? 0.7 : 1;
+    if (s.flags.crusader) mult *= 1.2;
+    if (s.flags.spellblade) mult *= 1.4;
+    emit(G, { t: 'atk', id: 0, x: p.x, y: p.y, tx: m.x, ty: m.y });
+    var dealt = strike(G, p, m, { mult: mult, kind: 'melee', basic: true });
+    noise(G, p.x, p.y, 5);
+    if (s.flags.hammer) G.mons.slice().forEach(function (o) { if (o !== m && !o.ally && o.hp > 0 && cheb(o.x, o.y, p.x, p.y) <= 1) strike(G, p, o, { mult: 0.35, kind: 'spell', elem: 'holy', noDodge: true }); });
+    if (s.flags.flurry) { var o2 = G.mons.filter(function (o) { return o !== m && !o.ally && o.hp > 0 && cheb(o.x, o.y, p.x, p.y) <= 1; })[0]; if (o2) strike(G, p, o2, { mult: 0.5 * mult, kind: 'melee', basic: true }); }
+    if (s.flags.quake) { p.swings = (p.swings || 0) + 1; if (p.swings % 4 === 0) { emit(G, { t: 'fx', k: 'nova', x: p.x, y: p.y, r: 1, col: '#d0a060' }); emit(G, { t: 'shake', n: 4 }); G.mons.slice().forEach(function (o) { if (!o.ally && o.hp > 0 && cheb(o.x, o.y, p.x, p.y) <= 1) strike(G, p, o, { mult: 0.8, kind: 'melee', noDodge: true }); }); } }
+    if (p.st.invis && !(s.flags.cloak && m.hp <= 0)) delete p.st.invis;
+    return dealt;
+  }
+  function playerMove(G, dx, dy) {
+    var p = G.p, nx = p.x + dx, ny = p.y + dy;
+    p.face = [dx, dy];
+    if (!inb(G, nx, ny)) return 0;
+    var m = monAt(G, nx, ny);
+    if (m && m.ally) {
+      if (p.st.root) { log(G, 'You are rooted in place!', 'bad'); return 100; }
+      m.x = p.x; m.y = p.y; p.x = nx; p.y = ny; stepOn(G); return 100;
+    }
+    if (m) {
+      if (m.disguised) { m.disguised = false; m.aware = true; log(G, 'The chest has TEETH!', 'bad'); emit(G, { t: 'shake', n: 5 }); }
+      basicAttack(G, m); return 100;
+    }
+    var o = blocksObj(G, nx, ny);
+    if (o) {
+      if (o.k === 'boulder') return pushBoulder(G, o, dx, dy);
+      return interact(G, o);
+    }
+    var t = tile(G, nx, ny);
+    if (t === T.WALL || t === T.CRACK) { emit(G, { t: 'bump', dx: dx, dy: dy }); return 0; }
+    if (t === T.GATE) { log(G, G.hero.cons.key ? 'The gate is sealed. (Press Use with a Skeleton Key to force it.)' : 'The gate is sealed. Something nearby must open it.', 'info'); return 0; }
+    if (t === T.DEEP) { log(G, 'The water is too deep to wade.', 'info'); return 0; }
+    var s = pstats(G);
+    if (t === T.CHASM && p.confirm !== 'c' + nx + ',' + ny) { p.confirm = 'c' + nx + ',' + ny; log(G, 'The chasm yawns below. Step again to jump down to the next floor (and take a fall).', 'warn'); return 0; }
+    if (t === T.LAVA && !s.flags.u_ember && p.confirm !== 'l' + nx + ',' + ny) { p.confirm = 'l' + nx + ',' + ny; log(G, 'That is lava. Step again if you really mean it.', 'warn'); return 0; }
+    p.confirm = null;
+    if (p.st.root) { log(G, 'You are rooted in place!', 'bad'); return 100; }
+    var wasAdj = s.flags.hop && G.mons.some(function (q) { return !q.ally && q.hp > 0 && manh(q.x, q.y, p.x, p.y) === 1; });
+    if (t === T.DOOR) setT(G, nx, ny, T.ODOOR);
+    p.x = nx; p.y = ny; p.moved = true;
+    if (wasAdj && !G.mons.some(function (q) { return !q.ally && q.hp > 0 && manh(q.x, q.y, p.x, p.y) === 1; })) gainRes(G, 20);
+    if (s.flags.sanctified && p.st.sanct) consecrateAt(G, p.x, p.y, s.flags.holyground ? 2 : 1, p.st.sanct, s.pow * 0.55);
+    stepOn(G);
+    return 100;
+  }
+  function pushBoulder(G, o, dx, dy) {
+    var bx = o.x + dx, by = o.y + dy, t = tile(G, bx, by);
+    if (!(t === T.FLOOR || t === T.ODOOR || t === T.WATER || t === T.OGATE) || actorAt(G, bx, by) || G.objs.some(function (q) { return q.x === bx && q.y === by && q.k !== 'plate' && q.k !== 'corpse'; })) { log(G, 'The boulder won\'t budge that way.', 'info'); return 0; }
+    o.x = bx; o.y = by; G.p.x += dx; G.p.y += dy; G.p.moved = true;
+    emit(G, { t: 'snd', k: 'push' });
+    checkPlates(G, o.pz);
+    stepOn(G);
+    return 100;
+  }
+  function checkPlates(G, pz) {
+    var P = G.pz[pz]; if (!P || P.solved) return;
+    var plates = G.objs.filter(function (q) { return q.k === 'plate' && q.pz === pz; });
+    plates.forEach(function (pl) { pl.on = !!objAt(G, pl.x, pl.y, 'boulder'); });
+    if (plates.length && plates.every(function (pl) { return pl.on; })) solve(G, pz);
+  }
+  function solve(G, pz) {
+    var P = G.pz[pz]; if (!P || P.solved) return;
+    P.solved = true;
+    P.gates.forEach(function (g) { setT(G, g[0], g[1], T.OGATE); emit(G, { t: 'fx', k: 'gate', x: g[0], y: g[1] }); });
+    G.run.puzzles++; G.hero.stats.puzzles++;
+    bounty(G, 'puzzle');
+    gainXp(G, G.hero, 12 * G.ml);
+    log(G, P.kind === 'stairvault' ? 'With a groan, the gate to the stairs grinds open!' : 'Somewhere nearby, a gate grinds open!', 'good');
+    emit(G, { t: 'snd', k: 'solve' });
+  }
+  function interact(G, o) {
+    var h = G.hero;
+    if (o.k === 'chest') return openChest(G, o);
+    if (o.k === 'lever') {
+      var P = G.pz[o.pz];
+      if (o.reset) {
+        if (P && P.solved) { log(G, 'The mechanism has already done its work.', 'info'); return 0; }
+        G.objs.forEach(function (b) { if (b.k === 'boulder' && b.pz === o.pz && !actorAt(G, b.home[0], b.home[1])) { b.x = b.home[0]; b.y = b.home[1]; } });
+        checkPlates(G, o.pz); log(G, 'Clank — the boulders roll back to where they started.', 'info'); emit(G, { t: 'snd', k: 'lever' }); return 100;
+      }
+      if (o.on) { log(G, 'The lever is already pulled.', 'info'); return 0; }
+      o.on = true; emit(G, { t: 'snd', k: 'lever' });
+      var all = G.objs.filter(function (q) { return q.k === 'lever' && q.pz === o.pz && !q.reset; });
+      var left = all.filter(function (q) { return !q.on; }).length;
+      if (!left) solve(G, o.pz); else log(G, 'Clunk. Somewhere a mechanism shifts — ' + left + ' more lever' + (left > 1 ? 's' : '') + ' to go.', 'info');
+      return 100;
+    }
+    if (o.k === 'tablet') { G.modal = { k: 'tablet', pz: o.pz }; return 0; }
+    if (o.k === 'event') {
+      if (o.used) { log(G, 'Nothing more happens here.', 'info'); return 0; }
+      G.modal = { k: 'event', id: o.id, oid: o.oid };
+      return 0;
+    }
+    return 0;
+  }
+  function openChest(G, o) {
+    var r = G.r;
+    if (o.mimic) {
+      G.objs.splice(G.objs.indexOf(o), 1);
+      var m = spawnMon(G, 'mimic', o.x, o.y, { aware: true });
+      log(G, 'The chest lunges at you — a MIMIC!', 'bad'); emit(G, { t: 'shake', n: 6 });
+      strike(G, m, G.p, { mult: 1.2, kind: 'melee' });
+      return 100;
+    }
+    G.objs.splice(G.objs.indexOf(o), 1);
+    G.deco.push({ x: o.x, y: o.y, k: 'openchest' });
+    emit(G, { t: 'snd', k: 'chest' }); emit(G, { t: 'fx', k: 'sparkle', x: o.x, y: o.y });
+    dropNear(G, o.x, o.y, { k: 'gold', n: goldAmount(G, r, o.vault ? 30 : 12) });
+    var n = o.vault ? rr(r, 1, 2) : 1;
+    for (var i = 0; i < n; i++) dropNear(G, o.x, o.y, { k: 'item', it: lootItem(G, { minRarity: o.vault ? 'rare' : (chance(r, 0.5) ? 'magic' : null), luck: o.vault ? 0.8 : 0.2 }) });
+    if (chance(r, 0.35)) dropNear(G, o.x, o.y, { k: 'cons', id: pick(r, ['potion', 'potion', 'tonic', 'bomb', 'elixir', 'recall']), n: 1 });
+    log(G, o.vault ? 'The vault chest spills its treasure!' : 'You open the chest.', 'good');
+    stepOn(G, true);
+    return 100;
+  }
+  // stepping onto a tile: pick things up, spring traps, press runes
+  function stepOn(G, quiet) {
+    var p = G.p, h = G.hero, here = objsAt(G, p.x, p.y);
+    for (var i = 0; i < here.length; i++) {
+      var o = here[i];
+      if (o.k === 'gold') { h.gold += o.n; G.run.gold += o.n; h.stats.gold += o.n; bounty(G, 'gold', { n: o.n }); rm(G, o); emit(G, { t: 'pick', k: 'gold', x: p.x, y: p.y, n: o.n }); }
+      else if (o.k === 'cons') { h.cons[o.id] = (h.cons[o.id] || 0) + o.n; rm(G, o); log(G, 'Picked up ' + D.CONSUMABLES[o.id].name + (o.n > 1 ? ' ×' + o.n : '') + '.', 'loot'); emit(G, { t: 'pick', k: 'cons', x: p.x, y: p.y }); }
+      else if (o.k === 'item') {
+        if (h.bag.length >= BAG_MAX) { if (!quiet) log(G, 'Your pack is full (' + BAG_MAX + '). Drop or salvage something.', 'warn'); continue; }
+        o.it.fresh = 1; h.bag.push(o.it); rm(G, o); G.run.items++;
+        log(G, 'Found: ' + o.it.name + ' (' + D.RARITIES[o.it.rarity].name + ').', 'loot:' + o.it.rarity);
+        emit(G, { t: 'pick', k: 'item', x: p.x, y: p.y, rarity: o.it.rarity });
+      }
+      else if (o.k === 'lore') {
+        rm(G, o);
+        if (h.lore.indexOf(o.idx) < 0) { h.lore.push(o.idx); G.run.lore++; bounty(G, 'lore'); gainXp(G, h, 8 * G.ml); }
+        G.modal = { k: 'lore', idx: o.idx };
+      }
+      else if (o.k === 'quest') {
+        rm(G, o); h.quests.side[o.q] = 'found';
+        var SQ = D.SIDEQUESTS[o.q]; log(G, 'Found ' + SQ.item + '! Bring it to ' + D.NPCS[SQ.giver].name + '.', 'good');
+        G.modal = { k: 'found', q: o.q };
+      }
+      else if (o.k === 'trap') springTrap(G, o);
+      else if (o.k === 'rune') pressRune(G, o);
+    }
+  }
+  function rm(G, o) { var i = G.objs.indexOf(o); if (i >= 0) G.objs.splice(i, 1); }
+  function springTrap(G, o) {
+    var TR = D.TRAPS[o.id], s = pstats(G), p = G.p;
+    rm(G, o);
+    log(G, TR.desc, 'bad'); emit(G, { t: 'fx', k: 'trap', x: p.x, y: p.y }); emit(G, { t: 'shake', n: 4 });
+    G.lastHazard = 'a ' + TR.name.toLowerCase();
+    if (TR.dmg) strike(G, null, p, { flat: Math.max(1, Math.round(s.maxHp * TR.dmg)), kind: 'true', elem: 'trap' });
+    for (var k in TR.status || {}) addStatus(G, p, k, TR.status[k], s.maxHp * 0.03);
+    if (TR.gas) gasAt(G, p.x, p.y, 1, 5, s.maxHp * 0.04);
+    if (TR.alarm) G.mons.forEach(function (m) { if (!m.ally && cheb(m.x, m.y, p.x, p.y) <= 16) { m.asleep = false; m.aware = true; } });
+    if (TR.tele) teleportRandom(G, p);
+  }
+  function teleportRandom(G, a) {
+    for (var t = 0; t < 200; t++) {
+      var x = ri(G.r, G.w), y = ri(G.r, G.h);
+      if (tile(G, x, y) === T.FLOOR && !actorAt(G, x, y) && !blocksObj(G, x, y) && cheb(x, y, a.x, a.y) > 6) { a.x = x; a.y = y; return true; }
+    }
+    return false;
+  }
+  function pressRune(G, o) {
+    var P = G.pz[o.pz]; if (!P || P.solved || o.lit) return;
+    if (P.order[P.prog] === o.sym) {
+      o.lit = true; P.prog++; emit(G, { t: 'fx', k: 'rune', x: o.x, y: o.y }); emit(G, { t: 'snd', k: 'rune' });
+      if (P.prog >= 4) solve(G, o.pz); else log(G, 'The rune flares to life. (' + P.prog + '/4)', 'good');
+    } else {
+      var s = pstats(G);
+      log(G, 'Wrong rune! A jolt of arcane force hurls the pattern back to darkness.', 'bad');
+      strike(G, null, G.p, { flat: Math.max(1, Math.round(s.maxHp * 0.08)), kind: 'true', elem: 'shock' });
+      G.lastHazard = 'a rune ward';
+      P.prog = 0; G.objs.forEach(function (q) { if (q.k === 'rune' && q.pz === o.pz) q.lit = false; });
+    }
+  }
+  function playerUse(G) {
+    var p = G.p, t = tile(G, p.x, p.y), h = G.hero;
+    if (t === T.STAIRS) { descend(G); return -1; }
+    if (t === T.PORTAL) { G.over = 'portal'; emit(G, { t: 'portal' }); return -1; }
+    // facing first, then any neighbor
+    var order = [p.face].concat(DIRS4);
+    for (var i = 0; i < order.length; i++) {
+      var x = p.x + order[i][0], y = p.y + order[i][1], o = blocksObj(G, x, y);
+      if (o && o.k !== 'boulder') return interact(G, o);
+      if (tile(G, x, y) === T.GATE && h.cons.key) return useKeyAt(G, x, y);
+    }
+    var trap = null;
+    for (i = 0; i < DIRS4.length; i++) { var q = objAt(G, p.x + DIRS4[i][0], p.y + DIRS4[i][1], 'trap'); if (q && !q.hidden) trap = q; }
+    if (trap) return disarm(G, trap);
+    var mons = G.mons.filter(function (m) { return !m.ally && m.hp > 0 && manh(m.x, m.y, p.x, p.y) === 1; });
+    if (mons.length) { basicAttack(G, mons[0]); return 100; }
+    log(G, 'Nothing to use here.', 'info');
+    return 0;
+  }
+  function disarm(G, o) {
+    var s = pstats(G), c = G.hero.cls === 'rogue' ? 0.85 : 0.55;
+    if (s.flags.traps) c = 1;
+    if (chance(G.r, c)) {
+      rm(G, o); log(G, 'You disarm the ' + D.TRAPS[o.id].name.toLowerCase() + '.', 'good');
+      gainXp(G, G.hero, 4 * G.ml);
+      if (s.flags.traps) { var g = goldAmount(G, G.r, 6); G.hero.gold += g; G.run.gold += g; log(G, 'Salvaged ' + g + ' gold of trap parts.', 'loot'); }
+    } else { log(G, 'Your hand slips…', 'bad'); var px = G.p.x, py = G.p.y; G.p.x = o.x; G.p.y = o.y; springTrap(G, o); G.p.x = px; G.p.y = py; }
+    return 100;
+  }
+  function useKeyAt(G, x, y) {
+    var h = G.hero; if (!h.cons.key) return 0;
+    h.cons.key--;
+    for (var pz in G.pz) if (G.pz[pz].gates.some(function (g) { return g[0] === x && g[1] === y; })) { solve(G, pz); return 100; }
+    setT(G, x, y, T.OGATE); log(G, 'The skeleton key turns. The gate opens.', 'good'); return 100;
+  }
+  function descend(G, fell) {
+    var h = G.hero, s = pstats(G);
+    G.run.floors++; h.stats.floors++;
+    // blessings/curses last a number of floors
+    h.bless = (h.bless || []).filter(function (b) { b.n--; if (b.n <= 0) log(G, D.BLESSINGS[b.id].name + ' fades.', 'info'); return b.n > 0; });
+    var nd = G.depth + 1;
+    if (G.mode === 'story') {
+      h.story.deepest = Math.max(h.story.deepest, nd);
+      if ((nd - 1) % 5 === 0 && h.story.waypoints.indexOf(nd) < 0) { h.story.waypoints.push(nd); h.story.waypoints.sort(function (a, b) { return a - b; }); }
+      if (nd > D.STORY_FLOORS) h.story.endless = Math.max(h.story.endless || 0, nd);
+    }
+    bounty(G, 'depth', { d: nd });
+    // minions stay behind, except wolves
+    var keep = G.mons.filter(function (m) { return m.ally && m.k === 'wolf'; });
+    genFloor(G, nd);
+    keep.forEach(function (m) {
+      for (var k = 0; k < 8; k++) { var x = G.p.x + DIRS8[k][0], y = G.p.y + DIRS8[k][1]; if (WALKABLE[tile(G, x, y)] && !actorAt(G, x, y) && !blocksObj(G, x, y)) { m.x = x; m.y = y; m.intent = null; G.mons.push(m); break; } }
+    });
+    if (fell) { var d = Math.round(s.maxHp * 0.12); G.p.hp = Math.max(1, G.p.hp - d); log(G, 'You plummet into the dark and land hard (−' + d + ').', 'bad'); emit(G, { t: 'shake', n: 8 }); }
+    var B = D.BIOMES[G.biome];
+    log(G, (G.boss ? '⚠ ' : '') + 'Floor ' + nd + ' — ' + B.name + '. ' + (G.boss ? 'Something vast waits ahead.' : pick(G.r, B.flavor)), G.boss ? 'warn' : 'floor');
+    if (G.mode === 'story' && (nd - 1) % 5 === 0 && nd <= D.STORY_FLOORS) emit(G, { t: 'act', act: actAt(nd), biome: G.biome });
+    return -1;
+  }
+
+  // ===========================================================================
+  //  abilities
+  // ===========================================================================
+  function abilityCost(G, id) {
+    var A = AB[id], s = pstats(G), c = A.cost;
+    if (id === 'fan' && s.flags.cuts) c = 25;
+    if (id === 'rain' && s.flags.volley) c -= 20;
+    if (id === 'blink' && s.flags.phase) c = 0;
+    if (s.flags.archmage) c *= 0.75;
+    if (s.flags.s_deep) c *= 0.8;
+    return Math.round(c);
+  }
+  function abilityCd(G, id) {
+    var A = AB[id], s = pstats(G), cd = A.cd;
+    if (id === 'charge' && s.flags.jugg) cd -= 3;
+    if (id === 'shadowstep' && s.flags.dance) cd -= 3;
+    if (id === 'snare' && s.flags.barbed) cd -= 4;
+    if (id === 'dshield' && s.flags.aegis) cd -= 6;
+    return Math.max(0, cd);
+  }
+  function abilityRange(G, id) {
+    var A = AB[id], s = pstats(G), r = A.range || 0;
+    if (id === 'charge' && s.flags.jugg) r = 6;
+    if ((id === 'quickshot' || id === 'aimed') && s.range) r += s.range;
+    return r;
+  }
+  function abilityState(G, id) {
+    var h = G.hero, list = abilitiesFor(h), a = null;
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) a = list[i];
+    if (!a) return { ok: false, why: 'Not your ability.' };
+    if (!a.known) return { ok: false, why: 'Unlocks at level ' + a.lvl + '.', locked: true };
+    var cd = G.p.cd[id] || 0; if (cd > 0) return { ok: false, why: AB[id].name + ' recharges in ' + cd + '.', cd: cd };
+    var cost = abilityCost(G, id); if (G.p.res < cost) return { ok: false, why: 'Not enough ' + C[h.cls].res.name + ' (' + cost + ').', cost: cost, short: true };
+    return { ok: true, cost: cost };
+  }
+  // valid targets for the UI: [{x,y}], plus a default
+  function abilityTargets(G, id) {
+    var A = AB[id], p = G.p, R = abilityRange(G, id), out = [];
+    if (A.target === 'enemy') {
+      hostilesVisible(G).forEach(function (m) {
+        var d = cheb(m.x, m.y, p.x, p.y);
+        if (d > R || !los(G, p.x, p.y, m.x, m.y)) return;
+        if (A.straight) { if ((m.x !== p.x && m.y !== p.y) || d < 2 || !clearPath(G, p.x, p.y, m.x, m.y)) return; }
+        out.push({ x: m.x, y: m.y, m: m.id });
+      });
+      out.sort(function (a, b) { return cheb(a.x, a.y, p.x, p.y) - cheb(b.x, b.y, p.x, p.y); });
+      var tgt = G.p.target && out.filter(function (o) { return o.m === G.p.target; })[0];
+      return { list: out, def: tgt || out[0] || null };
+    }
+    if (A.target === 'corpse') {
+      G.objs.forEach(function (o) { if (o.k === 'corpse' && visible(G, o.x, o.y) && cheb(o.x, o.y, p.x, p.y) <= R) out.push({ x: o.x, y: o.y }); });
+      out.sort(function (a, b) { return cheb(a.x, a.y, p.x, p.y) - cheb(b.x, b.y, p.x, p.y); });
+      if (id === 'corpseboom') { // prefer the corpse with the most enemies near it
+        var bestN = -1, bestT = null;
+        out.forEach(function (o) { var n = G.mons.filter(function (m) { return !m.ally && cheb(m.x, m.y, o.x, o.y) <= 1; }).length; if (n > bestN) { bestN = n; bestT = o; } });
+        return { list: out, def: bestT };
+      }
+      return { list: out, def: out[0] || null };
+    }
+    if (A.target === 'tile' || A.target === 'line') {
+      for (var y = p.y - R; y <= p.y + R; y++) for (var x = p.x - R; x <= p.x + R; x++) {
+        if (!inb(G, x, y) || !visible(G, x, y) || (x === p.x && y === p.y)) continue;
+        var t = tile(G, x, y);
+        if (id === 'blink') { if (!WALKABLE[t] || t === T.CHASM || t === T.LAVA || actorAt(G, x, y) || blocksObj(G, x, y) || t === T.STAIRS && false) continue; }
+        else if (OPAQUE[t]) continue;
+        if (A.target === 'line' && !los(G, p.x, p.y, x, y)) continue;
+        if (id === 'snare' && (!WALKABLE[t] || actorAt(G, x, y))) continue;
+        out.push({ x: x, y: y });
+      }
+      // default: the nearest visible enemy (or the cluster center for area spells)
+      var hv = hostilesVisible(G).filter(function (m) { return cheb(m.x, m.y, p.x, p.y) <= R; });
+      var def = null;
+      if (id === 'blink') {
+        // away from the nearest enemy
+        var near = hostilesVisible(G)[0];
+        var best = -1; out.forEach(function (o) { var sc = cheb(o.x, o.y, p.x, p.y) + (near ? cheb(o.x, o.y, near.x, near.y) * 2 : 0); if (sc > best) { best = sc; def = o; } });
+      } else if (hv.length) {
+        var bc = -1; hv.forEach(function (m) { var n = hv.filter(function (o) { return cheb(o.x, o.y, m.x, m.y) <= (A.radius || 1); }).length; if (n > bc) { bc = n; def = { x: m.x, y: m.y }; } });
+      } else if (out.length) def = out[0];
+      return { list: out, def: def };
+    }
+    return { list: [], def: null };
+  }
+  function clearPath(G, x0, y0, x1, y1) {
+    var dx = sgn(x1 - x0), dy = sgn(y1 - y0), x = x0 + dx, y = y0 + dy;
+    while (x !== x1 || y !== y1) { if (!WALKABLE[tile(G, x, y)] || tile(G, x, y) === T.CHASM || actorAt(G, x, y) || blocksObj(G, x, y)) return false; x += dx; y += dy; }
+    return true;
+  }
+  function hostileIn(G, cx, cy, rad) { return G.mons.filter(function (m) { return !m.ally && m.hp > 0 && cheb(m.x, m.y, cx, cy) <= rad && !m.disguised; }); }
+  function minions(G) { return G.mons.filter(function (m) { return m.ally && m.owner === 'p' && m.k !== 'wolf'; }); }
+  function raiseAt(G, x, y, ttl) {
+    var s = pstats(G), spot = null;
+    if (!actorAt(G, x, y) && WALKABLE[tile(G, x, y)]) spot = [x, y];
+    for (var k = 0; k < 8 && !spot; k++) { var nx = x + DIRS8[k][0], ny = y + DIRS8[k][1]; if (WALKABLE[tile(G, nx, ny)] && tile(G, nx, ny) !== T.CHASM && !actorAt(G, nx, ny) && !blocksObj(G, nx, ny)) spot = [nx, ny]; }
+    if (!spot) return null;
+    var kind = s.flags.skelmages ? 'skelmage' : 'skelally';
+    var m = spawnMon(G, kind, spot[0], spot[1], { ally: true, ttl: ttl || 0 });
+    m.maxHp = m.hp = Math.round(s.maxHp * 0.42); m.pow = s.pow * (kind === 'skelmage' ? 0.42 : 0.5); m.arm = Math.round(s.arm * 0.5);
+    if (s.flags.frenzy) m.spd = 150;
+    emit(G, { t: 'fx', k: 'raise', x: spot[0], y: spot[1] });
+    return m;
+  }
+  function consecrateAt(G, x, y, rad, t, d) {
+    for (var yy = y - rad; yy <= y + rad; yy++) for (var xx = x - rad; xx <= x + rad; xx++) {
+      if (!inb(G, xx, yy) || !WALKABLE[tile(G, xx, yy)]) continue;
+      G.holy[yy * G.w + xx] = { t: t, d: Math.round(d) };
+    }
+  }
+  function useAbility(G, id, tx, ty) {
+    var st = abilityState(G, id); if (!st.ok) { log(G, st.why, 'info'); return 0; }
+    var A = AB[id], p = G.p, h = G.hero, s = pstats(G), R = abilityRange(G, id), r = G.r;
+    var target = null, did = true;
+    if (A.target === 'enemy') {
+      target = monAt(G, tx, ty);
+      var tl = abilityTargets(G, id).list;
+      if (!target || !tl.some(function (o) { return o.m === target.id; })) { log(G, 'No valid target there.', 'info'); return 0; }
+      p.target = target.id;
+    }
+    if ((A.target === 'tile' || A.target === 'line' || A.target === 'corpse') && !abilityTargets(G, id).list.some(function (o) { return o.x === tx && o.y === ty; })) { log(G, 'Can\'t target that.', 'info'); return 0; }
+    var opt = function (mult, extra) { var o = { mult: mult, kind: 'spell', ability: true, noDodge: true, procs: false }; for (var k in extra || {}) o[k] = extra[k]; return o; };
+    switch (id) {
+      case 'cleave':
+        var adj = hostileIn(G, p.x, p.y, 1);
+        if (!adj.length) { log(G, 'No enemies within reach.', 'info'); return 0; }
+        emit(G, { t: 'fx', k: 'sweep', x: p.x, y: p.y, col: '#ffb070' });
+        adj.forEach(function (m) { strike(G, p, m, opt(A.mult * (s.flags.cleaveBleed ? 1.4 : 1), { kind: 'melee', procs: true })); if (s.flags.cleaveBleed && m.hp > 0) addStatus(G, m, 'bleed', 4, s.pow * 0.25); });
+        break;
+      case 'charge':
+        var dx = sgn(target.x - p.x), dy = sgn(target.y - p.y);
+        var x0 = p.x, y0 = p.y;
+        while (p.x + dx !== target.x || p.y + dy !== target.y) { p.x += dx; p.y += dy; }
+        emit(G, { t: 'dash', x0: x0, y0: y0, x1: p.x, y1: p.y });
+        strike(G, p, target, opt(A.mult, { kind: 'melee', procs: true }));
+        if (target.hp > 0) addStatus(G, target, 'stun', 1);
+        emit(G, { t: 'shake', n: 4 }); stepOn(G, true);
+        break;
+      case 'warcry':
+        gainRes(G, A.gain * (s.flags.avatar && p.st.unbreak ? 2 : 1));
+        emit(G, { t: 'fx', k: 'nova', x: p.x, y: p.y, r: 3, col: '#ff8a5a' });
+        hostileIn(G, p.x, p.y, A.radius).forEach(function (m) { addStatus(G, m, 'weaken', 4); if (s.flags.cryStun) addStatus(G, m, 'stun', 1); });
+        noise(G, p.x, p.y, 10);
+        break;
+      case 'execute':
+        var thr = s.flags.execHi ? 0.5 : 0.35, mul = A.mult * (target.hp < target.maxHp * thr ? 2 : 1);
+        emit(G, { t: 'atk', id: 0, x: p.x, y: p.y, tx: target.x, ty: target.y, heavy: true });
+        strike(G, p, target, opt(mul, { kind: 'melee', procs: true }));
+        if (target.hp <= 0) { gainRes(G, 20); emit(G, { t: 'shake', n: 5 }); }
+        break;
+      case 'unbreakable':
+        p.st.unbreak = A.turns; emit(G, { t: 'fx', k: 'shield', x: p.x, y: p.y, col: '#ffb070' });
+        log(G, 'You are UNBREAKABLE!', 'good'); break;
+      case 'backstab':
+        var force = target.asleep || target.st.stun || target.st.frozen || !target.aware;
+        emit(G, { t: 'atk', id: 0, x: p.x, y: p.y, tx: target.x, ty: target.y });
+        strike(G, p, target, opt(A.mult * (s.flags.assassin && target.hp < target.maxHp * 0.5 ? 1.6 : 1), { kind: 'melee', forceCrit: force, procs: true }));
+        if (p.st.invis && !s.flags.cloak) delete p.st.invis;
+        break;
+      case 'shadowstep':
+        var spots = DIRS4.concat(DIRS8.slice(4)).map(function (d) { return [target.x + d[0], target.y + d[1]]; }).filter(function (q) { return WALKABLE[tile(G, q[0], q[1])] && tile(G, q[0], q[1]) !== T.CHASM && tile(G, q[0], q[1]) !== T.LAVA && !actorAt(G, q[0], q[1]) && !blocksObj(G, q[0], q[1]); });
+        if (!spots.length) { log(G, 'No room to step out beside it.', 'info'); return 0; }
+        spots.sort(function (a, b) { return manh(b[0], b[1], p.x, p.y) - manh(a[0], a[1], p.x, p.y); });
+        emit(G, { t: 'fx', k: 'smoke', x: p.x, y: p.y });
+        p.x = spots[0][0]; p.y = spots[0][1]; p.st.critNext = 1;
+        emit(G, { t: 'fx', k: 'smoke', x: p.x, y: p.y }); stepOn(G, true);
+        break;
+      case 'envenom':
+        emit(G, { t: 'atk', id: 0, x: p.x, y: p.y, tx: target.x, ty: target.y });
+        strike(G, p, target, opt(A.mult, { kind: 'melee', procs: true }));
+        if (target.hp > 0) addStatus(G, target, 'poison', 6, s.pow * 0.38 * (s.flags.virulence ? 1.5 : 1));
+        break;
+      case 'fan':
+        var rad = s.flags.cuts ? 3 : A.radius, hit = hostileIn(G, p.x, p.y, rad).filter(function (m) { return los(G, p.x, p.y, m.x, m.y); });
+        if (!hit.length) { log(G, 'No enemies close enough.', 'info'); return 0; }
+        hit.forEach(function (m) { emit(G, { t: 'proj', k: 'knife', x0: p.x, y0: p.y, x1: m.x, y1: m.y }); strike(G, p, m, opt(A.mult, { kind: 'ranged' })); if (m.hp > 0) addStatus(G, m, 'bleed', 4, s.pow * 0.22 * (s.flags.virulence ? 1.5 : 1)); });
+        break;
+      case 'smoke':
+        p.st.invis = A.turns; emit(G, { t: 'fx', k: 'smoke', x: p.x, y: p.y, r: 1 });
+        hostileIn(G, p.x, p.y, 1).forEach(function (m) { addStatus(G, m, 'stun', 2); });
+        loseTrack(G); log(G, 'You vanish into smoke.', 'good');
+        break;
+      case 'firebolt':
+        emit(G, { t: 'proj', k: 'fire', x0: p.x, y0: p.y, x1: target.x, y1: target.y });
+        strike(G, p, target, opt(A.mult, { kind: 'ranged', elem: 'fire' }));
+        if (target.hp > 0 && (s.flags.ignite || chance(r, 0.5))) addStatus(G, target, 'burn', 4, s.pow * 0.3 * (s.flags.pyro ? 1.4 : 1));
+        break;
+      case 'frostnova':
+        emit(G, { t: 'fx', k: 'nova', x: p.x, y: p.y, r: A.radius, col: '#9fdcff' });
+        hostileIn(G, p.x, p.y, A.radius).forEach(function (m) { strike(G, p, m, opt(A.mult, { elem: 'frost' })); if (m.hp > 0) addStatus(G, m, 'frozen', 2); });
+        break;
+      case 'blink':
+        emit(G, { t: 'fx', k: 'blink', x: p.x, y: p.y });
+        p.x = tx; p.y = ty; if (s.flags.phase) p.st.dodgeBuff = { v: 0.5, t: 2 };
+        emit(G, { t: 'fx', k: 'blink', x: p.x, y: p.y }); stepOn(G, true);
+        break;
+      case 'chain':
+        var jumps = A.jumps + (s.flags.overload ? 2 : 0), cur = target, hitIds = {}, from = p, m2 = A.mult;
+        for (var j = 0; j <= jumps && cur; j++) {
+          emit(G, { t: 'proj', k: 'zap', x0: from.x, y0: from.y, x1: cur.x, y1: cur.y });
+          hitIds[cur.id] = 1; var cx = cur.x, cy = cur.y;
+          strike(G, p, cur, opt(m2, { elem: 'shock' }));
+          from = { x: cx, y: cy }; m2 *= 0.85;
+          var nxt = null; G.mons.forEach(function (o) { if (!o.ally && o.hp > 0 && !hitIds[o.id] && cheb(o.x, o.y, cx, cy) <= 3 && (!nxt || cheb(o.x, o.y, cx, cy) < cheb(nxt.x, nxt.y, cx, cy))) nxt = o; });
+          cur = nxt;
+        }
+        break;
+      case 'meteor':
+        var mr = s.flags.armageddon ? 2 : A.radius;
+        G.delayed.push({ k: 'meteor', x: tx, y: ty, rad: mr, t: A.delay, d: s.pow * A.mult * (1 + s.abilPct + (s.flags.archmage ? 0.2 : 0)) * (s.flags.pyro ? 1.25 : 1) });
+        log(G, 'A meteor streaks down from somewhere far above…', 'good');
+        break;
+      case 'quickshot':
+        var shots = s.flags.doubletap ? 2 : 1;
+        for (var k = 0; k < shots && target.hp > 0; k++) { emit(G, { t: 'proj', k: 'arrow', x0: p.x, y0: p.y, x1: target.x, y1: target.y, delay: k * 90 }); strike(G, p, target, { mult: A.mult * (shots > 1 ? 0.65 : 1), kind: 'ranged', ability: true, procs: true }); }
+        gainRes(G, A.gain);
+        if (s.flags.ricochet) { var rc = null; G.mons.forEach(function (o) { if (o !== target && !o.ally && o.hp > 0 && cheb(o.x, o.y, target.x, target.y) <= 3 && (!rc || cheb(o.x, o.y, target.x, target.y) < cheb(rc.x, rc.y, target.x, target.y))) rc = o; }); if (rc) { emit(G, { t: 'proj', k: 'arrow', x0: target.x, y0: target.y, x1: rc.x, y1: rc.y }); strike(G, p, rc, { mult: A.mult * 0.7, kind: 'ranged', ability: true }); } }
+        noise(G, p.x, p.y, 4);
+        break;
+      case 'aimed':
+        var line = lineTiles(G, p.x, p.y, target.x, target.y, R), first = true;
+        emit(G, { t: 'proj', k: 'bigarrow', x0: p.x, y0: p.y, x1: line.length ? line[line.length - 1][0] : target.x, y1: line.length ? line[line.length - 1][1] : target.y });
+        line.forEach(function (q) { var m = monAt(G, q[0], q[1]); if (m && !m.ally) { strike(G, p, m, { mult: A.mult, kind: 'ranged', ability: true, procs: true, forceCrit: s.flags.u_heart }); if (first && s.flags.huntmark && m.hp > 0) addStatus(G, m, 'mark', 5); first = false; } });
+        break;
+      case 'snare':
+        addObj(G, { k: 'snare', x: tx, y: ty, d: s.pow * A.mult, turns: A.turns, barbed: !!s.flags.barbed });
+        emit(G, { t: 'fx', k: 'sparkle', x: tx, y: ty }); log(G, 'You set a snare.', 'info');
+        break;
+      case 'wolf':
+        G.mons.filter(function (m) { return m.ally && m.k === 'wolf'; }).forEach(function (m) { G.mons.splice(G.mons.indexOf(m), 1); });
+        var nw = s.flags.twowolves ? 2 : 1, made = 0;
+        for (var kk = 0; kk < 8 && made < nw; kk++) {
+          var wx = p.x + DIRS8[kk][0], wy = p.y + DIRS8[kk][1];
+          if (!WALKABLE[tile(G, wx, wy)] || tile(G, wx, wy) === T.CHASM || actorAt(G, wx, wy) || blocksObj(G, wx, wy)) continue;
+          var w = spawnMon(G, 'wolf', wx, wy, { ally: true }), am = s.flags.alpha ? 1.6 : 1;
+          w.maxHp = w.hp = Math.round(s.maxHp * 0.55 * am); w.pow = s.pow * 0.55 * am; w.arm = Math.round(s.arm * 0.6); made++;
+          emit(G, { t: 'fx', k: 'raise', x: wx, y: wy, col: '#d0c0a0' });
+        }
+        if (!made) { log(G, 'No room for a wolf here.', 'info'); return 0; }
+        log(G, made > 1 ? 'Two wolves answer your call!' : 'A wolf answers your call!', 'good');
+        break;
+      case 'rain':
+        var rr2 = s.flags.volley ? 3 : A.radius;
+        emit(G, { t: 'fx', k: 'rain', x: tx, y: ty, r: rr2 });
+        hostileIn(G, tx, ty, rr2).forEach(function (m) { strike(G, p, m, opt(A.mult, { kind: 'ranged' })); });
+        break;
+      case 'smite':
+        var tg = [target];
+        if (s.flags.radiance) { var o2 = hostilesVisible(G).filter(function (m) { return m !== target && cheb(m.x, m.y, p.x, p.y) <= R && los(G, p.x, p.y, m.x, m.y); })[0]; if (o2) tg.push(o2); }
+        tg.forEach(function (m) {
+          emit(G, { t: 'proj', k: 'holy', x0: p.x, y0: p.y, x1: m.x, y1: m.y });
+          strike(G, p, m, opt(A.mult * (UNDEADISH[m.fam] ? 2 : 1), { elem: 'holy' }));
+          if (m.hp > 0 && s.flags.penance && chance(r, 0.35)) addStatus(G, m, 'stun', 1);
+        });
+        break;
+      case 'mend':
+        heal(G, p, s.maxHp * A.heal); cleanse(p);
+        if (s.flags.renew) p.st.regen = { t: 5, v: Math.round(s.maxHp * 0.04) };
+        emit(G, { t: 'fx', k: 'heal', x: p.x, y: p.y });
+        break;
+      case 'consecrate':
+        var cr = s.flags.holyground ? 2 : A.radius, ct = s.flags.sanctified ? 10 : A.turns;
+        consecrateAt(G, p.x, p.y, cr, ct, s.pow * A.mult * (1 + s.abilPct));
+        if (s.flags.sanctified) p.st.sanct = ct;
+        emit(G, { t: 'fx', k: 'nova', x: p.x, y: p.y, r: cr, col: '#ffe08a' });
+        break;
+      case 'dshield':
+        addStatus(G, p, 'shield', A.turns, s.maxHp * A.shield);
+        if (s.flags.aegis) cleanse(p);
+        emit(G, { t: 'fx', k: 'shield', x: p.x, y: p.y, col: '#ffe08a' });
+        break;
+      case 'judgment':
+        var vis = hostilesVisible(G);
+        if (!vis.length) { log(G, 'No enemy in sight to judge.', 'info'); return 0; }
+        emit(G, { t: 'fx', k: 'flash', col: '#fff4c0' });
+        vis.forEach(function (m) { strike(G, p, m, opt(A.mult, { elem: 'holy' })); if (m.hp > 0 && m.fam === 'undead') addStatus(G, m, 'stun', 1); });
+        if (s.flags.dayjudge) heal(G, p, s.maxHp * 0.04 * vis.length);
+        break;
+      case 'bonespear':
+        var ln = lineTiles(G, p.x, p.y, tx, ty, R);
+        emit(G, { t: 'proj', k: 'bone', x0: p.x, y0: p.y, x1: ln.length ? ln[ln.length - 1][0] : tx, y1: ln.length ? ln[ln.length - 1][1] : ty });
+        ln.forEach(function (q) { var m = monAt(G, q[0], q[1]); if (m && !m.ally) { strike(G, p, m, opt(A.mult * (s.flags.marrow ? 1.4 : 1), { kind: 'ranged' })); if (m.hp > 0 && s.flags.marrow) addStatus(G, m, 'slow', 3); if (m.hp > 0 && s.flags.plague) addStatus(G, m, 'poison', 5, s.pow * 0.25); } });
+        break;
+      case 'raise':
+        var corpse = objAt(G, tx, ty, 'corpse'); if (!corpse) return 0;
+        var cap = 2 + (s.flags.gravelord ? 1 : 0), mins = minions(G).filter(function (m) { return !m.ttl; });
+        if (mins.length >= cap) { var old = mins[0]; G.mons.splice(G.mons.indexOf(old), 1); emit(G, { t: 'die', id: old.id, x: old.x, y: old.y, ch: old.ch, col: old.col, ally: true }); }
+        rm(G, corpse);
+        if (!raiseAt(G, tx, ty, 0)) { log(G, 'No room for it to rise.', 'info'); return 0; }
+        log(G, 'The dead answer you.', 'good');
+        break;
+      case 'drain':
+        emit(G, { t: 'proj', k: 'drain', x0: target.x, y0: target.y, x1: p.x, y1: p.y });
+        var got = strike(G, p, target, opt(A.mult, { elem: 'void' }));
+        heal(G, p, got * A.drain * (s.flags.pact ? 1.3 : 1));
+        if (target.hp > 0 && s.flags.wither) addStatus(G, target, 'weaken', 3);
+        break;
+      case 'corpseboom':
+        var cp = objAt(G, tx, ty, 'corpse'); if (!cp) return 0; rm(G, cp);
+        var br = s.flags.chainboom ? 2 : A.radius;
+        emit(G, { t: 'fx', k: 'boom', x: tx, y: ty, r: br, col: '#c0ff9a' }); emit(G, { t: 'shake', n: 5 });
+        hostileIn(G, tx, ty, br).forEach(function (m) { strike(G, p, m, opt(A.mult)); });
+        break;
+      case 'army':
+        var cs = G.objs.filter(function (o) { return o.k === 'corpse' && cheb(o.x, o.y, p.x, p.y) <= A.radius; }), n2 = 0;
+        cs.forEach(function (o) { rm(G, o); if (raiseAt(G, o.x, o.y, A.turns)) n2++; });
+        if (s.flags.legion) while (n2 < 4) { if (!raiseAt(G, p.x, p.y, A.turns)) break; n2++; }
+        if (!n2) { log(G, 'There are no dead here to call.', 'info'); return 0; }
+        log(G, n2 + ' of the dead rise to fight for you!', 'good'); emit(G, { t: 'shake', n: 4 });
+        break;
+      default: did = false;
+    }
+    if (!did) return 0;
+    var cost = st.cost;
+    if ((s.flags.clearcast && h.cls === 'mage' && chance(r, 0.2)) || (s.flags.u_echo && chance(r, 0.2))) { cost = 0; if (st.cost) log(G, 'Clearcasting — that one was free.', 'good'); }
+    p.res = Math.max(0, p.res - cost);
+    var cd = abilityCd(G, id); if (cd) p.cd[id] = cd + 1;
+    emit(G, { t: 'cast', id: id });
+    if (id !== 'smoke' && id !== 'shadowstep' && id !== 'backstab' && p.st.invis && !(s.flags.cloak)) delete p.st.invis;
+    return 100;
+  }
+
+  // ---- consumables -----------------------------------------------------------
+  function useCons(G, id, tx, ty) {
+    var h = G.hero, p = G.p, s = pstats(G);
+    if (!h.cons[id]) { log(G, 'You have no ' + D.CONSUMABLES[id].name + '.', 'info'); return 0; }
+    switch (id) {
+      case 'potion':
+        if (p.hp >= s.maxHp) { log(G, 'You are already at full health.', 'info'); return 0; }
+        heal(G, p, s.maxHp * 0.4 * Math.max(0.2, 1 + s.potionPct)); emit(G, { t: 'fx', k: 'heal', x: p.x, y: p.y }); break;
+      case 'tonic': gainRes(G, s.maxRes * 0.6); emit(G, { t: 'fx', k: 'sparkle', x: p.x, y: p.y, col: C[h.cls].res.color }); break;
+      case 'elixir': cleanse(p); log(G, 'You feel clean.', 'good'); emit(G, { t: 'fx', k: 'heal', x: p.x, y: p.y }); break;
+      case 'bomb':
+        if (tx == null || cheb(tx, ty, p.x, p.y) > 4 || !visible(G, tx, ty)) { log(G, 'Throw it at a visible tile within 4.', 'info'); return 0; }
+        emit(G, { t: 'proj', k: 'bomb', x0: p.x, y0: p.y, x1: tx, y1: ty });
+        explodeAt(G, tx, ty, 1, s.pow * 1.5, p, '#ff8a3a'); noise(G, tx, ty, 10);
+        break;
+      case 'recall':
+        h.cons[id]--; G.over = 'recall'; emit(G, { t: 'portal' }); log(G, 'The scroll folds space around you…', 'good'); return -1;
+      case 'mapping':
+        for (var i = 0; i < G.seen.length; i++) if (G.t[i] !== T.WALL || hasFloorNeighbor(G, i)) G.seen[i] = 1;
+        G.objs.forEach(function (o) { if (o.k === 'trap') o.hidden = false; });
+        G.mapped = true; log(G, 'The floor\'s layout burns itself into your mind.', 'good'); break;
+      case 'key':
+        for (i = 0; i < 4; i++) { var x = p.x + DIRS4[i][0], y = p.y + DIRS4[i][1]; if (tile(G, x, y) === T.GATE) return useKeyAt(G, x, y); }
+        log(G, 'Stand beside a sealed gate to use the key.', 'info'); return 0;
+      default: return 0;
+    }
+    h.cons[id]--;
+    return 100;
+  }
+  function hasFloorNeighbor(G, i) { var x = i % G.w, y = (i - x) / G.w; for (var k = 0; k < 8; k++) { var t = tile(G, x + DIRS8[k][0], y + DIRS8[k][1]); if (t !== T.WALL && inb(G, x + DIRS8[k][0], y + DIRS8[k][1])) return true; } return false; }
+
+  // ===========================================================================
+  //  monster AI
+  // ===========================================================================
+  function fieldPass(G) { return function (x, y) { var t = tile(G, x, y); return WALKABLE[t] && t !== T.CHASM && t !== T.LAVA && !blocksObj(G, x, y); }; }
+  function buildFields(G) {
+    G.distP = bfs(G, G.p.x, G.p.y, fieldPass(G), 40);
+  }
+  function free(G, m, x, y) { return canEnter(G, m, x, y) && !actorAt(G, x, y) && !(m.ai !== 'ghost' && tile(G, x, y) === T.DOOR && false); }
+  function moveMon(G, m, x, y) {
+    if (tile(G, x, y) === T.DOOR) setT(G, x, y, T.ODOOR);
+    m.x = x; m.y = y;
+    var M = MON[m.k];
+    if (M && M.trail === 'fire') fireAt(G, m.x, m.y, 0, 3, m.pow * 0.3);
+    if (hasElite(m, 'molten') && chance(G.r, 0.3)) fireAt(G, m.x, m.y, 0, 3, m.pow * 0.25);
+    var sn = objAt(G, x, y, 'snare');
+    if (sn && !m.ally) { rm(G, sn); log(G, displayName(m) + ' is caught in your snare!', 'good'); strike(G, G.p, m, { flat: Math.round(sn.d), kind: 'true' }); if (m.hp > 0) { addStatus(G, m, 'root', sn.turns); if (sn.barbed) addStatus(G, m, 'bleed', 4, sn.d * 0.25); } }
+  }
+  function stepToward(G, m, tx, ty) {
+    var best = null, bd = 1e9, useField = tx === G.p.x && ty === G.p.y && m.ai !== 'ghost' && m.k !== 'lurker' && G.distP;
+    var cur = useField ? G.distP[m.y * G.w + m.x] : manh(m.x, m.y, tx, ty);
+    var dirs = shuffle(G.r, DIRS4.slice());
+    for (var k = 0; k < 4; k++) {
+      var nx = m.x + dirs[k][0], ny = m.y + dirs[k][1];
+      if (!free(G, m, nx, ny)) continue;
+      var d = useField ? G.distP[ny * G.w + nx] : manh(nx, ny, tx, ty);
+      if (useField && d >= 9999) d = 500 + manh(nx, ny, tx, ty);
+      if (d < bd) { bd = d; best = [nx, ny]; }
+    }
+    if (best && (bd < cur || (bd === cur && chance(G.r, 0.3)))) { moveMon(G, m, best[0], best[1]); return true; }
+    return false;
+  }
+  function stepAway(G, m, tx, ty) {
+    var best = null, bd = manh(m.x, m.y, tx, ty);
+    for (var k = 0; k < 4; k++) {
+      var nx = m.x + DIRS4[k][0], ny = m.y + DIRS4[k][1];
+      if (!free(G, m, nx, ny)) continue;
+      var d = manh(nx, ny, tx, ty); if (d > bd) { bd = d; best = [nx, ny]; }
+    }
+    if (best) { moveMon(G, m, best[0], best[1]); return true; }
+    return false;
+  }
+  function wander(G, m) {
+    if (m.lastSeen) { if (m.x === m.lastSeen[0] && m.y === m.lastSeen[1]) m.lastSeen = null; else { stepToward(G, m, m.lastSeen[0], m.lastSeen[1]); return; } }
+    if (chance(G.r, 0.3)) { var d = pick(G.r, DIRS4); if (free(G, m, m.x + d[0], m.y + d[1])) moveMon(G, m, m.x + d[0], m.y + d[1]); }
+  }
+  function monAttack(G, m, t, mult) {
+    emit(G, { t: 'atk', id: m.id, x: m.x, y: m.y, tx: t.x, ty: t.y });
+    strike(G, m, t, { mult: mult || 1, kind: 'melee' });
+  }
+  // the creature's chosen victim: the player, or a minion that's closer
+  function pickTarget(G, m) {
+    var p = G.p, best = null, bd = 1e9;
+    var pd = manh(m.x, m.y, p.x, p.y);
+    var hidden = p.st.invis && pd > 1;
+    if (G.hero && pstats(G).flags.camo && p.still >= 2 && cheb(m.x, m.y, p.x, p.y) > 2) hidden = true;
+    if (!hidden) { best = p; bd = pd; }
+    G.mons.forEach(function (a) { if (!a.ally || a.hp <= 0) return; var d = manh(m.x, m.y, a.x, a.y); if (d < bd - (best === p ? 1 : 0) && d <= 6) { bd = d; best = a; } });
+    return best;
+  }
+  function areaTiles(cx, cy, rad, skipCenter) {
+    var out = [];
+    for (var y = cy - rad; y <= cy + rad; y++) for (var x = cx - rad; x <= cx + rad; x++) if (!(skipCenter && x === cx && y === cy)) out.push([x, y]);
+    return out;
+  }
+  function crossTiles(G, cx, cy, horiz, vert, maxLen) {
+    var out = [];
+    function ray(dx, dy) { for (var i = 1; i <= maxLen; i++) { var x = cx + dx * i, y = cy + dy * i; if (!inb(G, x, y) || OPAQUE[tile(G, x, y)]) break; out.push([x, y]); } }
+    out.push([cx, cy]);
+    if (horiz) { ray(1, 0); ray(-1, 0); }
+    if (vert) { ray(0, 1); ray(0, -1); }
+    return out;
+  }
+  function setIntent(G, m, it) {
+    it.tiles = it.tiles.filter(function (q) { return inb(G, q[0], q[1]) && !OPAQUE[tile(G, q[0], q[1])]; });
+    m.intent = it;
+    emit(G, { t: 'intent', id: m.id });
+  }
+  function aligned(G, m, t, maxD) {
+    if (m.x !== t.x && m.y !== t.y) return false;
+    var d = manh(m.x, m.y, t.x, t.y); if (d < 2 || d > maxD) return false;
+    var dx = sgn(t.x - m.x), dy = sgn(t.y - m.y), x = m.x + dx, y = m.y + dy;
+    while (x !== t.x || y !== t.y) { if (!canEnter(G, m, x, y) || actorAt(G, x, y)) return false; x += dx; y += dy; }
+    return true;
+  }
+  function chargeTiles(G, m, t, len) {
+    var dx = sgn(t.x - m.x), dy = sgn(t.y - m.y), out = [];
+    for (var i = 1; i <= len; i++) { var x = m.x + dx * i, y = m.y + dy * i; if (!inb(G, x, y) || OPAQUE[tile(G, x, y)] || !WALKABLE[tile(G, x, y)]) break; out.push([x, y]); }
+    return out;
+  }
+  function resolveIntent(G, m, dying) {
+    var it = m.intent; if (!it) return;
+    it.t--; if (it.t > 0 && !dying) return;
+    m.intent = null;
+    var r = G.r, hitAny = false;
+    function hitTile(x, y, mult, extra) {
+      var a = actorAt(G, x, y);
+      if (!a || a === m || !hostile(m, a) && !it.friendly) return false;
+      var o = { mult: mult, kind: 'spell', noDodge: true, elem: it.elem };
+      strike(G, m.hp > 0 ? m : null, a, o.flat ? o : (m.hp > 0 ? o : { flat: Math.round(m.pow * mult), kind: 'true' }));
+      if (a.hp > 0 && extra) for (var k in extra) addStatus(G, a, k, extra[k], m.pow * 0.25);
+      hitAny = true; return true;
+    }
+    switch (it.k) {
+      case 'shot': case 'bolt':
+        emit(G, { t: 'proj', k: it.elem === 'fire' ? 'fire' : it.beam ? 'beam' : 'arrow', x0: m.x, y0: m.y, x1: it.tiles.length ? it.tiles[it.tiles.length - 1][0] : m.x, y1: it.tiles.length ? it.tiles[it.tiles.length - 1][1] : m.y, hostile: true });
+        for (var i = 0; i < it.tiles.length; i++) {
+          var q = it.tiles[i], a = actorAt(G, q[0], q[1]);
+          if (a && a !== m) { if (hostile(m, a)) hitTile(q[0], q[1], it.mult, it.status); if (!it.beam) break; }
+          if (blocksObj(G, q[0], q[1]) && !it.beam) break;
+        }
+        break;
+      case 'charge':
+        var x0 = m.x, y0 = m.y;
+        for (var j = 0; j < it.tiles.length; j++) {
+          var c = it.tiles[j], o = actorAt(G, c[0], c[1]);
+          if (o) { if (hostile(m, o)) { hitTile(c[0], c[1], it.mult); if (o.hp > 0) addStatus(G, o, 'stun', 1); emit(G, { t: 'shake', n: 5 }); } break; }
+          if (!canEnter(G, m, c[0], c[1])) break;
+          m.x = c[0]; m.y = c[1];
+        }
+        emit(G, { t: 'dash', id: m.id, x0: x0, y0: y0, x1: m.x, y1: m.y });
+        break;
+      case 'fuse':
+        emit(G, { t: 'fx', k: 'boom', x: m.x, y: m.y, r: 1, col: '#ff6a2a' }); emit(G, { t: 'shake', n: 7 });
+        it.tiles.forEach(function (q) { var a = actorAt(G, q[0], q[1]); if (a && a !== m) strike(G, null, a, { flat: Math.round(m.pow * it.mult * (0.9 + rf(r) * 0.2) * (a === G.p ? 1 - Math.min(0.5, pstats(G).arm / (pstats(G).arm + 12 + 2 * m.lvl)) : 1)), kind: 'true', elem: 'fire' }); });
+        fireAt(G, m.x, m.y, 1, 2, m.pow * 0.25);
+        m.exploded = true;
+        if (!dying && m.hp > 0) { G.lastHazard = displayName(m); killMon(G, m, null); }
+        return;
+      default:
+        // area: slam, sweep, spores, wave, erupt, beam, cloud…
+        var fxk = it.elem === 'fire' ? 'boom' : it.elem === 'poison' ? 'gas' : it.elem === 'wave' ? 'wave' : it.elem === 'void' ? 'void' : 'slam';
+        emit(G, { t: 'area', k: fxk, tiles: it.tiles });
+        if (it.k === 'slam' || it.k === 'sweep' || it.k === 'bigslam') emit(G, { t: 'shake', n: 5 });
+        it.tiles.forEach(function (q) { hitTile(q[0], q[1], it.mult, it.status); });
+        if (it.gas) it.tiles.forEach(function (q) { gasAt(G, q[0], q[1], 0, it.gas, m.pow * 0.3); });
+        if (it.fire) it.tiles.forEach(function (q) { fireAt(G, q[0], q[1], 0, it.fire, m.pow * 0.3); });
+    }
+  }
+  function monTurn(G, m) {
+    if (m.hp <= 0) return;
+    if (m.ally) return allyTurn(G, m);
+    if (m.st.stun || m.st.frozen) return;
+    if (m.intent) { resolveIntent(G, m); return; }
+    if (m.disguised) return;
+    var p = G.p, M = MON[m.k] || {};
+    if (m.asleep) {
+      if (visible(G, m.x, m.y) && cheb(m.x, m.y, p.x, p.y) <= 3 && !p.st.invis && chance(G.r, G.hero.cls === 'rogue' ? 0.25 : 0.5)) { m.asleep = false; m.aware = true; emit(G, { t: 'alert', id: m.id, x: m.x, y: m.y }); }
+      return;
+    }
+    if (m.boss) return bossTurn(G, m);
+    var t = pickTarget(G, m);
+    if (!m.aware) {
+      if (t === p && cheb(m.x, m.y, p.x, p.y) <= 8 && los(G, m.x, m.y, p.x, p.y)) { m.aware = true; emit(G, { t: 'alert', id: m.id, x: m.x, y: m.y }); }
+      else if (t && t !== p && manh(m.x, m.y, t.x, t.y) <= 5) m.aware = true;
+      else { wander(G, m); return; }
+    }
+    if (!t) { wander(G, m); return; }
+    if (t === p) m.lastSeen = [p.x, p.y];
+    if (m.st.root && m.ai !== 'archer' && m.ai !== 'caster' && m.ai !== 'turret') { if (manh(m.x, m.y, t.x, t.y) === 1) monAttack(G, m, t); return; }
+    var d = manh(m.x, m.y, t.x, t.y), ch = cheb(m.x, m.y, t.x, t.y), sight = los(G, m.x, m.y, t.x, t.y);
+    if (hasElite(m, 'blinking') && !m.cd.blink && d > 3 && sight) {
+      for (var k = 0; k < 4; k++) { var bx = t.x + DIRS4[k][0], by = t.y + DIRS4[k][1]; if (free(G, m, bx, by)) { emit(G, { t: 'fx', k: 'blink', x: m.x, y: m.y }); m.x = bx; m.y = by; m.cd.blink = 5; emit(G, { t: 'fx', k: 'blink', x: m.x, y: m.y }); return; } }
+    }
+    switch (m.ai) {
+      case 'brute':
+        if (ch <= 1 && !m.cd.slam) { setIntent(G, m, { k: 'slam', tiles: areaTiles(m.x, m.y, 1, true), t: 1, mult: 2.0 }); m.cd.slam = 4; return; }
+        if (d === 1) { monAttack(G, m, t, 0.9); return; }
+        stepToward(G, m, t.x, t.y); return;
+      case 'archer': case 'turret':
+        if (sight && ch <= m.range) {
+          if (d <= 1 && m.ai !== 'turret' && chance(G.r, 0.6) && stepAway(G, m, t.x, t.y)) return;
+          if (!m.cd.shot) {
+            var line = lineTiles(G, m.x, m.y, t.x, t.y, m.range + 2);
+            setIntent(G, m, { k: 'shot', tiles: line, t: 1, mult: M.beam ? 1.6 : 1.35, beam: !!M.beam, elem: m.k === 'imp' ? 'fire' : null, status: m.k === 'imp' ? { burn: 3 } : m.k === 'spitter' ? { poison: 4 } : null });
+            m.cd.shot = M.beam ? 3 : 2; return;
+          }
+          if (d === 1) { monAttack(G, m, t, 0.7); return; }
+          if (d <= 2 && m.ai !== 'turret') stepAway(G, m, t.x, t.y);
+          return;
+        }
+        if (m.ai !== 'turret') stepToward(G, m, t.x, t.y);
+        return;
+      case 'caster':
+        if (sight && ch <= m.range && !m.cd.cast) {
+          if (M.elem === 'wave') {
+            var horiz = Math.abs(t.x - m.x) < Math.abs(t.y - m.y);
+            setIntent(G, m, { k: 'wave', tiles: crossTiles(G, t.x, t.y, horiz, !horiz, 9), t: 1, mult: 1.5, elem: 'wave' });
+          } else setIntent(G, m, { k: 'area', tiles: areaTiles(t.x, t.y, 1), t: 2, mult: 1.6, elem: M.elem, status: M.elem === 'fire' ? { burn: 3 } : M.elem === 'void' ? { weaken: 3 } : null, fire: M.elem === 'fire' ? 3 : 0 });
+          m.cd.cast = 4; return;
+        }
+        if (d === 1) { monAttack(G, m, t, 0.8); return; }
+        if (sight && d <= 2) { stepAway(G, m, t.x, t.y); return; }
+        if (!sight || ch > m.range) stepToward(G, m, t.x, t.y);
+        return;
+      case 'charger':
+        if (!m.cd.charge && aligned(G, m, t, 6)) { setIntent(G, m, { k: 'charge', tiles: chargeTiles(G, m, t, 7), t: 1, mult: 1.8 }); m.cd.charge = 5; return; }
+        if (M.slam && ch <= 1 && !m.cd.slam) { setIntent(G, m, { k: 'slam', tiles: areaTiles(m.x, m.y, 1, true), t: 1, mult: 1.9 }); m.cd.slam = 4; return; }
+        if (d === 1) { monAttack(G, m, t); return; }
+        stepToward(G, m, t.x, t.y); return;
+      case 'bomber':
+        if (d <= 1) { setIntent(G, m, { k: 'fuse', tiles: areaTiles(m.x, m.y, 1, true), t: 1, mult: 2.0, elem: 'fire' }); log(G, displayName(m) + ' begins to glow white-hot!', 'warn'); return; }
+        stepToward(G, m, t.x, t.y); return;
+      case 'summoner':
+        var mine = G.mons.filter(function (o) { return o.summoner === m.id; }).length;
+        if (!m.cd.summon && mine < 4 && sight) {
+          var made = 0;
+          for (var k2 = 0; k2 < 8 && made < 2; k2++) { var sx = m.x + DIRS8[k2][0], sy = m.y + DIRS8[k2][1]; if (free(G, { k: M.summons, ai: 'melee' }, sx, sy)) { var c = spawnMon(G, M.summons, sx, sy, { aware: true, lvl: m.lvl }); c.summoner = m.id; c.xp = Math.round(c.xp * 0.3); c.gold = 0; made++; emit(G, { t: 'fx', k: 'raise', x: sx, y: sy, col: m.col }); } }
+          if (made) { log(G, displayName(m) + ' calls forth help!', 'warn'); m.cd.summon = 7; return; }
+        }
+        if (d === 1) { monAttack(G, m, t, 0.8); return; }
+        if (d <= 3) { stepAway(G, m, t.x, t.y); return; }
+        if (d > 6 || !sight) stepToward(G, m, t.x, t.y);
+        return;
+      case 'healer':
+        if (!m.cd.heal) {
+          var hurt = G.mons.filter(function (o) { return !o.ally && o !== m && o.hp > 0 && o.hp < o.maxHp * 0.7 && cheb(o.x, o.y, m.x, m.y) <= 5; })[0];
+          if (hurt) {
+            if (M.shields) { addStatus(G, hurt, 'shield', 6, hurt.maxHp * 0.3); log(G, displayName(m) + ' wards ' + displayName(hurt) + '.', 'warn'); }
+            else { heal(G, hurt, hurt.maxHp * 0.3); log(G, displayName(m) + ' mends ' + displayName(hurt) + '.', 'warn'); }
+            emit(G, { t: 'proj', k: 'heal', x0: m.x, y0: m.y, x1: hurt.x, y1: hurt.y, hostile: true });
+            m.cd.heal = 3; return;
+          }
+        }
+        if (M.raises && !m.cd.raise) {
+          var cp = G.objs.filter(function (o) { return o.k === 'corpse' && cheb(o.x, o.y, m.x, m.y) <= 4 && !actorAt(G, o.x, o.y); })[0];
+          if (cp) { rm(G, cp); var sk = spawnMon(G, M.raises, cp.x, cp.y, { aware: true, lvl: m.lvl }); sk.xp = Math.round(sk.xp * 0.4); sk.gold = 0; emit(G, { t: 'fx', k: 'raise', x: cp.x, y: cp.y, col: m.col }); log(G, displayName(m) + ' raises the dead!', 'warn'); m.cd.raise = 8; return; }
+        }
+        if (d === 1) { monAttack(G, m, t, 0.8); return; }
+        if (d <= 3) { stepAway(G, m, t.x, t.y); return; }
+        if (d > 5 || !sight) stepToward(G, m, t.x, t.y);
+        return;
+      case 'thief':
+        if (m.stolen) {
+          m.fleeT = (m.fleeT || 0) + 1;
+          if (m.fleeT > 10 && !visible(G, m.x, m.y)) { G.mons.splice(G.mons.indexOf(m), 1); log(G, 'You hear mocking laughter fade into the dark. Your gold is gone.', 'bad'); return; }
+          stepAway(G, m, p.x, p.y); return;
+        }
+        if (d === 1) { monAttack(G, m, t); return; }
+        stepToward(G, m, t.x, t.y); return;
+      case 'ambush':
+        if (m.k === 'shade' && ch <= 2) m.revealed = true;
+        if (d === 1) { monAttack(G, m, t); return; }
+        if (m.k === 'lurker' && d > 5) return;
+        stepToward(G, m, t.x, t.y); return;
+      default: // melee, swarm, ghost
+        if (d === 1) { monAttack(G, m, t); return; }
+        stepToward(G, m, t.x, t.y);
+    }
+  }
+  function allyTurn(G, m) {
+    if (m.ttl) { m.ttl--; if (m.ttl <= 0) { killMon(G, m, null); return; } }
+    if (m.st.stun || m.st.frozen) return;
+    var best = null, bd = 1e9, p = G.p;
+    G.mons.forEach(function (o) {
+      if (o.ally || o.hp <= 0 || o.disguised || o.asleep && cheb(o.x, o.y, p.x, p.y) > 3) return;
+      var d = manh(o.x, o.y, m.x, m.y);
+      if (d <= 8 && d < bd && (visible(G, o.x, o.y) || d <= 3)) { bd = d; best = o; }
+    });
+    if (best) {
+      if (m.k === 'skelmage' && bd <= 5 && los(G, m.x, m.y, best.x, best.y)) { emit(G, { t: 'proj', k: 'bone', x0: m.x, y0: m.y, x1: best.x, y1: best.y }); strike(G, m, best, { mult: 0.9, kind: 'ranged' }); return; }
+      if (bd === 1) { monAttack(G, m, best); return; }
+      if (stepToward(G, m, best.x, best.y)) return;
+    }
+    if (manh(m.x, m.y, p.x, p.y) > 2) stepToward(G, m, p.x, p.y);
+  }
+
+  // ---- bosses ----------------------------------------------------------------
+  var MOVE_CD = { sweep: 3, strike: 0, lunge: 4, raise: 9, spores: 4, brood: 6, cloud: 5, wave: 4, crosswave: 6, bolt: 2, phase: 4, drowned: 10, slam: 3, bigslam: 5, erupt: 4, beam: 4, shades: 10, darkness: 14, crossbeam: 5 };
+  function bossMinions(G, m) { return G.mons.filter(function (o) { return o.summoner === m.id; }).length; }
+  function bossSummon(G, m, kind, n) {
+    var made = 0;
+    for (var k = 0; k < 16 && made < n; k++) {
+      var d = DIRS8[k % 8], dist = k < 8 ? 1 : 2, x = m.x + d[0] * dist, y = m.y + d[1] * dist;
+      if (!free(G, { k: kind, ai: 'melee' }, x, y)) continue;
+      var c = spawnMon(G, kind, x, y, { aware: true, lvl: m.lvl }); c.summoner = m.id; c.xp = Math.round(c.xp * 0.3); c.gold = 0; made++;
+      emit(G, { t: 'fx', k: 'raise', x: x, y: y, col: m.col });
+    }
+    return made;
+  }
+  function bossTurn(G, m) {
+    var p = G.p, B = D.BOSSES[m.boss], ph = B.phases[m.phase];
+    var d = manh(m.x, m.y, p.x, p.y), ch = cheb(m.x, m.y, p.x, p.y), sight = los(G, m.x, m.y, p.x, p.y);
+    if (!m.aware) {
+      if (sight && ch <= 7) { m.aware = true; if (!G.bossSeen) { G.bossSeen = true; G.modal = { k: 'dialog', who: m.boss, lines: B.intro, intro: true }; emit(G, { t: 'boss', id: m.id }); } }
+      return;
+    }
+    if (m.gcd > 0) { m.gcd--; }
+    else {
+      var cands = ph.moves.filter(function (mv) {
+        if (m.mcd[mv] > 0) return false;
+        switch (mv) {
+          case 'sweep': case 'slam': return ch <= 1;
+          case 'bigslam': return ch <= 2;
+          case 'lunge': return aligned(G, m, p, 7);
+          case 'phase': return ch <= 1;
+          case 'raise': case 'brood': case 'drowned': case 'shades': return bossMinions(G, m) < 3;
+          case 'darkness': return !p.st.dark;
+          case 'strike': return false;
+          default: return sight && ch <= 10;
+        }
+      });
+      if (cands.length && chance(G.r, 0.75)) {
+        var mv = pick(G.r, cands);
+        m.mcd[mv] = MOVE_CD[mv] || 3; m.gcd = 1;
+        bossMove(G, m, mv); return;
+      }
+    }
+    if (d === 1) { monAttack(G, m, p, 1.0); return; }
+    stepToward(G, m, p.x, p.y);
+  }
+  function bossMove(G, m, mv) {
+    var p = G.p, B = D.BOSSES[m.boss];
+    switch (mv) {
+      case 'sweep': setIntent(G, m, { k: 'sweep', tiles: areaTiles(m.x, m.y, 1, true), t: 1, mult: 1.9 }); break;
+      case 'slam': setIntent(G, m, { k: 'slam', tiles: areaTiles(m.x, m.y, 1, true), t: 1, mult: 2.1, elem: 'fire', fire: 2 }); break;
+      case 'bigslam': setIntent(G, m, { k: 'bigslam', tiles: areaTiles(m.x, m.y, 2, true), t: 2, mult: 2.3, elem: 'fire', fire: 3 }); log(G, B.name + ' raises the hammer high!', 'warn'); break;
+      case 'lunge': setIntent(G, m, { k: 'charge', tiles: chargeTiles(G, m, p, 8), t: 1, mult: 1.9 }); break;
+      case 'raise': if (bossSummon(G, m, 'skeleton', 2)) log(G, 'Skeletons claw their way up from the floor!', 'warn'); break;
+      case 'brood': if (bossSummon(G, m, 'sporeling', 3)) log(G, 'The Mother births a brood of sporelings!', 'warn'); break;
+      case 'drowned': if (bossSummon(G, m, 'drowned', 2)) log(G, 'Drowned scribes rise from the water!', 'warn'); break;
+      case 'shades': if (bossSummon(G, m, 'shade', 2)) log(G, 'Shades peel away from the King\'s shadow!', 'warn'); break;
+      case 'spores': setIntent(G, m, { k: 'area', tiles: areaTiles(p.x, p.y, 1), t: 2, mult: 1.3, elem: 'poison', status: { poison: 4 }, gas: 4 }); break;
+      case 'cloud':
+        var tl = [];
+        for (var i = 0; i < 4; i++) { var cx = p.x + rr(G.r, -3, 3), cy = p.y + rr(G.r, -3, 3); tl = tl.concat(areaTiles(cx, cy, 1)); }
+        tl = tl.concat([[p.x, p.y]]);
+        setIntent(G, m, { k: 'area', tiles: tl, t: 2, mult: 1.0, elem: 'poison', status: { poison: 3 }, gas: 5 }); break;
+      case 'wave': var hz = chance(G.r, 0.5); setIntent(G, m, { k: 'wave', tiles: crossTiles(G, p.x, p.y, hz, !hz, 12), t: 1, mult: 1.6, elem: 'wave' }); break;
+      case 'crosswave': setIntent(G, m, { k: 'wave', tiles: crossTiles(G, p.x, p.y, true, true, 12), t: 2, mult: 1.7, elem: 'wave' }); log(G, 'The tide gathers from every direction!', 'warn'); break;
+      case 'bolt': setIntent(G, m, { k: 'bolt', tiles: lineTiles(G, m.x, m.y, p.x, p.y, 12), t: 1, mult: 1.4, elem: 'wave' }); break;
+      case 'beam': setIntent(G, m, { k: 'bolt', tiles: lineTiles(G, m.x, m.y, p.x, p.y, 14), t: 1, mult: 2.2, beam: true, elem: 'void' }); break;
+      case 'crossbeam': setIntent(G, m, { k: 'area', tiles: crossTiles(G, m.x, m.y, true, true, 14).slice(1), t: 1, mult: 2.2, elem: 'void' }); log(G, 'The Black Lantern blazes in four directions!', 'warn'); break;
+      case 'phase':
+        var best = null;
+        for (var t = 0; t < 60; t++) { var x = m.x + rr(G.r, -7, 7), y = m.y + rr(G.r, -7, 7); var dd = cheb(x, y, p.x, p.y); if (dd >= 4 && dd <= 7 && free(G, m, x, y) && tile(G, x, y) !== T.LAVA) { best = [x, y]; break; } }
+        if (best) { emit(G, { t: 'fx', k: 'blink', x: m.x, y: m.y }); m.x = best[0]; m.y = best[1]; emit(G, { t: 'fx', k: 'blink', x: m.x, y: m.y }); log(G, B.name + ' dissolves into ink and reforms across the room.', 'info'); }
+        break;
+      case 'erupt':
+        var et = [[p.x, p.y]];
+        for (var j = 0; j < 5; j++) et.push([p.x + rr(G.r, -3, 3), p.y + rr(G.r, -3, 3)]);
+        setIntent(G, m, { k: 'area', tiles: et.concat(et.map(function (q) { return [q[0] + 1, q[1]]; })), t: 1, mult: 1.5, elem: 'fire', status: { burn: 3 }, fire: 3 });
+        log(G, 'The floor glows red beneath you!', 'warn'); break;
+      case 'darkness': p.st.dark = 8; log(G, 'The Black Lantern drinks your torchlight!', 'bad'); emit(G, { t: 'fx', k: 'flash', col: '#1a0a2a' }); break;
+    }
+  }
+  function bossPhaseCheck(G, m) {
+    var B = D.BOSSES[m.boss], nx = B.phases[m.phase + 1];
+    if (nx && m.hp > 0 && m.hp / m.maxHp <= nx.at) {
+      m.phase++; m.intent = null; m.gcd = 0;
+      if (nx.spd) m.spd = nx.spd;
+      emit(G, { t: 'phase', id: m.id, line: nx.line, name: B.name });
+      log(G, B.name + ': ' + nx.line, 'boss');
+      emit(G, { t: 'shake', n: 8 });
+    }
+  }
+  function bossDown(G, m) {
+    var h = G.hero, B = D.BOSSES[m.boss], r = G.r, s = pstats(G);
+    h.stats.bosses++; G.run.bosses++;
+    G.mons.filter(function (o) { return o.summoner === m.id; }).forEach(function (o) { o.hp = 0; G.mons.splice(G.mons.indexOf(o), 1); emit(G, { t: 'die', id: o.id, x: o.x, y: o.y, ch: o.ch, col: o.col }); });
+    emit(G, { t: 'shake', n: 12 }); emit(G, { t: 'fx', k: 'flash', col: '#ffffff' });
+    for (var i = 0; i < 3; i++) dropNear(G, m.x, m.y, { k: 'item', it: lootItem(G, { minRarity: i === 0 ? 'epic' : 'rare', luck: 1 + s.magicFind }) });
+    if (chance(r, 0.3)) dropNear(G, m.x, m.y, { k: 'item', it: lootItem(G, { minRarity: 'legendary', luck: 2 }) });
+    dropNear(G, m.x, m.y, { k: 'gold', n: goldAmount(G, r, m.gold) });
+    var embers = 1 + (G.depth >= 15 ? 1 : 0); h.mats.soul = (h.mats.soul || 0) + embers;
+    log(G, 'You claim ' + embers + ' Soul Ember' + (embers > 1 ? 's' : '') + '.', 'loot');
+    // the way on — and the way home
+    var cx = G.arena ? G.arena.x + (G.arena.w >> 1) : m.x, cy = G.arena ? G.arena.y + 2 : m.y;
+    setT(G, cx - 1, cy, T.STAIRS); setT(G, cx + 1, cy, T.PORTAL); G.stairs = [cx - 1, cy];
+    G.objs = G.objs.filter(function (o) { return !((o.x === cx - 1 || o.x === cx + 1) && o.y === cy && o.k !== 'item' && o.k !== 'gold'); });
+    var lines = [B.death];
+    if (G.mode === 'story' && G.depth <= D.STORY_FLOORS) {
+      var act = G.depth / 5;
+      if (h.story.cleared < act) { h.story.cleared = act; lines = lines.concat(D.STORY.cleared[act] || []); }
+      if (B.final) { h.story.ended = true; G.ending = true; }
+    }
+    G.modal = { k: 'dialog', who: m.boss, lines: lines, outro: true, ending: !!G.ending };
+    log(G, B.name + ' falls! A portal home shimmers open — and stairs lead deeper.', 'good');
+  }
+
+  // ===========================================================================
+  //  turn pipeline
+  // ===========================================================================
+  function act(G, a) {
+    if (G.over || G.modal) return false;
+    G._ps = null; G.p.moved = false;
+    var cost = 0;
+    if (a.t === 'move') cost = playerMove(G, a.dx, a.dy);
+    else if (a.t === 'wait') { cost = 100; G.p.rested = true; }
+    else if (a.t === 'use') cost = playerUse(G);
+    else if (a.t === 'ability') cost = useAbility(G, a.id, a.x, a.y);
+    else if (a.t === 'cons') cost = useCons(G, a.id, a.x, a.y);
+    if (cost < 0) { G._ps = null; computeFov(G); return true; }   // changed floor / left the dungeon
+    if (cost > 0) endTurn(G, G.p.st.haste ? 50 : cost);
+    else computeFov(G);
+    return cost > 0;
+  }
+  function endTurn(G, cost) {
+    var p = G.p, h = G.hero;
+    h.stats.turns++;
+    if (p.moved) p.still = 0; else p.still++;
+    G._ps = null;
+    advance(G, cost);
+    // stunned / frozen: the world keeps moving without you
+    var guard = 0;
+    while (!G.over && !G.modal && (p.st.stun || p.st.frozen) && guard++ < 6) { log(G, p.st.frozen ? 'You are frozen solid!' : 'You are stunned!', 'bad'); advance(G, 100); }
+    G._ps = null;
+    computeFov(G);
+    // notice newly visible enemies (UI uses this to interrupt travel)
+    var seenNow = hostilesVisible(G).map(function (m) { return m.id; });
+    var fresh = seenNow.filter(function (id) { return !(G.seenMons || []).some(function (x) { return x === id; }); });
+    G.seenMons = seenNow;
+    if (fresh.length) emit(G, { t: 'spot', n: fresh.length });
+    p.rested = false;
+  }
+  function advance(G, cost) {
+    buildFields(G);
+    var list = G.mons.slice();
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i]; if (m.hp <= 0 || G.mons.indexOf(m) < 0) continue;
+      var spd = m.spd * (m.st.slow ? 0.5 : 1) * (m.st.haste ? 2 : 1);
+      m.energy += spd * cost / 100;
+      var n = 0;
+      while (m.energy >= 100 && m.hp > 0 && !G.over && n++ < 3) { m.energy -= 100; monTurn(G, m); if (G.modal && G.modal.k === 'dialog') break; }
+    }
+    G.time += cost;
+    while (G.time >= 100 && !G.over) { G.time -= 100; worldTick(G); }
+  }
+  function tickStatuses(G, a) {
+    var isP = a === G.p, st = a.st, s = isP ? pstats(G) : null;
+    var t = tile(G, a.x, a.y);
+    if (st.burn && (t === T.WATER || t === T.DEEP)) delete st.burn;
+    ['poison', 'burn', 'bleed'].forEach(function (k) {
+      var e = st[k]; if (!e || a.hp <= 0) return;
+      var d = e.d;
+      if (isP) G.lastHazard = k === 'poison' ? 'poison' : k === 'burn' ? 'flames' : 'blood loss';
+      strike(G, null, a, { flat: d, kind: 'dot', elem: k });
+      e.t--; if (e.t <= 0) delete st[k];
+    });
+    if (a.hp <= 0) return;
+    if (st.regen) { heal(G, a, st.regen.v, true); st.regen.t--; if (st.regen.t <= 0) delete st.regen; }
+    ['stun', 'frozen', 'root', 'slow', 'weaken', 'mark', 'invis', 'haste', 'unbreak', 'inv', 'dark', 'sanct'].forEach(function (k) { if (st[k]) { st[k]--; if (st[k] <= 0) delete st[k]; } });
+    if (st.dodgeBuff) { st.dodgeBuff.t--; if (st.dodgeBuff.t <= 0) delete st.dodgeBuff; }
+    if (st.ramp) { st.ramp.t--; if (st.ramp.t <= 0) delete st.ramp; }
+    if (st.shield && st.shield.t < 900) { st.shield.t--; if (st.shield.t <= 0) delete st.shield; }
+    // ground effects
+    var k2 = a.y * G.w + a.x;
+    if (G.gas[k2] && a.fam !== 'fungus') { if (isP) G.lastHazard = 'poison gas'; addStatus(G, a, 'poison', 2, G.gas[k2].d); }
+    if (G.fire[k2]) { if (isP) G.lastHazard = 'fire'; addStatus(G, a, 'burn', 2, G.fire[k2].d); }
+    if (t === T.LAVA && !(a.fireproof || (MON[a.k] && MON[a.k].fireproof))) {
+      var mx = isP ? s.maxHp : a.maxHp, ld = Math.round(mx * (isP && s.flags.u_ember ? 0.08 : 0.16));
+      if (isP) G.lastHazard = 'lava';
+      strike(G, null, a, { flat: ld, kind: 'true', elem: 'fire' }); if (a.hp > 0) addStatus(G, a, 'burn', 3, ld * 0.3);
+    }
+    if (G.holy[k2]) { if (isP) heal(G, a, s.maxHp * 0.03, true); else if (!a.ally) strike(G, G.p, a, { flat: G.holy[k2].d * (UNDEADISH[a.fam] ? 1.5 : 1), kind: 'true', elem: 'holy' }); }
+  }
+  function worldTick(G) {
+    var p = G.p, h = G.hero, s = pstats(G), r = G.r, cr = C[h.cls].res;
+    G.turn++; G.floorTurns++;
+    // player upkeep
+    tickStatuses(G, p);
+    if (G.over) return;
+    var foes = hostilesVisible(G).length;
+    if (!s.noRegen) {
+      if (s.regen && G.turn % 4 === 0) heal(G, p, s.regen, true);
+      if (!foes && p.hp < s.maxHp) heal(G, p, Math.max(1, s.maxHp * 0.012), true);
+    }
+    var rg = s.resRegen;
+    if (cr.still && !p.moved) rg += cr.still;
+    if (cr.decay && !foes && !s.flags.trance) rg -= cr.decay;
+    if (h.cls === 'mage' && p.rested && s.flags.leyline) rg += s.resRegen * 3;
+    p.res = clamp(p.res + rg, 0, s.maxRes);
+    for (var id in p.cd) if (p.cd[id] > 0) p.cd[id]--;
+    if (s.flags.sanctified && p.st.sanct) consecrateAt(G, p.x, p.y, s.flags.holyground ? 2 : 1, 1, s.pow * 0.55);
+    // monsters upkeep
+    G.mons.slice().forEach(function (m) {
+      if (m.hp <= 0) return;
+      tickStatuses(G, m);
+      for (var k in m.cd) if (m.cd[k] > 0) m.cd[k]--;
+      if (m.mcd) for (var k3 in m.mcd) if (m.mcd[k3] > 0) m.mcd[k3]--;
+      if (hasElite(m, 'shielded') && G.turn % 5 === 0 && !(m.st.shield && m.st.shield.v > 0)) m.st.shield = { v: Math.round(m.maxHp * 0.25), t: 999 };
+    });
+    // ground effects decay
+    ['gas', 'fire', 'holy'].forEach(function (f) { for (var k in G[f]) { G[f][k].t--; if (G[f][k].t <= 0) delete G[f][k]; } });
+    // vents cycle: 0..3 — 2 = warning, 3 = burst
+    G.objs.forEach(function (o) {
+      if (o.k !== 'vent') return;
+      o.ph = (o.ph + 1) % 4;
+      if (o.ph === 3) {
+        var a = actorAt(G, o.x, o.y);
+        if (visible(G, o.x, o.y)) emit(G, { t: 'area', k: o.kind === 'gas' ? 'gas' : o.kind === 'flame' ? 'boom' : o.kind === 'void' ? 'void' : 'slam', tiles: [[o.x, o.y]], small: true });
+        if (o.kind === 'gas') gasAt(G, o.x, o.y, 1, 3, Math.max(2, G.ml * 1.2));
+        if (a) {
+          var mx = a === p ? s.maxHp : a.maxHp;
+          if (a === p) G.lastHazard = 'a ' + o.kind + ' vent';
+          if (o.kind === 'flame') { strike(G, null, a, { flat: Math.round(mx * 0.12), kind: 'true', elem: 'fire' }); if (a.hp > 0) addStatus(G, a, 'burn', 3, mx * 0.03); }
+          else if (o.kind === 'spike') { strike(G, null, a, { flat: Math.round(mx * 0.1), kind: 'true' }); if (a.hp > 0) addStatus(G, a, 'bleed', 3, mx * 0.02); }
+          else if (o.kind === 'void') { strike(G, null, a, { flat: Math.round(mx * 0.1), kind: 'true', elem: 'void' }); if (a.hp > 0) addStatus(G, a, 'weaken', 3); }
+        }
+      }
+    });
+    // delayed spells (meteor)
+    G.delayed = G.delayed.filter(function (e) {
+      e.t--; if (e.t > 0) return true;
+      emit(G, { t: 'fx', k: 'meteor', x: e.x, y: e.y, r: e.rad }); emit(G, { t: 'shake', n: 9 });
+      hostileIn(G, e.x, e.y, e.rad).forEach(function (m) { strike(G, G.p, m, { flat: Math.round(e.d * (0.9 + rf(r) * 0.2) * (1 - m.arm / (m.arm + 12 + 2 * h.level))), kind: 'true', elem: 'fire' }); if (m.hp > 0) addStatus(G, m, 'burn', 3, e.d * 0.1); });
+      fireAt(G, e.x, e.y, e.rad, 3, e.d * 0.08);
+      return false;
+    });
+    // the dark stirs: wandering monsters arrive over time
+    if (!G.boss && G.mode !== 'town') {
+      G.wanderT = (G.wanderT || 0) + 1;
+      if (G.wanderT >= 90 && (G.wanderers || 0) < 4) {
+        G.wanderT = 0;
+        var B = D.BIOMES[G.biome];
+        for (var t = 0; t < 80; t++) {
+          var x = ri(r, G.w), y = ri(r, G.h);
+          if (tile(G, x, y) !== T.FLOOR || actorAt(G, x, y) || blocksObj(G, x, y) || cheb(x, y, p.x, p.y) < 12 || visible(G, x, y)) continue;
+          var mk = pick(r, B.mons.filter(function (k) { return !MON[k].rare; }));
+          var wm = spawnMon(G, mk, x, y, { aware: true }); wm.lastSeen = [p.x, p.y];
+          G.wanderers = (G.wanderers || 0) + 1;
+          log(G, 'You hear something moving in the dark.', 'warn');
+          break;
+        }
+      }
+    }
   }

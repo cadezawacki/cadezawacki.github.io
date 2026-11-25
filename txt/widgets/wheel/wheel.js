@@ -157,9 +157,9 @@
   function makeWheel(m) {
     m = Math.max(0, m | 0);
     return BASE.map(function (x, i) {
+      if (m >= 3 && i === 23) return { k: 'bk', v: 0 };          // a late round grows a third BANKRUPT
       if (x === 'top') return { k: 'cash', v: TOPS[Math.min(m, 2)], top: 1 };
       if (typeof x === 'number') return { k: 'cash', v: x + 100 * Math.min(m, 4) };
-      if (m >= 3 && i === 23) return { k: 'bk', v: 0 };          // a late round grows a third BANKRUPT
       return { k: x, v: x === 'mys' ? 1000 : (x === 'bk' || x === 'lose') ? 0 : FREE_VAL };
     });
   }
@@ -776,7 +776,7 @@
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   function normSetup(o) {
     o = o && typeof o === 'object' ? o : {};
-    var seats = Array.isArray(o.seats) && o.seats.length ? o.seats.slice(0, 4) : [{ name: 'You', color: 0, cpu: 0 }, { name: 'Comet', color: 1, cpu: 2 }, { name: 'Maple', color: 2, cpu: 2 }];
+    var seats = Array.isArray(o.seats) && o.seats.length ? o.seats.slice(0, 4) : [{ name: 'Sunny', color: 0, cpu: 0 }, { name: 'Comet', color: 1, cpu: 2 }, { name: 'Maple', color: 2, cpu: 2 }];
     return {
       mode: o.mode === 'party' ? 'party' : 'solo',
       seats: seats.map(function (s, i) {
@@ -1011,6 +1011,8 @@
     var bb = S.keys.back, bon = human && !S.busy && (solving(ph) || (ph === 'bpick' && !!r.picks));
     bb.classList.toggle('on', bon); bb.disabled = !bon;
     S.kb.classList.toggle('solve', solving(ph));
+    var kbOn = !!r && /^(call|vowel|free|speedCall|bpick|solve|tossSolve|bsolve|mystery)$/.test(ph);
+    if (S.root.getAttribute('data-kb') !== (kbOn ? '1' : '0')) S.root.setAttribute('data-kb', kbOn ? '1' : '0');
   }
   function pressKey(L) {
     var b = S.keys[L];
@@ -1057,7 +1059,7 @@
     if (html !== S.catHtml) { S.catHtml = html; S.catEl.innerHTML = html; }
   }
   function say(html, cls) {
-    S.msgEl.innerHTML = html;
+    S.msgEl.innerHTML = html ? '<span>' + html + '</span>' : '';
     S.msgEl.className = 'wh-msg' + (cls ? ' ' + cls : '');
     var t = S.msgEl.textContent;
     if (S.live && t) S.live.textContent = t;
@@ -1111,7 +1113,7 @@
       }
       h = '<div class="wh-picks">' + slots + '</div>' + btn('enter', 'GO &#9656;', 'go', r.picks.length >= need.c + need.v ? '' : ' disabled');
     }
-    S.act.innerHTML = h;
+    S.act.innerHTML = h.replace(/<div class="wh-(hint|wait)">([\s\S]*?)<\/div>/g, '<div class="wh-$1"><span>$2</span></div>');
   }
 
   // ---- the wheel ----
@@ -2033,19 +2035,20 @@
     S.root.style.setProperty('--wh-th', th + 'px');
     S.coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
     var r = S.panel.getBoundingClientRect(), top = Math.max(0, Math.min(r.top || 0, 140)), mx = getComputedStyle(S.panel).maxHeight, mh = /px$/.test(mx) ? parseFloat(mx) : 0;
-    var room = vh - top - 10;
+    var room = vh - top - 8;
     if (mh > 0) room = Math.min(room, mh);
-    var D;
-    S.wmodal = false;
+    var D, mode = 'both', kbH = 3 * (S.coarse ? 44 : 40) + 8 + 6;
     if (wide) D = clamp(Math.min(room - 70, 430), 240, 430);
     else {
-      var chrome = chromeNow(r);
-      if (!r.height) chrome = 470;
-      D = Math.min(colW, room - chrome - 4, 400);
-      if (D < 170) { S.wmodal = true; D = Math.min(colW - 16, Math.round(vh * 0.55), 360); }
+      var base = r.height ? chromeBase() : 330;
+      D = Math.min(colW, room - base - kbH - 6, 400);
+      if (D < 190) { mode = 'swap'; D = Math.min(colW, room - base - 6, 360); }
+      if (D < 150) { mode = 'modal'; D = Math.min(colW - 16, Math.round(vh * 0.55), 360); }
     }
-    D = Math.max(120, Math.floor(D));
+    S.wmodal = mode === 'modal';
     S.panel.classList.toggle('wh-wmodal', S.wmodal);
+    S.panel.classList.toggle('wh-swap', mode === 'swap');
+    D = Math.max(120, Math.floor(D));
     var dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
     if (D !== S.wD || dpr !== S.wDpr) {
       S.wD = D; S.wDpr = dpr; S.wR = D / 2 / 1.16;
@@ -2053,24 +2056,27 @@
       S.wcv.style.width = D + 'px'; S.wcv.style.height = D + 'px';
       S.faceKey = '';
     }
-    S.wst.style.setProperty('--wh-wd', D + 'px');
     // the confetti layer covers the whole game
     var rr = S.root.getBoundingClientRect(), fd = Math.min(1.5, dpr);
     S.fxW = Math.max(1, Math.round(rr.width)); S.fxH = Math.max(1, Math.round(rr.height)); S.fxDpr = fd;
     S.fx.width = Math.round(S.fxW * fd); S.fx.height = Math.round(S.fxH * fd);
-    S.lay = { vw: vw, vh: vh, chrome: chromeNow(S.panel.getBoundingClientRect()) };
+    S.lay = { vw: vw, vh: vh, chrome: chromeBase() };
     buildLights();
     drawWheel();
   }
-  // the panel's height without the wheel (when the wheel sits in the column)
-  function chromeNow(r) {
-    var inFlow = !S.panel.classList.contains('wh-wmodal') && !S.panel.classList.contains('wh-wide');
-    return (r.height || 0) - (inFlow ? (S.wst.offsetHeight || 0) : 0);
+  // the panel's full content height without the wheel and the keyboard (whichever are in the column)
+  function chromeBase() {
+    var r = S.panel.getBoundingClientRect(), bd = S.panel.querySelector('.cade-panel-body');
+    if (!r.height || !bd) return 0;
+    var full = (r.height - bd.clientHeight) + bd.scrollHeight, wide = S.panel.classList.contains('wh-wide');
+    if (!wide && !S.panel.classList.contains('wh-wmodal') && S.wst.offsetHeight) full -= S.wst.offsetHeight + 6;
+    if (S.kb.offsetHeight) full -= S.kb.offsetHeight + 6;
+    return full;
   }
   function relayoutIfMoved() {
     if (!S || !S.lay || (Cade.isMinimized && Cade.isMinimized(S.panel))) return;
-    var ch = chromeNow(S.panel.getBoundingClientRect());
-    if (Math.abs(ch - S.lay.chrome) > 2 || S.lightsKey !== S.boardW.offsetWidth + 'x' + S.boardW.offsetHeight) layout();
+    var ch = chromeBase();
+    if (Math.abs(ch - S.lay.chrome) > 16 || S.lightsKey !== S.boardW.offsetWidth + 'x' + S.boardW.offsetHeight) layout();
   }
   function syncHead() {
     if (!S) return;

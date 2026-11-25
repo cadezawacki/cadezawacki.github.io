@@ -193,8 +193,8 @@
 }
 #povracer-panel.pr-side .pr-stage { grid-area: stage; margin: 0; }
 #povracer-panel.pr-side .pr-pad { display: contents; }
-#povracer-panel.pr-side .pr-pl { grid-area: pl; flex-direction: column; align-self: stretch; justify-content: flex-end; }
+#povracer-panel.pr-side .pr-pl { grid-area: pl; flex-direction: row; align-self: stretch; align-items: stretch; }
 #povracer-panel.pr-side .pr-pr { grid-area: pr; flex-direction: column-reverse; align-self: stretch; justify-content: flex-start; }
-#povracer-panel.pr-side .pr-pl button { width: 100%; flex: 1 1 0; max-height: 90px; height: auto; }
+#povracer-panel.pr-side .pr-pl button { width: auto; min-width: 0; flex: 1 1 0; height: auto; }
 #povracer-panel.pr-side .pr-pr button { width: 100%; flex: 1 1 0; max-height: 90px; height: auto; }
 #povracer-panel.pr-side .pr-pr .gas { flex: 1.6 1 0; max-height: 130px; }
