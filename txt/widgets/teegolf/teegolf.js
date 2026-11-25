@@ -805,7 +805,7 @@
 
   // ---- the tour: a field of invented pros, simulated rounds, purses ----
   var TOURS = [
-    { name: 'Rookie Series', purse: 25000, skill: [0.1, 0.48], holes: 9, lvl: 0, fee: 0 },
+    { name: 'Rookie Series', purse: 40000, skill: [0.1, 0.48], holes: 9, lvl: 0, fee: 0 },
     { name: 'Challenger Tour', purse: 120000, skill: [0.28, 0.66], holes: 9, lvl: 1 },
     { name: 'Pro Tour', purse: 650000, skill: [0.45, 0.83], holes: 18, lvl: 2 },
     { name: 'Legends Tour', purse: 2500000, skill: [0.62, 0.97], holes: 18, lvl: 3 }
@@ -1424,8 +1424,8 @@
       var occ = occY(Math.round(o.rx), o.d) * S.sc;
       if (o.k === 0) {
         var tt = o.t, spr = treeSprite(tt.k), h = tt.h * o.s, w = tt.r * 2.3 * o.s, top = o.y - h, vis = Math.min(o.y, occ) - top;
-        if (h < 1.2 || vis <= 0) continue;
-        c.globalAlpha = o.d > fog0 ? Math.max(0.15, 1 - (o.d - fog0) / (R.far - fog0) * 1.1) : 1;
+        if (h < 1.2 || vis <= 0 || o.d < 3) continue;
+        c.globalAlpha = o.d > fog0 ? Math.max(0.15, 1 - (o.d - fog0) / (R.far - fog0) * 1.1) : o.d < 9 ? (o.d - 3) / 6 * 0.75 + 0.25 : 1;
         c.drawImage(spr, 0, 0, 64, Math.max(1, 96 * vis / h), o.x - w / 2, top, w, vis);
         c.globalAlpha = 1;
       } else if (o.k === 1) drawFlag(c, o, occ);
@@ -1989,7 +1989,7 @@
     if (!p.cpu && !b.putt && fromLie === TEE && par > 3 && lieAt(H, b.x, b.y) !== OB && total > (rec.ld || 0) && res.kind === 'rest') { rec.ld = Math.round(total); persist(); }
     syncHud();
     saveRound();
-    setPad('wait'); S.waitTxt = 'tap to continue';
+    S.waitTxt = 'tap to continue'; setPad('wait');
   }
   function afterSettle() {
     var g = S.g;
@@ -2013,7 +2013,7 @@
     ch.res.push(Math.round(v * 10) / 10);
     S.settleDur = 2;
     syncHud(); saveRound();
-    setPad('wait'); S.waitTxt = 'tap to continue';
+    S.waitTxt = 'tap to continue'; setPad('wait');
   }
   function nextChallengeShot() {
     var g = S.g;
@@ -2164,7 +2164,7 @@
       var r = g.ch.res, sum = 0;
       r.forEach(function (v) { sum += v; });
       h += '<span class="tg-h1">' + (g.ch.kind === 'ctp' ? 'CLOSEST TO PIN' : 'LONG DRIVE') + ' <i>' + Math.min(r.length + 1, g.holes.length) + '/' + g.holes.length + '</i></span>';
-      h += '<span class="tg-st">' + (g.ch.kind === 'ctp' ? 'total <b>' + ydft(sum) + '</b>' : 'best <b>' + Math.max.apply(null, [0].concat(r)) + ' yd</b>') + '</span>';
+      h += '<span class="tg-st">' + (g.ch.kind === 'ctp' ? 'total <b>' + (r.length ? ydft(sum) : '—') + '</b>' : 'best <b>' + Math.max.apply(null, [0].concat(r)) + ' yd</b>') + '</span>';
     } else {
       h += '<span class="tg-h1">H' + (g.hi + 1) + '<i>/' + g.holes.length + '</i></span><span class="tg-par">PAR ' + H.par + ' · ' + H.len + 'y</span>';
       h += '<span class="tg-pls">';

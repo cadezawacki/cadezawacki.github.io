@@ -75,7 +75,7 @@
 .tg-art { margin: 0 auto; font: inherit; font-weight: 700; line-height: 1.2; white-space: pre; color: var(--accent); }
 .tg-tab { margin: 0; font: inherit; line-height: 1.5; white-space: pre; color: var(--text-muted); font-variant-numeric: tabular-nums; max-width: 100%; overflow-x: auto; }
 .tg-tab b { color: var(--text); font-weight: 700; }
-.tg-board { font-size: 11px; }
+.tg-board { font-size: 11px; margin: 0 auto; }
 .tg-keys { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: var(--radius-md, 6px); color: var(--text-muted); }
 .tg-keys b { color: var(--text); }
 .tg-tip { font-size: 11px; }

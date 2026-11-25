@@ -198,7 +198,7 @@ test('putting: the right pace holes a straight putt; too hard lips or runs by; s
   assert.strictEqual(start.lie, E.GREEN, 'start on the green');
   var yaw2 = Math.atan2(dirx, diry), b2 = E.simShot(tilted, start, { club: E.PUTTER, yaw: yaw2, power: 0.25, dev: 0 }, EQ0, e2);
   var moved = { x: b2.x - start.x, y: b2.y - start.y };
-  assert.ok(moved.x * -gx + moved.y * -gy > 0.05, 'the putt fell downhill');
+  assert.ok((moved.x * -gx + moved.y * -gy) / gm > 0.25, 'the putt fell downhill');
 });
 
 test('water is a one-stroke drop on dry land; OB is stroke and distance', function () {
