@@ -91,7 +91,7 @@
       surf: [70, 128, 150], deep: [10, 34, 58], mud: [92, 86, 70], blurb: 'A weedy shelf, then a cold drop-off.' },
     { id: 'pier', name: 'Saltwind Pier', short: 'Pier', lvl: 7, W: 46, maxD: 12, stand: 'pier', cur: 0, wave: 0.22, clar: 6.5, salt: true, n: 18, vis: 1.2,
       surf: [64, 140, 150], deep: [8, 42, 70], mud: [176, 158, 118], blurb: 'Swells, pilings and fast sea fish.' },
-    { id: 'ice', name: 'Frostbite Hole', short: 'Ice', lvl: 9, W: 26, maxD: 9, stand: 'ice', cur: 0, wave: 0, clar: 7, salt: false, n: 12, winter: true,
+    { id: 'ice', name: 'Frostbite Hole', short: 'Ice', lvl: 9, W: 26, maxD: 9, stand: 'ice', cur: 0, wave: 0, clar: 7, salt: false, n: 14, winter: true, vis: 2.5,
       surf: [96, 140, 170], deep: [12, 30, 52], mud: [84, 84, 80], blurb: 'Winter only. Jig through the ice.' },
     { id: 'deep', name: 'Blue Shelf', short: 'Deep sea', lvl: 12, W: 52, maxD: 120, stand: 'boat', cur: 0, wave: 0.32, clar: 26, salt: true, n: 26, boat: true, vis: 4, reelMul: 1.7,
       surf: [40, 120, 170], deep: [2, 10, 34], mud: [70, 70, 76], blurb: 'Needs a boat. Monsters a hundred metres down.' }
@@ -154,7 +154,7 @@
     { id: 'c', name: 'Crankbait', note: 'Floats at rest, dives ~2.5 m when reeled. Predators strike on the move.', sink: -0.18, dive: 2.6, ideal: 1.15, price: 120, lvl: 2 },
     { id: 'j', name: 'Jig', note: 'Sinks fast. Twitch it off the bottom; nibbling fish often hit a twitch.', sink: 1.7, ideal: 0.3, hop: 1.5, price: 160, lvl: 3 },
     { id: 'f', name: 'Dry Fly', note: 'Sits on the surface film. Skitter it with taps for trout and sunfish.', sink: 0, surface: true, ideal: 0.3, price: 260, lvl: 4 },
-    { id: 'd', name: 'Deep Rig', note: 'Heavy sinker and a fat bait. Plummets to the bottom. Salt water only.', ideal: 0.15, heavy: true, salt: true, price: 900, lvl: 8, scent: 3.2, sink: 7 }
+    { id: 'd', name: 'Deep Rig', note: 'Heavy sinker and a fat bait. Plummets to the bottom. Salt water only.', ideal: 0.15, heavy: true, salt: true, price: 900, lvl: 8, scent: 5, sink: 7 }
   ];
   var LURE = {};
   LURES.forEach(function (l, i) { l.i = i; LURE[l.id] = l; });
@@ -373,21 +373,50 @@
       tx: x, ty: y, tT: 0, lead: null, cd: 1 + r() * 3, t: 0, nib: 0, nibT: 0, win: 0, wig: r() * 6.28, gone: false, ox: (r() - 0.5) * 1.2, oy: (r() - 0.5) * 0.6
     };
   }
+  // Where a species likes to live along the cross-section: weed beds, rocks and
+  // pilings, deep water or the shallows. Fish get a home spot drawn by this.
+  var HAB_WEED = ' bluegill pumpkinseed shiner crappie lmbass pike muskie perch bowfin thunderjaw frostmaw gar whitebass ';
+  var HAB_ROCK = ' smallmouth rockbass seabass sheepshead grouper snapper brown sauger drum burbot reddrum ';
+  function habitat(W, s, x) {
+    var lay = W.lay, b = depthAt(lay, x), need = W.L.id === 'deep' ? 2 : Math.max(0.6, Math.min(1.4, s.d1 * lay.maxD * 0.25));
+    if (b < need) return 0.03;
+    var w = 1, f = b / lay.maxD, i;
+    if (W.L.id !== 'deep') {
+      if (s.d0 >= 0.5) w *= 0.25 + 1.5 * f;                 // bottom dwellers: the deeper, the better
+      else if (s.d1 <= 0.6) w *= 1.2 - 0.6 * Math.abs(f - 0.4);   // shallow and mid-water fish: the shelf
+    }
+    if (W.L.stand === 'bank' || W.L.stand === 'pier') w *= clamp((x - W.st.minX) / 5, 0.25, 1);   // wary of the bank right under the angler
+    if (W.st.hole) w *= 1 + 1.5 * Math.exp(-Math.abs(x - W.st.hole) / 7);   // the hole was drilled over a good spot
+    var tag = ' ' + s.id + ' ';
+    if (HAB_WEED.indexOf(tag) >= 0) for (i = 0; i < lay.plants.length; i++) if (Math.abs(lay.plants[i].x - x) < 2.5) { w *= 1.8; break; }
+    if (HAB_ROCK.indexOf(tag) >= 0) {
+      for (i = 0; i < lay.rocks.length; i++) if (Math.abs(lay.rocks[i].x - x) < 2.2) { w *= 3; break; }
+      for (i = 0; i < lay.posts.length; i++) if (Math.abs(lay.posts[i] - x) < 2.5) { w *= 3; break; }
+    }
+    return w;
+  }
+  function pickHome(W, s) {
+    var r = W.r, lo = W.st.minX + 1.5, hi = W.lay.W - 0.6, xs = [], ws = [];
+    for (var i = 0; i < 6; i++) { var x = lo + r() * (hi - lo); xs.push(x); ws.push(habitat(W, s, x)); }
+    return xs[pickW(r(), ws)];
+  }
   function cruise(f) { return (0.22 + 0.55 * Math.sqrt(Math.min(3.5, f.lm))) * f.sp.spd; }
   function spawnFish(W, edge) {
     var r = W.r, s = pickSpecies(r, W.L.id, W.cond, W.legend);
     if (!s) return;
     if (s.rar === 4) W.legend = true;
-    var lo = W.st.minX + 1.2, x = edge ? (r() < 0.75 ? W.lay.W - 0.6 : lo + r() * (W.lay.W - lo)) : lo + r() * (W.lay.W - lo - 0.5);
+    var lo = W.st.minX + 1.2, home = pickHome(W, s), x = edge && r() < 0.4 ? W.lay.W - 0.6 : clamp(home + (r() - 0.5) * 4, lo, W.lay.W - 0.5);
     var b = bandY(W, s, x), y = lerp(b[0], b[1], r());
     var lead = newFish(W, s, x, y);
+    lead.home = home;
     if (s.rar === 4) { var big = rollSize(r, s, 1.2); lead.w = big.w; lead.len = big.len; lead.lm = big.len * 0.0254; }
     W.fish.push(lead);
     if (s.sch) {
       var k = 2 + Math.floor(r() * 3);
       for (var i = 0; i < k; i++) {
-        var m = newFish(W, s, clamp(x + (r() - 0.5) * 2, lo, W.lay.W - 0.4), clamp(y + (r() - 0.5) * 0.8, b[0], b[1]));
-        m.lead = lead; W.fish.push(m);
+        var mx = clamp(x + (r() - 0.5) * 2, lo, W.lay.W - 0.4), mb = bandY(W, s, mx);
+        var m = newFish(W, s, mx, clamp(y + (r() - 0.5) * 0.8, mb[0], mb[1]));
+        m.lead = lead; m.home = home; W.fish.push(m);
       }
     }
   }
@@ -453,10 +482,12 @@
   // ---- the lure in the water ----
   function lureBottom(W, x) { return depthAt(W.lay, x) - 0.1; }
   function stepLure(W, dt, inp) {
-    var lu = W.lure, d = lu.def, st = W.st, g = W.gear, c = W.cond, reel = !!inp.reel;
+    var lu = W.lure, d = lu.def, st = W.st, g = W.gear, c = W.cond;
+    if (lu.quickT > 0) { lu.quickT -= dt; if (lu.quickT <= 0) lu.quick = true; }
+    var reel = !!inp.reel || !!lu.quick, fast = lu.quick ? 4 : 1;      // an empty line comes back fast
     var bot = lureBottom(W, lu.x), ax = st.anc.x, ay = W.st.hole ? -1 : st.anc.y;
     var dx = ax - lu.x, dy = ay - lu.y, dl = Math.hypot(dx, dy) || 1, ux = dx / dl, uy = dy / dl;
-    var rs = g.reel.speed, tvx = 0, tvy = 0, cur = W.L.cur * (1 - 0.5 * clamp(lu.y / W.lay.maxD, 0, 1));
+    var rs = lu.quick ? Math.max(g.reel.speed * fast, 6) : g.reel.speed, tvx = 0, tvy = 0, cur = W.L.cur * (1 - 0.5 * clamp(lu.y / W.lay.maxD, 0, 1));
     var top = st.iceT ? (Math.abs(lu.x - st.hole) < 0.35 ? 0.05 : st.iceT + 0.05) : d.surface ? 0.02 : 0.05;
     if (d.bob) {
       // a float on top, the bait hanging under it at the set depth
@@ -471,9 +502,9 @@
       lu.vx = (lu.x - px) / dt; lu.vy = (lu.y - py) / dt;
     } else {
       if (reel) {
-        var k = rs * (d.surface ? 0.55 : d.heavy ? 0.8 : 1) * (W.L.reelMul ? W.L.reelMul * 1.5 : 1);
+        var k = rs * (d.surface ? 0.55 : d.heavy ? 0.8 : 1) * (W.L.reelMul && lu.y > 12 ? W.L.reelMul * 1.5 : 1);
         tvx = ux * k; tvy = uy * k;
-        if (d.dive) { var dv = Math.min(d.dive, bot - 0.2); if (!st.hole) tvy = clamp((dv - lu.y) * 1.6, -0.8, 1.1) + uy * k * 0.25; }
+        if (d.dive && !lu.quick) { var dv = Math.min(d.dive, bot - 0.2); if (!st.hole) tvy = clamp((dv - lu.y) * 1.6, -0.8, 1.1) + uy * k * 0.25; }
         if (d.rise) tvy -= d.rise * 0.4;
         if (d.surface) tvy = 0;
       } else {
@@ -486,7 +517,7 @@
       lu.x += lu.vx * dt; lu.y += lu.vy * dt;
       if (d.surface) lu.y = 0.03;
     }
-    if (inp.twitch) twitch(W, inp.twitch);
+    if (inp.twitch && !lu.quick) twitch(W, inp.twitch);
     if (lu.y > bot) { lu.y = bot; lu.vy = Math.min(0, lu.vy); lu.vx *= 0.9; }
     if (lu.y < top) { lu.y = top; lu.vy = Math.max(0, lu.vy); }
     lu.x = clamp(lu.x, st.hole ? st.hole - 1.5 : st.minX - 0.5, W.lay.W - 0.3);
@@ -497,6 +528,13 @@
     lu.maxY = Math.max(lu.maxY || 0, lu.y);
     var near = st.hole ? lu.y < 0.45 && (lu.maxY > 0.9 || W.t - lu.landT > 1.5) : (lu.x <= st.minX + 0.15 || (Math.abs(lu.x - st.anc.x) < 1.4 && lu.y < 0.5 && reel));
     if (near && reel && W.t - lu.landT > 0.6) { W.phase = 'ready'; W.hookBait = !!lu.baited && W.hookBait; W.lure = null; releaseBiter(W, false); ev(W, 'in'); }
+  }
+  // One tap: wind the line straight back in, fast (nothing bites a lure on its way home).
+  function reelIn(W) {
+    if (W.phase !== 'fishing' || !W.lure || W.lure.quick) return false;
+    if (W.biter) releaseBiter(W, false);
+    W.lure.quick = true;
+    return true;
   }
   function twitch(W, n) {
     var lu = W.lure, d = lu.def;
@@ -519,7 +557,7 @@
   // How much a fish wants this lure moving like this.
   function appeal(W, f) {
     var lu = W.lure, d = lu.def, s = f.sp;
-    if (!lu.baited && d.bob) return 0;
+    if ((!lu.baited && d.bob) || lu.quick) return 0;
     var a = (s.lures[d.id] || 0.04) * activity(s, W.cond);
     if (d.ideal > 0) {
       var sp = lu.moving ? lu.spd : 0;
@@ -604,7 +642,10 @@
           else {
             f.tT -= dt;
             if (f.tT <= 0 || Math.hypot(f.tx - f.x, f.ty - f.y) < 0.3) {
-              f.tx = clamp(f.x + (r() - 0.5) * 10, W.st.minX + 1, W.lay.W - 0.4);
+              // roam around a home spot; now and then move house (schools drift about the water)
+              if (f.home == null || r() < 0.12) f.home = pickHome(W, s);
+              f.tx = clamp(f.home + (r() - 0.5) * 12, W.st.minX + 1.5, W.lay.W - 0.4);
+              if (habitat(W, s, f.tx) < 0.05) f.tx = f.home;
               var b2 = bandY(W, s, f.tx);
               f.ty = lerp(b2[0], b2[1], r()); f.tT = 3 + r() * 6;
               if (r() < 0.06 && f.x > W.lay.W - 4 && W.fish.length > 4) f.leave = true;
@@ -616,20 +657,22 @@
             var dx = lu.x - f.x, dy = lu.y - f.y, dd = Math.hypot(dx, dy * 1.4);
             if (dd < vision(W, f)) {
               var ap = appeal(W, f);
-              if (r() < ap * 0.9 * dt) { f.st = 'follow'; f.t = 0; }
+              if (r() < ap * 1.4 * dt) { f.st = 'follow'; f.t = 0; }
               else if (r() < 0.25 * dt) f.cd = 2 + r() * 3;
-            } else if (dd < vision(W, f) * 2.6 && !L && r() < appeal(W, f) * 0.5 * dt) {
+            } else if (dd < vision(W, f) * 2.2 && !L && r() < appeal(W, f) * 0.9 * dt) {
               f.tx = lu.x + (r() - 0.5) * 1.5; f.ty = lu.y + (r() - 0.5) * 0.8; f.tT = 4;       // drawn over to have a look
             }
           }
           break;
         }
         case 'follow': {
-          if (!lu || (!lu.baited && (lu.def.bob || lu.def.scent))) { f.st = 'wander'; f.cd = 3; break; }
+          if (!lu || (!lu.baited && (lu.def.bob || lu.def.scent))) { f.st = 'wander'; f.cd = 3; f.tT = 0; break; }
           var side = f.x < lu.x ? -1 : 1, mx = lu.x + side * f.lm * 0.45, my = lu.y + 0.02;
           steerTo(f, mx, my, cr * 2, dt, 3);
           var dist = Math.hypot(lu.x - f.x, lu.y - f.y), close = dist < 0.3 + f.lm * 0.55;
-          if (f.t > 9 || (lu.moving && lu.spd > 1.9 * s.spd)) { f.st = 'wander'; f.cd = 3 + r() * 4; break; }
+          if (dist > 2 && f.t > 2 && f.t < 30) f.t -= dt * 0.75;   // the swim over counts for less than dawdling at the lure
+          // fish don't trail a lure far from their patch, or into the shallows at the angler's feet
+          if (f.t > 9 || (lu.moving && lu.spd > 1.9 * s.spd) || (!W.st.hole && lu.x < W.st.minX + 2.5) || (f.home != null && Math.abs(lu.x - f.home) > 8 * (W.L.vis || 1))) { f.st = 'wander'; f.cd = 3 + r() * 4; f.tT = 0; break; }
           if (close) {
             if (lu.moving && lu.spd > 0.25) {
               if (s.chase && !W.biter && r() < 1.4 * appeal(W, f) * dt) strike(W, f);
@@ -659,7 +702,7 @@
           lu.x += (f.vx * 0.3) * dt; lu.y += 0.2 * dt;
           if (f.t > f.win) {
             ev(W, 'missed', { x: f.x, y: f.y, bait: !!(lu.def.bob || lu.def.scent) });
-            if (lu.def.bob || lu.def.scent) { lu.baited = false; W.hookBait = false; }
+            if (lu.def.bob || lu.def.scent) { lu.baited = false; W.hookBait = false; lu.quickT = 0.8; }
             flee(W, f, lu.x, lu.y);
           }
           break;
@@ -671,19 +714,20 @@
         }
       }
       // schoolmates keep a little room
-      if (s.sch && f.st === 'wander') {
+      if (s.sch && f.st === 'wander' && f.lead) {
         for (j = 0; j < fish.length; j++) {
           var o = fish[j];
           if (o === f || o.sp !== s) continue;
           var ex = f.x - o.x, ey = f.y - o.y, e2 = ex * ex + ey * ey;
-          if (e2 < 0.16 && e2 > 1e-6) { f.vx += ex / e2 * 0.02; f.vy += ey / e2 * 0.02; }
+          if (e2 < 0.16 && e2 > 1e-6) { var kk = dt * 0.08 / Math.max(0.05, e2); f.vx += ex * kk; f.vy += ey * kk * 0.5; }
         }
       }
       f.x += f.vx * dt; f.y += f.vy * dt;
       var bot = depthAt(W.lay, f.x) - 0.12, top = W.st.iceT ? W.st.iceT + 0.1 : (s.d0 < 0.05 ? 0.06 : 0.15);
       if (f.y > bot) { f.y = bot; f.vy = Math.min(0, f.vy); if (f.st === 'wander') f.ty = Math.min(f.ty, bot - 0.2); }
       if (f.y < top) { f.y = top; f.vy = Math.max(0, f.vy); }
-      if (f.x < W.st.minX + 0.6) { f.x = W.st.minX + 0.6; f.vx = Math.abs(f.vx); }
+      var xmin = W.st.hole ? 0.8 : W.st.minX + 0.6;              // under the ice they swim beneath your boots too
+      if (f.x < xmin) { f.x = xmin; f.vx = Math.abs(f.vx); }
       if (Math.abs(f.vx) > 0.04) f.dir = f.vx > 0 ? 1 : -1;
       if (f.x > W.lay.W + 1) f.gone = true;
     }
@@ -832,7 +876,7 @@
     }
     if (why === 'throw') {                                   // it swims off; the lure is still on the line
       W.phase = 'fishing';
-      if (W.lure) { W.lure.x = clamp(f.x, W.st.minX, W.lay.W - 0.3); W.lure.y = Math.max(0.1, f.y); W.lure.vx = 0; W.lure.vy = 0; W.lure.baited = false; W.lure.landT = W.t; W.lure.bx = W.lure.x; }
+      if (W.lure) { W.lure.x = clamp(f.x, W.st.minX, W.lay.W - 0.3); W.lure.y = Math.max(0.1, f.y); W.lure.vx = 0; W.lure.vy = 0; W.lure.baited = false; W.lure.landT = W.t; W.lure.bx = W.lure.x; W.lure.quickT = 1; }
       f.st = 'flee'; f.t = 0; f.cd = 15; f.tx = W.lay.W + 2; f.ty = f.y; f.leave = true;
       W.fish.push(f);
     } else { W.phase = 'ready'; W.lure = null; f.st = 'flee'; f.t = 0; f.cd = 30; f.leave = true; f.tx = W.lay.W + 2; W.fish.push(f); }
@@ -866,7 +910,7 @@
       rod: 0, reel: 0, line: 0, owned: { rod: [0], reel: [0], line: [0] }, lures: { b: 1, s: 1 }, lure: 'b', bait: 20,
       up: { creel: 0, cooler: 0, finder: 0, boat: 0 }, creel: [], journal: {}, contracts: [], cday: 0, tday: 0,
       stats: { caught: 0, released: 0, sold: 0, earned: 0, snaps: 0, lost: 0, tWins: 0, tPlayed: 0, cDone: 0, days: 0, best: null },
-      diff: 'normal', amb: 1, floatD: 1.5, drag: 0.65, daily: {}, seen: 0, today: { n: 0, rel: 0, earn: 0 }
+      diff: 'normal', amb: 1, floatD: 1.5, drag: 0.65, daily: {}, seen: 0, tut: 0, today: { n: 0, rel: 0, earn: 0 }
     };
   }
   function normSave(o) {
@@ -897,7 +941,7 @@
     s.amb = o.amb === 0 ? 0 : 1;
     s.floatD = num(o.floatD, 1.5, 0.5, 8); s.drag = num(o.drag, 0.65, 0.4, 0.9);
     if (o.daily && typeof o.daily === 'object') for (var dk in o.daily) if (/^\d{4}-\d\d-\d\d$/.test(dk) && isFinite(+o.daily[dk])) s.daily[dk] = +o.daily[dk];
-    s.seen = o.seen | 0;
+    s.seen = o.seen | 0; s.tut = o.tut ? 1 : 0;
     if (o.today) s.today = { n: o.today.n | 0, rel: o.today.rel | 0, earn: +o.today.earn || 0 };
     return s;
   }
@@ -1044,7 +1088,7 @@
     standOf: standOf, genLayout: genLayout, depthAt: depthAt, speciesAt: speciesAt, activity: activity, legendReady: legendReady, spawnWeight: spawnWeight,
     pickSpecies: pickSpecies, rollSize: rollSize, freshness: freshness, priceOf: priceOf, releaseRep: releaseRep, catchXp: catchXp, cumXp: cumXp, levelOf: levelOf, absMin: absMin,
     gearStats: gearStats, newWorld: newWorld, spawnFish: spawnFish, castRange: castRange, castAim: castAim, cast: cast, hook: hook, twitch: twitch, appeal: appeal, light: light,
-    strike: strike, startFight: startFight, stepFight: stepFight, endFight: endFight, stepWorld: stepWorld, fmax: fmax, cruise: cruise,
+    strike: strike, reelIn: reelIn, pickHome: pickHome, habitat: habitat, startFight: startFight, stepFight: stepFight, endFight: endFight, stepWorld: stepWorld, fmax: fmax, cruise: cruise,
     newSave: newSave, normSave: normSave, creelCap: creelCap, locOpen: locOpen, logCatch: logCatch, sellCreel: sellCreel,
     genContracts: genContracts, contractEvent: contractEvent, newTourney: newTourney, stepTourney: stepTourney, standings: standings, bagW: bagW, addBag: addBag,
     dailySpec: dailySpec
@@ -1803,6 +1847,45 @@
 
   // ---- the canvas HUD: meters, cues and messages ----
   function pill(c, x, y, w, h, fill) { c.fillStyle = fill; c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, Math.min(h / 2, 10)); else c.rect(x, y, w, h); c.fill(); }
+  function runDir(F) { return F.dark || F.air ? 0 : Math.abs(F.f.vx) > 0.15 ? (F.f.vx > 0 ? 1 : -1) : 0; }
+  function hint(W) {
+    var th = S.th, lu = W.lure, F = W.fight, tch = S.coarse;
+    if (W.phase === 'ready') return S.charge && S.charge.on ? null : { t: W.st.hole ? (tch ? 'Tap DROP to send the jig down' : 'Space or DROP: send the jig down') : tch ? 'HOLD CAST, let go at the top — or drag back on the water' : 'HOLD Space (or CAST), let go at the top of the meter' };
+    if (W.phase === 'fishing' && lu) {
+      if (W.biter && W.biter.st === 'strike') return { t: 'BITE!  Tap HOOK now', col: th.gold, big: true };
+      if (lu.quick) return { t: 'Reeling in…' };
+      if (W.biter && W.biter.st === 'nibble') return { t: 'Nibble… wait for the bite — don\'t hook yet' };
+      if (!lu.baited && (lu.def.bob || lu.def.scent)) return { t: 'Bait gone — tap REEL IN and cast again', col: th.gold };
+      if (lu.def.bob) return { t: 'Wait for the float to plunge, then tap HOOK' };
+      var tk = tch ? '' : ' (T)';
+      return { t: lu.def.hop ? 'TWITCH' + tk + ' to hop the jig · HOLD REEL to bring it in' : 'HOLD REEL to retrieve · TWITCH' + tk + ' to tempt' };
+    }
+    if (F) {
+      var dir = runDir(F), cn = -S.steer * dir;
+      if (F.air) return { t: 'JUMP!  LET GO of reel', col: th.gold, big: true };
+      if (F.T > 0.85) return { t: S.inpReel ? 'LET GO — line about to snap!' : 'Letting it run… wait for green', col: th.red, big: S.inpReel };
+      if (F.slackT > 0.5) return { t: 'Slack line!  HOLD to reel', col: th.gold, big: true };
+      if (dir && F.mode === 'run' && cn < 0.3) return { t: 'Steer ' + (dir > 0 ? '\u25C0' : '\u25B6') + ' against the run', col: th.acc };
+      if (F.sta <= 0) return { t: 'It\'s tired — HOLD to reel it in', col: th.green };
+      return { t: S.inpReel ? 'Reeling — keep it out of the red' : 'HOLD to reel · let go in the red' };
+    }
+    return null;
+  }
+  // live pad state: pressed reel, a glowing HOOK on a bite, the steer to press
+  function syncLive() {
+    var W = S.W, F = W.fight, rb = S.pad.querySelector('[data-hold="reel"]'), hb = S.pad.querySelector('[data-act="hook"]');
+    if (rb) rb.classList.toggle('on', !!S.inpReel);
+    if (hb) hb.classList.toggle('hot', !!(W.phase === 'fishing' && W.biter && W.biter.st === 'strike'));
+    if (F && rb) {
+      var lab = F.air ? 'Let go — jump!' : F.T > 0.85 ? (S.inpReel ? 'LET GO!' : 'Letting it run') : S.inpReel ? 'Reeling…' : 'Hold to reel';
+      var el = rb.querySelector('.fs-rl');
+      if (el && el.textContent !== lab) el.textContent = lab;
+      rb.classList.toggle('danger', F.T > 0.85 && S.inpReel);
+      var dir = runDir(F), l = S.pad.querySelector('[data-hold="l"]'), r = S.pad.querySelector('[data-hold="r"]');
+      if (l) l.classList.toggle('hint', dir > 0);
+      if (r) r.classList.toggle('hint', dir < 0);
+    }
+  }
   function drawHud(c, V, W) {
     var SW = S.SW, SH = S.SH, th = S.th, F = W.fight, f = th.font;
     var panelBg = css(th.dark ? [16, 18, 22] : [255, 255, 255], 0.78), tx = css(th.text), mu = css(th.muted);
@@ -1824,16 +1907,19 @@
     // the fight panel
     if (F) {
       var bw = 16, bh = Math.min(200, SH * 0.5), bx = SW - bw - 12, by = SH * 0.5 - bh / 2 + 10, T = clamp(F.T, 0, 1);
-      pill(c, bx - 6, by - 28, bw + 12, bh + 40, panelBg);
+      pill(c, bx - 40, by - 28, bw + 46, bh + 40, panelBg);
       var zones = [[0, 0.6, th.green], [0.6, 0.85, th.gold], [0.85, 1, th.red]];
       zones.forEach(function (z) { c.fillStyle = css(z[2], 0.28); c.fillRect(bx, by + bh * (1 - z[1]), bw, bh * (z[1] - z[0])); });
       var tc = T > 0.85 ? th.red : T > 0.6 ? th.gold : th.green;
       c.fillStyle = css(tc); c.fillRect(bx + 3, by + bh * (1 - T), bw - 6, bh * T);
       var dragT = Math.min(W.gear.reel.drag, W.gear.line.lb * W.dragSet) / W.gear.line.lb;
       c.fillStyle = tx; c.fillRect(bx - 3, by + bh * (1 - dragT) - 1, bw + 6, 2);
-      c.font = '700 9px ' + f; c.textAlign = 'center'; c.fillStyle = tx; c.fillText('LINE', bx + bw / 2, by - 16);
+      c.font = '700 9px ' + f; c.textAlign = 'center'; c.fillStyle = tx; c.fillText('TENSION', bx - 12, by - 16);
       c.font = '600 8px ' + f; c.fillStyle = mu; c.fillText('drag', bx + bw / 2, by + bh * (1 - dragT) - 8);
-      if (T > 0.85 && (S.t * 6 | 0) % 2) { c.font = '700 13px ' + f; c.fillStyle = css(th.red); c.textAlign = 'right'; c.fillText('EASE OFF!', bx - 12, by + 12); }
+      c.font = '700 8px ' + f; c.textAlign = 'right';
+      c.fillStyle = css(th.red); c.fillText('SNAP', bx - 9, by + bh * 0.075);
+      c.fillStyle = css(th.gold); c.fillText('risky', bx - 9, by + bh * 0.275);
+      c.fillStyle = css(th.green); c.fillText('safe', bx - 9, by + bh * 0.7);
       // fish energy, line out
       var ew = Math.min(180, SW * 0.42), ex = SW / 2 - ew / 2, ey = 10, en = clamp(F.sta / F.sta0, 0, 1);
       pill(c, ex - 8, ey - 4, ew + 16, 34, panelBg);
@@ -1859,7 +1945,6 @@
         c.fillStyle = css(th.acc); c.beginPath(); c.arc(gx + 28 + S.steer * 26, gy + 1.5, 5, 0, 6.283); c.fill();
         c.font = '600 8px ' + f; c.fillStyle = mu; c.textAlign = 'center'; c.fillText('ROD', gx + 28, gy - 8);
       }
-      if (F.air) { c.font = '700 14px ' + f; c.fillStyle = css(th.gold); c.textAlign = 'center'; c.fillText('JUMP! LET OFF THE REEL', SW / 2, ey + 48); }
     }
     // tournament / derby board
     if (S.mode === 'tour' && S.tour) {
@@ -1880,9 +1965,15 @@
       c.font = '700 9px ' + f; c.textAlign = 'left'; c.fillStyle = css(th.acc); c.fillText('DAILY DERBY ' + clockStr(lft).slice(1), 16, 18);
       c.fillStyle = tx; c.font = '500 9px ' + f; c.fillText('bag ' + bagW(S.daily.bag).toFixed(2) + ' lb (best ' + S.daily.lim + ')', 16, 32);
     }
-    // bait / status hints
-    if (W.phase === 'fishing' && W.lure && !W.lure.baited && (W.lure.def.bob || W.lure.def.scent) && !F) {
-      c.font = '600 10px ' + f; c.textAlign = 'center'; c.fillStyle = css(th.gold); c.fillText('Bait stolen — reel in and recast', SW / 2, SH - 14);
+    // the live prompt: what to do right now
+    var hn = S.phase === 'water' && !S.paused ? hint(W) : null;
+    if (hn) {
+      var hs = hn.big ? 15 : 12, hy = SH - 22;
+      c.font = '700 ' + hs + 'px ' + f; c.textAlign = 'center';
+      var hw = Math.min(SW - 16, c.measureText(hn.t).width + 28);
+      pill(c, SW / 2 - hw / 2, hy - hs / 2 - 7, hw, hs + 14, hn.col ? css(hn.col, 0.92) : panelBg);
+      c.fillStyle = hn.col === th.gold ? '#1a1200' : hn.col ? (S.th.dark ? '#111' : '#fff') : tx;
+      c.fillText(hn.t, SW / 2, hy + 1, SW - 24);
     }
     // messages
     var m = S.msg;
@@ -2122,8 +2213,8 @@
         case 'splash': splashFx(e.x, e.big); S.snd.splash(e.big); setPad(W.phase === 'fight' ? 'fight' : 'fishing'); break;
         case 'drop': S.fx.rip.push({ x: e.x, t: 0, T: 1, s: 0.5 }); S.snd.tone(260, 0.1, 'sine', 0.03, 150); setPad('fishing'); break;
         case 'nibble': S.cue = 0.5 * e.k; S.bobDip = 0.35 + 0.3 * e.k; S.snd.tone(900, 0.03, 'square', 0.012 + 0.012 * W.gear.rod.sens); haptic(8); if (W.lure) S.fx.rip.push({ x: W.lure.def.bob ? W.lure.bx : W.lure.x, t: 0, T: 0.7, s: 0.3 }); live('Nibble'); break;
-        case 'strike': S.cue = 1.2; S.bobDip = 1.5; msg('STRIKE! Hook it!', { big: true, col: S.th.gold, T: e.win + 0.2 }); S.snd.tone(140, 0.16, 'triangle', 0.08, 70); haptic(35); flashHook(); break;
-        case 'hooked': msg(e.solid ? 'Fish on!' : 'Fish on — light hookset', { big: true, col: S.th.green, T: 1.4 }); S.snd.tone(330, 0.1, 'square', 0.04, 660); haptic(70); S.steer = 0; setPad('fight'); bubbles(e.x, e.y, 6); break;
+        case 'strike': S.cue = 1.2; S.bobDip = 1.5; msg('BITE! Tap HOOK', { big: true, col: S.th.gold, T: e.win + 0.2 }); S.snd.tone(140, 0.16, 'triangle', 0.08, 70); haptic(35); flashHook(); break;
+        case 'hooked': msg(e.solid ? 'Fish on!' : 'Fish on — light hookset', { big: true, col: S.th.green, T: 1.4 }); S.snd.tone(330, 0.1, 'square', 0.04, 660); haptic(70); S.steer = 0; setPad('fight'); bubbles(e.x, e.y, 6); if (!S.save.tut) { S.save.tut = 1; persist(); W.ev.length = 0; tutorial(); return; } break;
         case 'early': msg('Too early — spooked it', { col: S.th.red }); S.snd.tone(200, 0.15, 'sine', 0.04, 120); haptic(15); break;
         case 'missed': msg(e.bait ? 'Too late — bait stolen' : 'Too late — it let go', { col: S.th.red }); S.snd.tone(240, 0.15, 'sine', 0.04, 160); break;
         case 'spooked': msg('Spooked it', { T: 1 }); break;
@@ -2148,7 +2239,7 @@
     setPad(W.phase === 'fishing' ? 'fishing' : 'cast');
     persist();
   }
-  function flashHook() { var b = S.pad.querySelector('[data-act="hook"]'); if (b) { b.classList.add('hot'); setTimeout(function () { if (b) b.classList.remove('hot'); }, 600); } }
+  function flashHook() {}
 
   // ================= input =================
   function clearHeld() { S.keys = {}; S.held = { l: 0, r: 0 }; S.reelSrc = {}; S.cvSteer = 0; S.drag = null; S.twitchQ = 0; S.hookQ = false; S.inpReel = false; }
@@ -2185,7 +2276,17 @@
     var e = S.reelSrc[src];
     delete S.reelSrc[src];
     if (!atWater() || !e || e === 'hook') return;
-    if (S.W.phase === 'fishing' && S.t - e.t < 0.2) S.twitchQ++;
+  }
+  function doTwitch() {
+    var W = S.W;
+    if (!atWater() || W.phase !== 'fishing' || !W.lure || W.lure.def.bob || W.lure.quick) return;
+    S.twitchQ++;
+    S.snd.tone(1400, 0.02, 'square', 0.012);
+  }
+  function doReelIn() {
+    var W = S.W;
+    if (!atWater() || W.phase !== 'fishing') return;
+    if (reelIn(W)) { msg('Reeling in…', { T: 0.9 }); S.snd.tone(520, 0.08, 'sine', 0.03, 880); }
   }
   function anyReel() { for (var k in S.reelSrc) if (S.reelSrc[k] !== 'hook') return true; return false; }
   function cycleLure(dirn) {
@@ -2226,7 +2327,7 @@
     return { reel: S.inpReel, steer: S.steer, twitch: 0, hook: false };
   }
 
-  var KEY2CODE = { ' ': 'Space', arrowleft: 'ArrowLeft', arrowright: 'ArrowRight', arrowup: 'ArrowUp', arrowdown: 'ArrowDown', enter: 'Enter', escape: 'Escape', p: 'KeyP', j: 'KeyJ', l: 'KeyL', h: 'KeyH', r: 'KeyR', k: 'KeyK', a: 'KeyA', d: 'KeyD', w: 'KeyW', s: 'KeyS' };
+  var KEY2CODE = { ' ': 'Space', arrowleft: 'ArrowLeft', arrowright: 'ArrowRight', arrowup: 'ArrowUp', arrowdown: 'ArrowDown', enter: 'Enter', escape: 'Escape', p: 'KeyP', j: 'KeyJ', l: 'KeyL', t: 'KeyT', backspace: 'Backspace', h: 'KeyH', r: 'KeyR', k: 'KeyK', a: 'KeyA', d: 'KeyD', w: 'KeyW', s: 'KeyS' };
   function keyCode(e) { return e.code || KEY2CODE[(e.key || '').toLowerCase()] || ''; }
   function onKey(e) {
     if (!S || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -2239,6 +2340,7 @@
       e.preventDefault();
       if (e.repeat) return;
       if (S.phase === 'water' && !S.paused) pause();
+      else if (S.cardKind === 'tut' && S.tutFrom) { S.tutFrom = null; showCard('help'); }
       else if (S.paused && (S.cardKind === 'journal' || S.cardKind === 'help')) showCard('pause');
       else if (S.paused) resume();
       else if (S.phase === 'dock' && S.cardKind === 'help') { S.firstRun = false; showCard('dock'); }
@@ -2271,6 +2373,8 @@
         return;
       }
       if (code === 'KeyL' && !e.repeat) { e.preventDefault(); if (ph === 'ready') cycleLure(1); return; }
+      if (code === 'KeyT' && !e.repeat) { e.preventDefault(); doTwitch(); return; }
+      if ((code === 'KeyR' || code === 'Backspace') && !e.repeat) { e.preventDefault(); doReelIn(); return; }
       return;
     }
     if (S.phase === 'catch') {
@@ -2295,6 +2399,26 @@
   }
 
   // ================= pause / cards =================
+  function tutorial() {
+    S.paused = true; S.tutFrom = null;
+    stopHolds(); clearHeld();
+    showCard('tut'); setPad('tutgo'); syncHead();
+    S.snd.hush();
+    draw();
+  }
+  function tutHtml() {
+    var tch = S.coarse;
+    return '<div class="fs-card fs-tut"><div class="fs-title">FISH ON!</div><p class="fs-sub">How a fight works — one rule: <b>hold</b> or <b>let go</b>.</p>' +
+      '<ol class="fs-steps">' +
+      '<li><b>Hook</b> &nbsp;when <b class="k-gold">BITE!</b> shows (the float plunges, the rod jerks), tap <b>HOOK</b> once' + (tch ? '' : ' (Enter or Space)') + '. Too early on a nibble spooks it; too late and it lets go.</li>' +
+      '<li><b>Hold to reel</b> &nbsp;hold <b>REEL</b>' + (tch ? ' or the water' : ' or Space') + ': you win line, tension rises.</li>' +
+      '<li><b>Let go to let it run</b> &nbsp;in the <b class="k-red">red</b> the line snaps — let go and tension falls. A slack line for too long and it throws the hook.</li>' +
+      '<li><b>Steer</b> &nbsp;arrows by the fish show its run. Press the <b>opposite</b> way (' + (tch ? '&#9664; &#9654; or drag on the water' : '&larr; &rarr; or &#9664; &#9654;') + ') — pulling against it tires it fast.</li>' +
+      '<li><b>Jumps</b> &nbsp;let go while it is in the air.</li></ol>' +
+      '<pre class="fs-meter" aria-hidden="true">TENSION [<span class="k-green">  safe  </span>|<span class="k-gold">risky</span>|<span class="k-red">SNAP</span>]</pre>' +
+      '<p class="fs-tip">Drain its energy bar, then reel it to your feet. Bigger fish need stronger line, a better drag and a bigger spool.</p>' +
+      (S.tutFrom ? '<button type="button" class="fs-go" data-act="tut-back">Back</button>' : '') + '</div>';
+  }
   function pause() {
     if (!S || S.phase !== 'water' || S.paused) return;
     S.paused = true;
@@ -2315,6 +2439,7 @@
     S.cardKind = kind;
     var h = '';
     if (kind === 'help') h = helpHtml(S.firstRun);
+    else if (kind === 'tut') h = tutHtml();
     else if (kind === 'dock') h = dockHtml();
     else if (kind === 'pause') h = pauseHtml();
     else if (kind === 'catch') h = catchHtml();
@@ -2352,12 +2477,15 @@
       h += '<button type="button" class="fs-act" data-hold="cast">' + (W.st.hole ? 'Drop' : 'Cast') + (S.coarse ? '<small>hold</small>' : ' <small>hold space</small>') + '</button>';
       if (lu.bob) h += '<div class="fs-depth"><button type="button" class="fs-sq" data-act="fd-">&minus;</button><span><small>float</small><b>' + W.floatD.toFixed(2) + ' m</b></span><button type="button" class="fs-sq" data-act="fd+">+</button></div>';
     } else if (mode === 'fishing' || mode === 'flight') {
-      h = '<button type="button" class="fs-act fs-hook" data-act="hook">Hook' + (S.coarse ? '' : ' <small>enter</small>') + '</button>' +
-        '<button type="button" class="fs-act fs-reel" data-hold="reel">Reel' + (S.coarse ? '<small>hold · tap twitches</small>' : ' <small>hold space · tap twitch</small>') + '</button>';
+      var lu2 = W.gear.lure;
+      h = (lu2.bob ? '' : '<button type="button" class="fs-pb fs-tw" data-act="twitch" aria-label="Twitch the lure (T)"><small>twitch</small><b>~</b></button>') +
+        '<button type="button" class="fs-act fs-hook" data-act="hook">Hook<small>' + (S.coarse ? 'tap on a bite' : 'enter / space on a bite') + '</small></button>' +
+        '<button type="button" class="fs-act fs-reel" data-hold="reel">Reel<small>' + (S.coarse ? 'hold' : 'hold space') + '</small></button>' +
+        '<button type="button" class="fs-pb fs-in" data-act="reelin" aria-label="Reel all the way in (R)"><small>reel</small><b>in</b></button>';
     } else if (mode === 'fight') {
-      h = '<button type="button" class="fs-pb" data-hold="l" aria-label="Rod left">&lt;</button>' +
-        '<button type="button" class="fs-act fs-reel" data-hold="reel">Reel' + k + '</button>' +
-        '<button type="button" class="fs-pb" data-hold="r" aria-label="Rod right">&gt;</button>' +
+      h = '<button type="button" class="fs-pb fs-steer" data-hold="l" aria-label="Rod left">&#9664;</button>' +
+        '<button type="button" class="fs-act fs-reel fs-freel" data-hold="reel"><span class="fs-rl">Hold to reel</span><small>' + (S.coarse ? 'let go to let it run' : 'hold space · let go to let it run') + '</small></button>' +
+        '<button type="button" class="fs-pb fs-steer" data-hold="r" aria-label="Rod right">&#9654;</button>' +
         '<button type="button" class="fs-pb fs-drag" data-act="drag" aria-label="Drag setting"><small>drag</small><b>' + Math.round(W.dragSet * 100) + '%</b></button>';
     } else if (mode === 'catch') {
       var ci = S.catchInfo;
@@ -2368,6 +2496,7 @@
       h = S.phase === 'over' ? '<button type="button" class="fs-act" data-act="go">To the dock' + k + '</button>' : '<button type="button" class="fs-act" data-act="go">' + (s.atWater ? 'Back to the water' : 'Go fishing') + ' <small>' + esc(L.name) + '</small></button>';
     } else if (mode === 'resume') h = '<button type="button" class="fs-act" data-act="resume">Resume' + k + '</button>';
     else if (mode === 'next') h = '<button type="button" class="fs-act" data-act="next">Continue' + k + '</button>';
+    else if (mode === 'tutgo') h = '<button type="button" class="fs-act" data-act="resume">Got it — fight!' + k + '</button>';
     else if (mode === 'start') h = '<button type="button" class="fs-act" data-act="start">Let\'s fish' + k + '</button>';
     S.pad.innerHTML = h;
   }
@@ -2403,13 +2532,16 @@
   var ART = '     o      ,\n    /|\\_.-\'  \\\n    / \\       \\\n ~~~~~~~~~~~~~~J~~~\n   ><(((\'>     ;\n          <\')))><';
   function helpHtml(first) {
     var keys = S.coarse ?
-      '<div><b>CAST</b> &nbsp;hold, let go at the top of the meter — or drag back on the water and flick</div>' +
-      '<div><b>REEL</b> &nbsp;hold to reel, tap to twitch the lure</div>' +
-      '<div><b>HOOK</b> &nbsp;tap the moment it <b>strikes</b> (not on a nibble)</div>' +
-      '<div><b>&lt; &gt;</b> or drag &nbsp;steer the rod against the fish\'s run</div>' :
-      '<div><b>Space</b> &nbsp;hold to charge the cast, let go at the top; then hold to reel, tap to twitch</div>' +
-      '<div><b>Enter / H</b> &nbsp;set the hook when it <b>strikes</b> (Space works too)</div>' +
+      '<div><b>CAST</b> &nbsp;hold, let go at the top of the meter — or drag back on the water and let go</div>' +
+      '<div><b>HOOK</b> &nbsp;one tap when <b>BITE!</b> shows (not on a nibble)</div>' +
+      '<div><b>REEL</b> &nbsp;<b>hold</b> to reel, <b>let go</b> to let the fish run</div>' +
+      '<div><b>&#9664; &#9654;</b> or drag &nbsp;steer the rod against the fish\'s run</div>' +
+      '<div><b>TWITCH</b> &nbsp;hop a lure to tempt fish &nbsp; <b>REEL IN</b> &nbsp;wind an empty line home fast</div>' :
+      '<div><b>Space</b> &nbsp;hold to charge the cast, let go at the top of the meter</div>' +
+      '<div><b>Enter / H / Space</b> &nbsp;set the hook — one tap when <b>BITE!</b> shows</div>' +
+      '<div><b>Space</b> &nbsp;<b>hold</b> to reel, <b>let go</b> to let the fish run</div>' +
       '<div><b>&larr; &rarr;</b> &nbsp;steer the rod against the run &nbsp; <b>&uarr; &darr;</b> &nbsp;float depth / drag</div>' +
+      '<div><b>T</b> &nbsp;twitch the lure &nbsp; <b>R</b> &nbsp;reel an empty line in fast</div>' +
       '<div><b>L</b> &nbsp;change lure &nbsp; <b>J</b> &nbsp;journal &nbsp; <b>P / Esc</b> &nbsp;pause</div>' +
       '<div><b>K / R</b> &nbsp;keep or release a catch</div>';
     return '<div class="fs-card fs-help">' +
@@ -2423,6 +2555,7 @@
       '<div><b class="k-green">tension</b> &nbsp;<span>reel in the green; ease off in the red or the line snaps</span></div>' +
       '<div><b class="k-gold">slack</b> &nbsp;<span>too long with a loose line and it throws the hook</span></div>' +
       '<div><b class="k-acc">jumps</b> &nbsp;<span>let off the reel while it is in the air</span></div></div>' +
+      '<button type="button" class="fs-go alt" data-act="tut">How a fight works</button>' +
       '<p class="fs-tip">Sell or release your catch, take angler-club contracts, enter tournaments, buy better gear and fill the journal. Legends only show in their exact conditions.</p>' +
       '<button type="button" class="fs-go" data-act="close-help">' + (first ? 'LET\'S PLAY' : 'Back') + '</button></div>';
   }
@@ -2634,6 +2767,8 @@
     else if (act === 'resume') resume();
     else if (act === 'next') { if (S.phase === 'over') { S.phase = 'water'; showCard(null); setPad(S.W && S.W.phase === 'fishing' ? 'fishing' : 'cast'); syncHead(); kick(); } }
     else if (act === 'hook') { if (atWater() && S.W.phase === 'fishing') S.hookQ = true; }
+    else if (act === 'twitch') doTwitch();
+    else if (act === 'reelin') doReelIn();
     else if (act === 'lure') cycleLure(1);
     else if (act === 'fd-') adjFloat(-0.25);
     else if (act === 'fd+') adjFloat(0.25);
@@ -2671,6 +2806,8 @@
     else if (a === 'reset-no') { S.resetArm = false; rerenderCard(); }
     else if (a === 'reset-yes') { S.resetArm = false; S.save = newSave(); S.save.seen = 1; persist(); toDock('fish'); toast('A fresh start at Willow Pond.'); }
     else if (a === 'help') { S.helpFrom = S.cardKind; showCard('help'); }
+    else if (a === 'tut') { S.tutFrom = 'help'; showCard('tut'); }
+    else if (a === 'tut-back') { S.tutFrom = null; showCard('help'); }
     else if (a === 'close-help') { S.firstRun = false; if (S.phase === 'water' && S.paused) showCard('pause'); else { showCard('dock'); setPad('dock'); } persist(); }
     else if (a === 'resume') resume();
     else if (a === 'journal') showCard('journal');
@@ -2723,6 +2860,7 @@
       } else if (S.mode === 'career' && W.min >= DAY_END && W.phase !== 'fight' && S.phase === 'water') endDay(true);
       S.saveT = (S.saveT || 0) + dt;
       if (S.saveT > 15) { S.saveT = 0; persist(); }
+      syncLive();
       S.hudT = (S.hudT || 0) + dt;
       if (S.hudT > 0.5) { S.hudT = 0; syncHud(); }
     } else if (W && S.phase !== 'water') {
