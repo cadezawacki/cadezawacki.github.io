@@ -54,7 +54,7 @@
     spider: 'board', connect4: 'board', chess: 'board', checkers: 'board', seabattle: 'board', mancala: 'board',
     dotsboxes: 'board', blackjack: 'board', holdem: 'board', farkle: 'board', hearts: 'board', deckbuilder: 'board',
     // sports & physics
-    minigolf: 'sports', pool: 'sports', bowling: 'sports', darts: 'sports', curling: 'sports', papertoss: 'sports', teegolf: 'sports',
+    minigolf: 'sports', pool: 'sports', bowling: 'sports', darts: 'sports', curling: 'sports', papertoss: 'sports', teegolf: 'sports', fishing: 'sports',
     // sims & idle
     lemonade: 'sims', tinyfarm: 'sims', spacetrader: 'sims',
     // story

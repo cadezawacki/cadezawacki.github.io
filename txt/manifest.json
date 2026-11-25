@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.11.25-1",
+  "version": "2026.11.25-2",
   "modules": [
     {
       "id": "crawler",
@@ -4138,6 +4138,16 @@
       "tags": "game,word,party,puzzle,wheel,phrase,multiplayer,pass and play,cpu,2 player,fun",
       "entry": "widgets/wheel/wheel.js",
       "css": "widgets/wheel/wheel.css"
+    },
+    {
+      "id": "fishing",
+      "type": "widget",
+      "name": "Reel Deep",
+      "description": "Cast, lure and land fish across generated lakes, rivers and seas — tension-line fights, a fish journal, gear upgrades and an angler career",
+      "icon": "🎣",
+      "tags": "game,sport,fishing,fish,relax,career,collection,fun",
+      "entry": "widgets/fishing/fishing.js",
+      "css": "widgets/fishing/fishing.css"
     }
   ]
 }
