@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.11.25-2",
+  "version": "2026.11.25-3",
   "modules": [
     {
       "id": "crawler",
@@ -4137,7 +4137,10 @@
       "icon": "🎡",
       "tags": "game,word,party,puzzle,wheel,phrase,multiplayer,pass and play,cpu,2 player,fun",
       "entry": "widgets/wheel/wheel.js",
-      "css": "widgets/wheel/wheel.css"
+      "css": "widgets/wheel/wheel.css",
+      "precache": [
+        "widgets/wheel/wheel-data.js"
+      ]
     },
     {
       "id": "fishing",

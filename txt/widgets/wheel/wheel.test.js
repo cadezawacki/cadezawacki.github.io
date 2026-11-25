@@ -397,6 +397,8 @@ test('settings, stats, saves', function () {
   E.startSolve(g2);
   E.spinLand(g2, wedgeIdx(r2, 'cash', 600)); E.callLetter(g2, 'T'); E.startSolve(g2);
   assert.strictEqual(E.normGame(JSON.parse(JSON.stringify(g2))).r.phase, 'turn', 'a solve in progress resumes at the turn');
+  g2.r.phase = 'done';
+  assert.strictEqual(E.normGame(JSON.parse(JSON.stringify(g2))).r.phase, 'done', 'between rounds resumes at the result');
   assert.strictEqual(E.normGame({ v: 0 }), null);
   assert.strictEqual(E.normGame(null), null);
   g2.over = true;

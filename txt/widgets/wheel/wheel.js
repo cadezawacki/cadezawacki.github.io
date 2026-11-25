@@ -704,7 +704,7 @@
     if (r.phase === 'spin') r.phase = r.from || 'turn';
     if (r.phase === 'solve') { r.phase = r.from === 'speedSolve' ? 'speedSolve' : (r.from || 'turn'); r.from = ''; }
     if (r.phase === 'tossSolve') { r.phase = 'toss'; r.turn = -1; }
-    if (r.phase === 'bsolve' || r.phase === 'bdone' || r.phase === 'done') return null;   // nothing worth resuming mid-reveal
+    if (r.phase === 'bsolve' || r.phase === 'bdone') return null;   // a bonus clock can't be paused by quitting
     return o;
   }
 
@@ -1356,7 +1356,7 @@
   }
   function saveIfStable() {
     var ph = S.g.r.phase;
-    if (/^(turn|toss|bspin|bpick|speedCall|speedSolve|final|call|vowel|free|mystery)$/.test(ph)) saveGame();
+    if (/^(turn|toss|bspin|bpick|speedCall|speedSolve|final|call|vowel|free|mystery|done)$/.test(ph)) saveGame();
   }
   function cpuDelay(ph) {
     var base = ph === 'turn' ? 1100 : ph === 'bpick' ? 900 : ph === 'tossSolve' ? 500 : 800;
@@ -1928,7 +1928,7 @@
       h += sec('CPU difficulty <i>for every CPU seat</i>', '<div class="wh-chips">' + [1, 2, 3, 4].map(function (d) { return chip('diff', d, DIFFS[d], set.diff === d); }).join('') + '</div>');
       h += sec('Turn timer', '<div class="wh-chips">' + [0, 10, 15, 20, 30].map(function (t) { return chip('timer', t, t ? t + 's' : 'Off', set.timer === t); }).join('') + '</div>');
       h += sec('Final round clock', '<div class="wh-chips">' + [30, 45, 60, 90].map(function (t) { return chip('clock', t, t + 's', set.clock === t); }).join('') + '</div>');
-      h += sec('Reveal speed', '<div class="wh-chips">' + ['slow', 'normal', 'fast'].map(function (t) { return chip('anim', t, t, set.anim === t); }).join('') + '</div>');
+      h += sec('Reveal speed', '<div class="wh-chips">' + ['slow', 'normal', 'fast'].map(function (t) { return chip('anim', t, t.charAt(0).toUpperCase() + t.slice(1), set.anim === t); }).join('') + '</div>');
       h += sec('Sound', '<div class="wh-chips">' + chip('sound', 1, 'On', S.snd.on) + chip('sound', 0, 'Off', !S.snd.on) + '</div>');
       h += '<p class="wh-note">' + BANK.length + ' puzzles in the bank &middot; ' + S.recent.length + ' recently played are skipped</p>';
     } else {
@@ -2185,7 +2185,7 @@
     if (s.themeObs) s.themeObs.disconnect();
     if (s.mode === 'play' && s.g && !s.g.over) {
       var ph = s.g.r && s.g.r.phase;
-      if (ph && /^(turn|toss|bspin|bpick|speedCall|speedSolve|final|call|vowel|free|mystery|spin|solve|tossSolve)$/.test(ph)) { try { sset(GAME_KEY, JSON.stringify(s.g)); } catch (e) {} }
+      if (ph && /^(turn|toss|bspin|bpick|speedCall|speedSolve|final|call|vowel|free|mystery|spin|solve|tossSolve|done)$/.test(ph)) { try { sset(GAME_KEY, JSON.stringify(s.g)); } catch (e) {} }
     }
     s.snd.close();
     [s.wcv, s.fx, s.face].forEach(function (c) { if (c) { c.width = 0; c.height = 0; } });
