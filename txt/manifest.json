@@ -4093,7 +4093,7 @@
       "id": "bubbles",
       "type": "widget",
       "name": "Bubble Burst",
-      "description": "Aim, bank and pop matching bubbles — endless rising ceiling, powerups and a story-free chase for the high score",
+      "description": "Aim, bank and pop matching bubbles — generative stages with stars, an endless rising ceiling, powerups and hazards",
       "icon": "🫧",
       "tags": "game,arcade,puzzle,bubble,shooter,match 3,endless,powerups,fun",
       "entry": "widgets/bubbles/bubbles.js",
