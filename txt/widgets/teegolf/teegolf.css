@@ -208,3 +208,13 @@
   .tg-lnk { min-height: 38px; padding: 0 6px; }
   .tg-go { padding: 12px; }
 }
+
+/* a phone on its side: a slimmer HUD and pad so the course keeps its height */
+@media (max-height: 500px) and (orientation: landscape) {
+  #teegolf-panel { top: calc(var(--menubar-h, 36px) + 4px); }
+  #teegolf-panel .cade-panel-body { padding: 6px 8px max(6px, env(safe-area-inset-bottom)); }
+  .tg { gap: 5px; }
+  .tg-hud { font-size: 11px; min-height: 18px; }
+  .tg-pad { min-height: 40px; }
+  .tg-pb, .tg-act, .tg-clubb, .tg-wait { height: 40px; min-height: 40px; }
+}

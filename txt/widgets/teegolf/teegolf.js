@@ -1835,7 +1835,7 @@
     S.phase2 = p.cpu ? 'cpu' : 'aim';
     var cg = camAim(s, S.aim.yaw, S.putting); cg.k = 3;
     setCam(cg, !!snap || Math.abs(S.cam.x - cg.x) + Math.abs(S.cam.y - cg.y) > 60);
-    if (p.cpu) { S.plan = newPlanner(H, s, S.eq, S.env, LEVELS[p.cpu] ? LEVELS[p.cpu].skill : 0.5); S.cpuT = 0; S.waitTxt = p.name + ' is lining up…'; setPad('wait'); }
+    if (p.cpu) { S.plan = newPlanner(H, s, S.eq, S.env, LEVELS[p.cpu] ? LEVELS[p.cpu].skill : 0.5); S.cpuT = 0; S.waitTxt = p.name + ' is lining up… (' + (LEVELS[p.cpu] ? LEVELS[p.cpu].name.toLowerCase() : 'cpu') + ')'; setPad('wait'); }
     else setPad('aim');
     if (humans() > 1 && !p.cpu) say(p.name + (humans() > 1 ? ' — your shot' : ' to play'), Math.round(distPin(H, s.x, s.y)) + ' yd · ' + LIE[s.lie].name, PCSS(g.cur), 1.3);
     syncHud();
@@ -1900,8 +1900,9 @@
       else if (s.lie !== TEE && s.lie !== GREEN) spawn(s.x, s.y, gz, 10, 'divot');
       if (Cade.haptic) try { Cade.haptic(12); } catch (e) {}
     }
-    setPad(isCpu() ? 'wait' : putt ? 'wait' : 'flight');
-    if (putt) S.waitTxt = 'rolling…';
+    if (isCpu()) S.waitTxt = g.players[g.cur].name + ' · ' + CLUBS[shot.club].name;
+    else if (putt) S.waitTxt = 'rolling…';
+    setPad(isCpu() || putt ? 'wait' : 'flight');
   }
   function applyEng(side, top) {
     var b = S.ball;
@@ -2184,7 +2185,7 @@
   }
 
   // ---- cards ----
-  var ART = '      __\n   o |  |>\n  /|\\|\n  / \\|   . o\n ~~~~|~~~~~~~';
+  var ART = '  \\ O          |>\n   \\|\\         |\n     |      o   |\n    / \\  .\'   (_)\n ~~~~~~~~~~~~~~~~~~~';
   function tabsHtml() {
     return '<div class="tg-tabs" role="tablist">' + [['play', 'Play'], ['tour', 'Tour'], ['chal', 'Challenge'], ['rec', 'Records'], ['opt', 'Options']].map(function (t) {
       return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (S.tab === t[0]) + '" class="' + (S.tab === t[0] ? 'on' : '') + '">' + t[1] + '</button>';
@@ -2627,7 +2628,7 @@
     if (vv && vv.height && vv.scale <= 1.01) vh = Math.min(vh, vv.height);
     var phone = vw <= 560, solo = S.panel.classList.contains('cade-solo-panel');
     var gut = phone ? (solo ? 20 : 34) : 48;
-    var W = Math.floor(Math.min(vw - gut, solo ? 1000 : 720)), ch = chromeH(), ah = Math.floor(Math.max(170, availH(vw, vh, ch))), H;
+    var W = Math.floor(Math.min(vw - gut, solo ? 1000 : 720)), ch = chromeH(), ah = Math.floor(Math.max(120, availH(vw, vh, ch))), H;
     if (W < 520) H = Math.min(ah, Math.round(W * 1.3));
     else H = Math.min(ah, Math.round(W * 0.64));
     H = Math.max(H, Math.min(ah, 220));
