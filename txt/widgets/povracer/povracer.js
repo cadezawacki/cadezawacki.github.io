@@ -1828,9 +1828,9 @@
       var lw = small ? 84 : 110;
       box(c, pad, hy, lw, bh);
       c.textAlign = 'left'; c.fillStyle = th.hudAc; c.font = '800 ' + (big - 3) + 'px ' + th.font;
-      c.fillText((g.dist / 1000).toFixed(2), pad + 7, hy + 6);
-      c.fillStyle = th.hudMu; c.font = '700 ' + (fs - 1) + 'px ' + th.font; c.fillText(S.save.set.units === 'mph' ? 'MI' : 'KM', pad + 7, hy + big + 6);
-      if (S.save.set.units === 'mph') { c.fillStyle = th.hudAc; c.font = '800 ' + (big - 3) + 'px ' + th.font; c.fillStyle = th.hudBg; c.fillRect(pad + 2, hy + 3, lw - 4, big); c.fillStyle = th.hudAc; c.fillText((g.dist / 1609.34).toFixed(2), pad + 7, hy + 6); }
+      var mi = S.save.set.units === 'mph';
+      c.fillText((g.dist / (mi ? 1609.34 : 1000)).toFixed(2), pad + 7, hy + 6);
+      c.fillStyle = th.hudMu; c.font = '700 ' + (fs - 1) + 'px ' + th.font; c.fillText(mi ? 'MI' : 'KM', pad + 7, hy + big + 6);
       box(c, W - pad - lw, hy, lw, bh);
       c.textAlign = 'right'; c.fillStyle = th.hudTx; c.font = '800 ' + (big - 3) + 'px ' + th.font;
       c.fillText(String(g.score), W - pad - 7, hy + 6);
@@ -1986,10 +1986,9 @@
       h += '<div class="pr-card"><div class="pr-title">HOW TO DRIVE</div>' +
         '<div class="pr-keys"><div><b>← →</b> / <b>A D</b> steer</div><div><b>↑</b> / <b>W</b> gas · <b>↓</b> / <b>S</b> / <b>Shift</b> brake</div>' +
         '<div><b>Space</b> nitro · <b>C</b> camera · <b>P</b> / <b>Esc</b> pause</div><div><b>Touch</b> ◀ ▶ to steer (or the screen halves / tilt), NOS · BRK · GAS</div></div>' +
-        '<p>Curves pull you <b>outward</b> — the faster you go, the harder. Brake before sharp bends; the chevron signs warn you.</p>' +
-        '<p>Leave the road and you slow down and shake; hit a tree, rock or car and you can <b>spin out</b>. Tunnels have walls.</p>' +
-        '<p>Tuck in right behind a car for a <b>slipstream</b> boost. Nitro refills over time — faster while you <b>drift</b> through a bend.</p>' +
-        '<p><b>Endless</b>: reach each checkpoint before the clock runs out; near misses build a combo. <b>Career</b>: finish high for points and credits, spend them in the garage, podium a cup to open the next.</p>' +
+        '<p>Curves pull you <b>outward</b>, harder the faster you go — brake before sharp bends (chevrons warn you). Off-road is slow and bumpy; trees, rocks, walls and cars can <b>spin you out</b>.</p>' +
+        '<p>Sit right behind a car for a <b>slipstream</b>; <b>drifting</b> through bends refills nitro.</p>' +
+        '<p><b>Endless</b>: make each checkpoint before time runs out; near misses build a combo. <b>Career</b>: points and credits → garage upgrades; podium a cup to unlock the next.</p>' +
         '<button type="button" class="pr-go" data-act="close-help" data-primary="1">' + (S.firstRun ? "LET'S DRIVE" : 'GOT IT') + '</button></div>';
     } else if (kind === 'cups') {
       h += '<div class="pr-card"><div class="pr-top"><span class="pr-brand">CAREER</span><span class="pr-meta">' + fmtN(sv.car.credits) + ' cr</span></div>';
