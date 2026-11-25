@@ -577,7 +577,7 @@
     G.boss = isBossFloor(depth) && !(G.mode === 'daily' && depth % 5 !== 0);
     var r = rng(hashStr(G.seed + ':' + depth));
     G.objs = []; G.mons = []; G.deco = []; G.gas = {}; G.fire = {}; G.holy = {}; G.delayed = []; G.pz = {}; G.start = null; G.stairs = null;
-    G.floorTurns = 0; G.wanderT = 0; G.bossSeen = false;
+    G.floorTurns = 0; G.wanderT = 0; G.wanderers = 0; G.bossSeen = false; G.arena = null; G.seenMons = []; G.mapped = false;
     if (G.boss) genBossFloor(G, r);
     else {
       var ok = false;
@@ -2492,3 +2492,523 @@
       }
     }
   }
+
+  // ===========================================================================
+  //  events (shrines, strangers) — G.modal = {k:'event', id, oid}
+  // ===========================================================================
+  function scaleOf(G) { return 1 + 0.3 * ((G ? G.ml : 1) - 1); }
+  function addBlessing(h, id, n) {
+    h.bless = h.bless || [];
+    for (var i = 0; i < h.bless.length; i++) if (h.bless[i].id === id) { h.bless[i].n = Math.max(h.bless[i].n, n || 3); return; }
+    h.bless.push({ id: id, n: n || 3 });
+  }
+  function applyOps(G, ops, out) {
+    var h = G.hero, p = G.p, s = pstats(G), r = G.r, sc = scaleOf(G);
+    if (ops.heal) heal(G, p, s.maxHp * ops.heal);
+    if (ops.res) p.res = s.maxRes;
+    if (ops.hurt) { var d = Math.round(s.maxHp * ops.hurt); p.hp = Math.max(1, p.hp - d); emit(G, { t: 'dmg', x: p.x, y: p.y, n: d, p: true, elem: 'blood' }); }
+    if (ops.gold) { var g = Math.round(ops.gold * sc); h.gold += g; G.run.gold += g; out.push('+' + g + ' gold'); }
+    if (ops.bless) { addBlessing(h, ops.bless, 3); out.push(D.BLESSINGS[ops.bless].name); }
+    if (ops.bless2) { addBlessing(h, ops.bless2, 3); out.push(D.BLESSINGS[ops.bless2].name); }
+    if (ops.curse) { addBlessing(h, ops.curse, 3); out.push(D.BLESSINGS[ops.curse].name); }
+    if (ops.curseRandom) { var cs = Object.keys(D.BLESSINGS).filter(function (k) { return !D.BLESSINGS[k].good; }), c = pick(r, cs); addBlessing(h, c, 3); out.push(D.BLESSINGS[c].name); }
+    if (ops.item) { var it = lootItem(G, { minRarity: ops.item, luck: 0.5 }); dropNear(G, p.x, p.y, { k: 'item', it: it }); out.push(it.name); }
+    if (ops.cons) for (var k in ops.cons) { h.cons[k] = Math.max(0, (h.cons[k] || 0) + ops.cons[k]); if (ops.cons[k] > 0) out.push('+' + ops.cons[k] + ' ' + D.CONSUMABLES[k].name); }
+    if (ops.xp) { var x = Math.round(ops.xp * sc); gainXp(G, h, x); out.push('+' + x + ' XP'); }
+    if (ops.map) { for (var i = 0; i < G.seen.length; i++) if (G.t[i] !== T.WALL || hasFloorNeighbor(G, i)) G.seen[i] = 1; out.push('the floor revealed'); }
+    if (ops.cleanse) cleanse(p);
+    if (ops.uncurse) h.bless = (h.bless || []).filter(function (b) { return D.BLESSINGS[b.id].good; });
+    if (ops.mats) for (var mk in ops.mats) { h.mats[mk] = (h.mats[mk] || 0) + ops.mats[mk]; out.push('+' + ops.mats[mk] + ' ' + D.MATERIALS[mk].name); }
+    if (ops.status) for (var sk in ops.status) addStatus(G, p, sk, ops.status[sk], s.maxHp * 0.03);
+    if (ops.temper) { var tt = h.equip[ops.temper]; if (tt && (tt.plus || 0) < 10) { tt.plus = (tt.plus || 0) + 1; out.push(tt.name + ' +' + tt.plus); } }
+    if (ops.lore) { var act = clamp(actAt(((G.depth - 1) % 25) + 1), 1, 5); for (var L = 0; L < D.LORE.length; L++) if (D.LORE[L].act === act && h.lore.indexOf(L) < 0) { h.lore.push(L); out.push('“' + D.LORE[L].title + '”'); break; } }
+    if (ops.elite) {
+      var B = D.BIOMES[G.biome];
+      for (var t = 0; t < 40; t++) {
+        var ex = p.x + rr(r, -4, 4), ey = p.y + rr(r, -4, 4);
+        if (tile(G, ex, ey) !== T.FLOOR || actorAt(G, ex, ey) || blocksObj(G, ex, ey) || cheb(ex, ey, p.x, p.y) < 2) continue;
+        spawnMon(G, pick(r, B.mons.filter(function (k) { return !MON[k].rare; })), ex, ey, { aware: true, elite: eliteAffixes(G, r) });
+        out.push('an ambush!'); break;
+      }
+    }
+  }
+  function eventChoice(G, idx) {
+    var md = G.modal; if (!md || md.k !== 'event') return null;
+    var EV = D.EVENTS[md.id], ch = EV && EV.choices[idx]; if (!ch) return null;
+    var h = G.hero, ops = ch.ops || {}, out = [], obj = null;
+    G.objs.forEach(function (o) { if (o.oid === md.oid) obj = o; });
+    if (ops.shop) { G.modal = { k: 'shop', stock: dungeonStock(G), oid: md.oid, title: EV.name }; return { shop: true }; }
+    if (ops.needCons && !h.cons[ops.needCons]) return { ok: false, text: 'You have nothing to give.' };
+    if (ops.pay) { var cost = Math.round(ops.pay * scaleOf(G)); if (h.gold < cost) return { ok: false, text: 'You can\'t afford that (' + cost + ' gold).' }; h.gold -= cost; out.push('−' + cost + ' gold'); }
+    applyOps(G, ops, out);
+    var text = ch.text || '';
+    if (ops.roll) { var rl = wpick(G.r, ops.roll, function (x) { return x.w; }); applyOps(G, rl.ops || {}, out); text = rl.text; }
+    var meaningful = Object.keys(ops).length > 0;
+    if (meaningful && obj) { obj.used = true; G.run.events++; h.stats.events++; bounty(G, 'event'); }
+    G._ps = null;
+    G.modal = null;
+    return { ok: true, text: text, gains: out, done: meaningful };
+  }
+  function dungeonStock(G) {
+    var r = rng(hashStr(G.seed + ':shop:' + G.depth)), stock = [];
+    for (var i = 0; i < 3; i++) { var it = makeItem(r, { ilvl: G.ml, luck: 0.6, minRarity: 'magic', cls: chance(r, 0.7) ? G.hero.cls : null }); stock.push({ it: it, price: itemValue(it) * 4 }); }
+    ['potion', 'recall', 'elixir'].forEach(function (id) { stock.push({ cons: id, n: 1, price: Math.round(D.CONSUMABLES[id].price * 1.8 * (1 + 0.1 * G.ml)) }); });
+    return stock;
+  }
+  function closeModal(G) { G.modal = null; }
+
+  // ===========================================================================
+  //  town: shop, temple, board, side quests
+  // ===========================================================================
+  function townArrive(h) {
+    var s = stats(h);
+    h.town = h.town || { visit: 0 }; h.town.visit++;
+    h.hp = s.maxHp; h.res = C[h.cls].res.start;
+    h.bag.forEach(function (it) { delete it.fresh; });
+    D.SLOTS.forEach(function (sl) { if (h.equip[sl]) delete h.equip[sl].fresh; });
+    rollBoard(h);
+  }
+  function consPrice(h, id) { return Math.round(D.CONSUMABLES[id].price * (1 + 0.2 * (h.story.cleared || 0) + 0.5 * (h.story.ng || 0))); }
+  function shopStock(h) {
+    var r = rng(hashStr(h.id + ':shop:' + ((h.town && h.town.visit) || 0))), items = [];
+    var il = Math.max(1, (h.story.deepest || 1) + (h.story.ng || 0) * 25);
+    for (var i = 0; i < 6; i++) {
+      var it = makeItem(r, { ilvl: il, luck: 0.25, minRarity: i < 2 ? 'magic' : null, cls: i < 4 ? h.cls : null, slot: i === 0 ? 'weapon' : i === 1 ? 'armor' : null });
+      items.push({ it: it, price: itemValue(it) * 3 });
+    }
+    return { cons: D.CONS_ORDER.map(function (id) { return { cons: id, price: consPrice(h, id) }; }), items: items };
+  }
+  function buy(h, entry) {
+    if (entry.sold) return { ok: false, msg: 'Sold out.' };
+    if (h.gold < entry.price) return { ok: false, msg: 'Not enough gold.' };
+    if (entry.it && h.bag.length >= BAG_MAX) return { ok: false, msg: 'Your pack is full.' };
+    h.gold -= entry.price;
+    if (entry.it) { h.bag.push(entry.it); entry.sold = true; }
+    else h.cons[entry.cons] = (h.cons[entry.cons] || 0) + (entry.n || 1);
+    if (entry.n && entry.it == null && entry.once) entry.sold = true;
+    return { ok: true };
+  }
+  function templeCosts(h) {
+    var a = 1 + (h.story.cleared || 0) + 2 * (h.story.ng || 0);
+    return { uncurse: 35 * a, bless: 70 * a, respec: 25 * h.level };
+  }
+  function uncurse(h) { var c = templeCosts(h).uncurse; if (h.gold < c) return false; var had = (h.bless || []).some(function (b) { return !D.BLESSINGS[b.id].good; }); if (!had) return false; h.gold -= c; h.bless = h.bless.filter(function (b) { return D.BLESSINGS[b.id].good; }); return true; }
+  function buyBlessing(h, id) { var c = templeCosts(h).bless; if (h.gold < c || !D.BLESSINGS[id] || !D.BLESSINGS[id].good) return false; h.gold -= c; addBlessing(h, id, 3); return true; }
+  function respec(h) { var c = templeCosts(h).respec; if (h.gold < c) return false; h.gold -= c; h.talents = [null, null, null, null, null]; return true; }
+
+  function frontierAct(h) { return clamp((h.story.cleared || 0) + 1, 1, 5); }
+  function makeBounty(h, r) {
+    var tpl = pick(r, D.BOUNTIES), act = frontierAct(h), b = { id: 'b' + uid(r), tpl: tpl.id, have: 0, done: false };
+    var sc = 1 + act * 0.8 + (h.story.ng || 0) * 2;
+    if (tpl.id === 'kill') {
+      var fams = {}; D.BIOMES[D.BIOME_ORDER[act - 1]].mons.forEach(function (k) { fams[MON[k].fam] = 1; });
+      var fam = pick(r, Object.keys(fams)); b.fam = fam; b.need = rr(r, tpl.n[0], tpl.n[1]);
+      b.name = tpl.name.replace('{fam}', D.FAMILIES[fam][0]); b.text = tpl.text.replace('{n}', b.need).replace('{famPlural}', D.FAMILIES[fam][1]);
+    } else if (tpl.id === 'depth') {
+      var top = h.story.ended ? 999 : D.STORY_FLOORS;
+      b.d = Math.min(top, Math.max(2, (h.story.deepest || 1) + rr(r, 1, 3))); b.need = 1;
+      b.name = tpl.name; b.text = tpl.text.replace('{d}', b.d);
+    } else if (tpl.id === 'gold') {
+      b.need = Math.round(120 * sc); b.name = tpl.name; b.text = tpl.text.replace('{n}', b.need);
+    } else {
+      b.need = rr(r, tpl.n[0], tpl.n[1]); b.name = tpl.name; b.text = tpl.text.replace('{n}', b.need);
+    }
+    b.reward = { gold: Math.round(45 * sc * (tpl.id === 'gold' ? 0.6 : 1) * (1 + b.need * 0.04)), xp: Math.round(40 * sc * sc) };
+    return b;
+  }
+  function rollBoard(h) {
+    h.quests = h.quests || { board: [], boardSeed: 1, side: {}, done: 0 };
+    var r = rng(h.quests.boardSeed || 1);
+    while (h.quests.board.length < 3) { h.quests.board.push(makeBounty(h, r)); h.quests.boardSeed = (h.quests.boardSeed || 1) + 7919; r = rng(h.quests.boardSeed); }
+  }
+  function bounty(G, kind, data) {
+    if (G.mode === 'daily') return;
+    var h = G.hero; data = data || {};
+    (h.quests.board || []).forEach(function (b) {
+      if (b.done) return;
+      var inc = 0;
+      if (b.tpl === 'kill' && kind === 'kill' && data.fam === b.fam) inc = 1;
+      else if (b.tpl === 'elite' && kind === 'kill' && data.elite) inc = 1;
+      else if (b.tpl === 'depth' && kind === 'depth' && data.d >= b.d) inc = 1;
+      else if (b.tpl === 'puzzle' && kind === 'puzzle') inc = 1;
+      else if (b.tpl === 'lore' && kind === 'lore') inc = 1;
+      else if (b.tpl === 'event' && kind === 'event') inc = 1;
+      else if (b.tpl === 'gold' && kind === 'gold') inc = data.n || 0;
+      if (!inc) return;
+      b.have = Math.min(b.need, b.have + inc);
+      if (b.have >= b.need) { b.done = true; log(G, 'Bounty complete: ' + b.name + '! Claim it at the Quest Board.', 'good'); emit(G, { t: 'bounty' }); }
+    });
+  }
+  function claimBounty(h, id) {
+    var q = h.quests.board, i;
+    for (i = 0; i < q.length; i++) if (q[i].id === id) break;
+    if (i >= q.length || !q[i].done) return null;
+    var b = q.splice(i, 1)[0];
+    h.gold += b.reward.gold; gainXp(null, h, b.reward.xp); h.quests.done++;
+    rollBoard(h);
+    return b.reward;
+  }
+  function sideOffers(h, npc) {
+    var out = [];
+    for (var id in D.SIDEQUESTS) { var SQ = D.SIDEQUESTS[id]; if (SQ.giver === npc && (h.story.cleared || 0) >= SQ.act - 1) out.push({ id: id, state: h.quests.side[id] || 'new' }); }
+    return out;
+  }
+  function acceptSide(h, id) { if (!D.SIDEQUESTS[id] || h.quests.side[id]) return false; h.quests.side[id] = 'active'; return true; }
+  function turnInSide(h, id) {
+    var SQ = D.SIDEQUESTS[id]; if (!SQ || h.quests.side[id] !== 'found') return null;
+    h.quests.side[id] = 'done';
+    var rw = SQ.reward, r = rng(hashStr(h.id + id)), got = [];
+    if (rw.gold) { h.gold += rw.gold; got.push('+' + rw.gold + ' gold'); }
+    if (rw.xp) { gainXp(null, h, rw.xp); got.push('+' + rw.xp + ' XP'); }
+    if (rw.item) { var it = makeItem(r, { ilvl: Math.max(2, h.story.deepest), rarity: rw.item, cls: h.cls }); h.bag.push(it); got.push(it.name); }
+    if (rw.cons) for (var k in rw.cons) { h.cons[k] = (h.cons[k] || 0) + rw.cons[k]; got.push('+' + rw.cons[k] + ' ' + D.CONSUMABLES[k].name); }
+    if (rw.mats) for (var m in rw.mats) { h.mats[m] = (h.mats[m] || 0) + rw.mats[m]; got.push('+' + rw.mats[m] + ' ' + D.MATERIALS[m].name); }
+    if (rw.bless) { addBlessing(h, rw.bless, 3); got.push(D.BLESSINGS[rw.bless].name); }
+    if (rw.flag) h.flags[rw.flag] = 1;
+    return got;
+  }
+  // the story stage NPC lines key off (0..5 acts cleared, 6 after the ending)
+  function storyStage(h) { return h.story.ended ? 6 : clamp(h.story.cleared || 0, 0, 5); }
+  function npcLine(h, npc, r) {
+    var N = D.NPCS[npc], st = storyStage(h), best = 0;
+    for (var k in N.lines) if (+k <= st && +k >= best) best = +k;
+    var pool = N.lines[best] || N.lines[0];
+    if (N.barks.length && r && chance(r, 0.35)) return pick(r, N.barks);
+    return r ? pick(r, pool) : pool[0];
+  }
+
+  // ===========================================================================
+  //  starting and ending a delve
+  // ===========================================================================
+  function startRun(h, depth, o) {
+    o = o || {};
+    var G = newRunShell(h, o);
+    h.stats.runs++;
+    genFloor(G, depth);
+    var B = D.BIOMES[G.biome];
+    log(G, 'Floor ' + depth + ' — ' + B.name + '. ' + pick(G.r, B.flavor), 'floor');
+    if (G.mode === 'story' && (depth - 1) % 5 === 0 && depth <= D.STORY_FLOORS) emit(G, { t: 'act', act: actAt(depth), biome: G.biome });
+    return G;
+  }
+  // sync the run's player back into the hero (hp, resource)
+  function syncHero(G) { if (!G || !G.hero) return; G.hero.hp = Math.max(1, G.p.hp); G.hero.res = Math.round(G.p.res); G.hero.updated = Date.now(); }
+  function applyDeath(G) {
+    var h = G.hero, d = difficulty(h), lost = { gold: 0, items: [] };
+    h.stats.deaths++;
+    lost.gold = Math.floor(h.gold * d.goldLoss); h.gold -= lost.gold;
+    if (!d.keepLoot) { h.bag = h.bag.filter(function (it) { if (it.fresh) { lost.items.push(it.name); return false; } return true; }); }
+    // a little xp toward the next level, never a level
+    var xl = Math.floor(h.xp * 0.2); h.xp -= xl; lost.xp = xl;
+    h.bless = (h.bless || []).filter(function (b) { return D.BLESSINGS[b.id].good; });
+    return lost;
+  }
+  function newGamePlus(h) {
+    if (!h.story.ended) return false;
+    h.story.ng = (h.story.ng || 0) + 1; h.story.cleared = 0; h.story.ended = false; h.story.deepest = 1; h.story.waypoints = [1];
+    h.quests.side = {};
+    return true;
+  }
+
+  // ===========================================================================
+  //  daily challenge
+  // ===========================================================================
+  function dailyInfo(date) {
+    var seed = hashStr('deepdelve-daily:' + date), mods = Object.keys(D.DAILY_MODS);
+    return { date: date, seed: seed, cls: D.CLASS_ORDER[seed % D.CLASS_ORDER.length], mod: mods[(seed >>> 5) % mods.length] };
+  }
+  function dailyHero(info) {
+    var r = rng(info.seed);
+    var h = newHero(info.cls, 'Daily Delver', 'normal', r);
+    h.id = 'daily'; h.level = 3; h.gold = 0;
+    h.equip.weapon = makeItem(r, { base: C[info.cls].kit.weapon, ilvl: 3, rarity: 'magic' });
+    h.cons.potion = info.mod === 'frail' ? 8 : 4; h.cons.recall = 0;
+    h.story.waypoints = [1];
+    h.hp = stats(h).maxHp;
+    return h;
+  }
+  function dailyScore(G) { var r = G.run; return Math.max(0, (G.depth - 1) * 100 + r.kills * 4 + r.elites * 25 + r.bosses * 300 + Math.floor(r.gold / 4) + (G.hero.level - 3) * 15); }
+
+  // ===========================================================================
+  //  travel & auto-explore (paths over what you've seen)
+  // ===========================================================================
+  function knownSafe(G, x, y) {
+    var i = y * G.w + x; if (!G.seen[i]) return false;
+    var t = G.t[i]; if (!WALKABLE[t] || t === T.LAVA || t === T.CHASM) return false;
+    if (G.gas[i] || G.fire[i]) return false;
+    for (var k = 0; k < G.objs.length; k++) { var o = G.objs[k]; if (o.x === x && o.y === y && ((o.k === 'trap' && !o.hidden) || BLOCKING[o.k] || o.k === 'vent')) return false; }
+    var m = monAt(G, x, y); if (m && !m.ally && monVisible(G, m)) return false;
+    return true;
+  }
+  function pathFrom(G, dist, tx, ty) {
+    if (dist[ty * G.w + tx] >= 9999) return null;
+    var path = [[tx, ty]], x = tx, y = ty;
+    while (dist[y * G.w + x] > 1) {
+      var d = dist[y * G.w + x], moved = false;
+      for (var k = 0; k < 4; k++) { var nx = x + DIRS4[k][0], ny = y + DIRS4[k][1]; if (inb(G, nx, ny) && dist[ny * G.w + nx] === d - 1) { x = nx; y = ny; path.unshift([x, y]); moved = true; break; } }
+      if (!moved) return null;
+    }
+    return path;
+  }
+  function travelPath(G, tx, ty) {
+    if (!inb(G, tx, ty) || !G.seen[ty * G.w + tx]) return null;
+    var dist = bfs(G, G.p.x, G.p.y, function (x, y) { return (x === tx && y === ty) || knownSafe(G, x, y); });
+    return pathFrom(G, dist, tx, ty);
+  }
+  var LOOT_K = { gold: 1, item: 1, cons: 1, lore: 1, quest: 1 };
+  function explorePath(G) {
+    var dist = bfs(G, G.p.x, G.p.y, function (x, y) { return knownSafe(G, x, y); }), best = null, bd = 9999;
+    for (var i = 0; i < G.objs.length; i++) { var o = G.objs[i]; if (LOOT_K[o.k] && G.seen[o.y * G.w + o.x] && !(o.k === 'item' && G.hero.bag.length >= BAG_MAX)) { var d = dist[o.y * G.w + o.x]; if (d > 0 && d < bd) { bd = d; best = [o.x, o.y]; } } }
+    if (!best) for (var y = 0; y < G.h; y++) for (var x = 0; x < G.w; x++) {
+      var j = y * G.w + x, dj = dist[j]; if (dj >= 9999 || dj === 0 || dj >= bd) continue;
+      for (var k = 0; k < 4; k++) { var nx = x + DIRS4[k][0], ny = y + DIRS4[k][1]; if (inb(G, nx, ny) && !G.seen[ny * G.w + nx]) { bd = dj; best = [x, y]; break; } }
+    }
+    if (!best) return null;
+    return pathFrom(G, dist, best[0], best[1]);
+  }
+
+  // ===========================================================================
+  //  saves: runs, heroes, the roster; legacy migration; merging devices
+  // ===========================================================================
+  function serializeRun(G) {
+    var o = {};
+    for (var k in G) {
+      if (k === 'hero' || k === 'vis' || k === 'distP' || k === '_ps' || k === 'ev' || k === 'rooms' || k === 'startRoom') continue;
+      o[k] = G[k];
+    }
+    o.t = G.t.map(function (v) { return String.fromCharCode(48 + v); }).join('');
+    o.seen = G.seen.join('');
+    o.log = G.log.slice(-40);
+    if (G.mode === 'daily') o.dailyHero = G.hero;
+    return JSON.parse(JSON.stringify(o));
+  }
+  function loadRun(o, h) {
+    if (!o || typeof o !== 'object' || o.v !== 1 || typeof o.t !== 'string') return null;
+    var G = copy(o);
+    G.t = o.t.split('').map(function (c) { return c.charCodeAt(0) - 48; });
+    G.seen = o.seen.split('').map(function (c) { return c === '1' ? 1 : 0; });
+    if (G.t.length !== G.w * G.h || G.seen.length !== G.t.length) return null;
+    G.hero = o.dailyHero ? normHero(o.dailyHero) : h; delete G.dailyHero;
+    if (!G.hero) return null;
+    G.ev = []; G._ps = null; G.modal = G.modal && G.modal.k === 'dialog' ? null : G.modal;
+    computeFov(G);
+    return G;
+  }
+  function progressScore(h) {
+    if (!h || !h.story) return 0;
+    return ((h.story.ng || 0) * 100 + (h.story.cleared || 0) * 10 + (h.story.ended ? 5 : 0)) * 100000 + (h.level || 1) * 1000 + (h.story.deepest || 0) * 10 + Math.min(9, (h.lore || []).length / 5);
+  }
+  function validItem(it) {
+    if (!it || typeof it !== 'object' || !D.BASES[it.base]) return null;
+    it.slot = D.BASES[it.base].slot;
+    if (!D.RARITIES[it.rarity]) it.rarity = 'common';
+    it.ilvl = clamp(+it.ilvl || 1, 1, 99); it.plus = clamp(+it.plus || 0, 0, 10);
+    if (it.uq && !D.UNIQUES[it.uq]) delete it.uq;
+    if (it.set && !D.SETS[it.set]) delete it.set;
+    var aff = {}; for (var k in it.aff || {}) if (D.AFFIXES[k] && typeof it.aff[k] === 'number' && isFinite(it.aff[k])) aff[k] = it.aff[k];
+    it.aff = aff;
+    if (!it.uid) it.uid = 'i' + Math.random().toString(36).slice(2, 10);
+    it.name = itemName(it);
+    return it;
+  }
+  function normHero(h) {
+    if (!h || typeof h !== 'object') return null;
+    var base = newHero(C[h.cls] ? h.cls : 'warrior', h.name, h.difficulty, rng(hashStr(String(h.id || 'x'))));
+    var out = base;
+    out.id = typeof h.id === 'string' ? h.id.slice(0, 40) : base.id;
+    out.name = cleanName(h.name);
+    out.cls = C[h.cls] ? h.cls : 'warrior';
+    out.level = clamp(Math.floor(+h.level || 1), 1, LEVEL_CAP); out.xp = Math.max(0, Math.floor(+h.xp || 0));
+    out.difficulty = D.DIFFICULTIES[h.difficulty] ? h.difficulty : 'normal';
+    out.gold = Math.max(0, Math.floor(+h.gold || 0));
+    out.equip = { weapon: null, armor: null, helm: null, charm: null };
+    if (h.equip) D.SLOTS.forEach(function (sl) { var it = validItem(h.equip[sl]); if (it && it.slot === sl) out.equip[sl] = it; });
+    if (!out.equip.weapon || C[out.cls].weapons.indexOf(out.equip.weapon.base) < 0) out.equip.weapon = out.equip.weapon && C[out.cls].weapons.indexOf(out.equip.weapon.base) >= 0 ? out.equip.weapon : base.equip.weapon || makeItem(rng(7), { base: C[out.cls].kit.weapon, ilvl: 1, rarity: 'common' });
+    out.bag = (Array.isArray(h.bag) ? h.bag : []).map(validItem).filter(Boolean).slice(0, BAG_MAX + 8);
+    out.cons = {}; if (h.cons) D.CONS_ORDER.forEach(function (k) { if (h.cons[k] > 0) out.cons[k] = Math.min(99, Math.floor(h.cons[k])); });
+    out.mats = { scrap: 0, dust: 0, soul: 0 }; if (h.mats) for (var mk in out.mats) out.mats[mk] = Math.max(0, Math.floor(+h.mats[mk] || 0));
+    out.talents = [null, null, null, null, null];
+    if (Array.isArray(h.talents)) for (var i = 0; i < 5; i++) { var tid = h.talents[i]; if (tid && D.TALENTS[out.cls][i].some(function (t) { return t.id === tid; }) && out.level >= D.TALENT_LEVELS[i]) out.talents[i] = tid; }
+    var st = h.story || {};
+    out.story = { cleared: clamp(+st.cleared || 0, 0, 5), ng: clamp(+st.ng || 0, 0, 99), ended: !!st.ended, deepest: clamp(+st.deepest || 0, 0, 999), waypoints: [1], endless: +st.endless || 0, seen: (st.seen && typeof st.seen === 'object') ? st.seen : {} };
+    (Array.isArray(st.waypoints) ? st.waypoints : [1]).forEach(function (w) { w = Math.floor(+w); if (w >= 1 && (w - 1) % 5 === 0 && w <= Math.max(out.story.deepest, 1) && out.story.waypoints.indexOf(w) < 0) out.story.waypoints.push(w); });
+    out.story.waypoints.sort(function (a, b) { return a - b; });
+    out.lore = (Array.isArray(h.lore) ? h.lore : []).filter(function (n) { return typeof n === 'number' && D.LORE[n]; });
+    out.bestiary = (h.bestiary && typeof h.bestiary === 'object' && !Array.isArray(h.bestiary)) ? h.bestiary : {};
+    var q = h.quests || {};
+    out.quests = { board: Array.isArray(q.board) ? q.board.filter(function (b) { return b && b.id && b.reward; }).slice(0, 3) : [], boardSeed: +q.boardSeed || 1, side: {}, done: +q.done || 0 };
+    if (q.side) for (var sq in q.side) if (D.SIDEQUESTS[sq] && ['active', 'found', 'done'].indexOf(q.side[sq]) >= 0) out.quests.side[sq] = q.side[sq];
+    rollBoard(out);
+    out.bless = (Array.isArray(h.bless) ? h.bless : []).filter(function (b) { return b && D.BLESSINGS[b.id] && b.n > 0; });
+    out.flags = (h.flags && typeof h.flags === 'object') ? h.flags : {};
+    out.town = { visit: +(h.town && h.town.visit) || 0 };
+    out.stats = base.stats; if (h.stats) for (var sk in out.stats) out.stats[sk] = Math.max(0, +h.stats[sk] || 0);
+    out.created = +h.created || Date.now(); out.updated = +h.updated || 0; out.rev = +h.rev || 1;
+    if (h.needsClass) { out.needsClass = true; out.legacy = Array.isArray(h.legacy) ? h.legacy.slice(0, 20) : []; }
+    var s = stats(out);
+    out.hp = clamp(+h.hp || s.maxHp, 1, s.maxHp); out.res = clamp(+h.res || 0, 0, s.maxRes);
+    out.v = SAVE_V;
+    return out;
+  }
+  // The old single "Deepdelve" hero (schema v4) becomes a veteran in the roster.
+  // Their class is unknown, so they pick one on first open; old gear is reforged
+  // into equivalents of the same rarity and item level, materials become scrap.
+  function migrateLegacy(old) {
+    if (!old || typeof old !== 'object' || !(old.level >= 1)) return null;
+    var r = rng(hashStr('legacy:' + (old.createdAt || 0) + ':' + (old.name || '')));
+    var h = newHero('warrior', old.name || 'Veteran', D.DIFFICULTIES[old.difficulty] ? old.difficulty : 'normal', r);
+    h.needsClass = true;
+    h.level = clamp(Math.floor(old.level), 1, 30);
+    h.gold = Math.max(0, Math.floor(+old.gold || 0));
+    var trophies = Array.isArray(old.trophies) ? old.trophies.length : 0;
+    h.story.cleared = clamp(trophies, 0, 4);
+    h.story.deepest = clamp(Math.round((+old.maxDepth || 0) * 25 / 35), h.story.cleared * 5, 25);
+    for (var a = 1; a <= h.story.cleared; a++) h.story.waypoints.push(a * 5 + 1);
+    h.story.deepest = Math.max(h.story.deepest, h.story.waypoints[h.story.waypoints.length - 1]);
+    var st = old.stats || {};
+    h.stats.kills = +st.kills || 0; h.stats.deaths = +st.deaths || 0; h.stats.floors = +st.floors || 0; h.stats.runs = +st.runs || 0;
+    var items = [].concat(Array.isArray(old.owned) ? old.owned : [], Array.isArray(old.stash) ? old.stash : []);
+    var rmap = { common: 'common', magic: 'magic', rare: 'rare', epic: 'epic', legendary: 'legendary' };
+    h.legacy = items.filter(function (it) { return it && typeof it === 'object' && it.slot; }).map(function (it) {
+      return { slot: it.slot === 'trinket' ? 'charm' : it.slot, rarity: rmap[it.rarity] || 'common', ilvl: clamp(Math.round((+it.ilvl || 1) * 25 / 35 + 1), 1, 30) };
+    }).sort(function (x, y) { return D.RARITY_ORDER.indexOf(y.rarity) - D.RARITY_ORDER.indexOf(x.rarity); }).slice(0, 12);
+    var bag = old.bag || {};
+    h.cons = { potion: Math.min(20, (+bag.potion || 0) + (+bag.hpotion || 0)), tonic: Math.min(20, (+bag.elixir || 0) + (+bag.eelixir || 0)), bomb: Math.min(20, +bag.bomb || 0), recall: 2, key: Math.min(10, +bag.key || 0), elixir: Math.min(10, +bag.antidote || 0) };
+    var mats = old.mats || {}, tot = 0; for (var m in mats) tot += +mats[m] || 0;
+    h.mats.scrap = Math.floor(tot / 2); h.mats.dust = Math.floor((+mats.crystal || 0) / 3) + Math.floor((+mats.essence || 0) / 2);
+    h.flags.veteran = 1;
+    h.created = +old.createdAt || Date.now();
+    h.hp = stats(h).maxHp;
+    return h;
+  }
+  // setClass: for a migrated veteran (or a fresh hero before their first delve)
+  function setClass(h, cls) {
+    if (!C[cls]) return false;
+    h.cls = cls; h.talents = [null, null, null, null, null];
+    var r = rng(hashStr(h.id + ':cls:' + cls)), k = C[cls].kit;
+    h.equip.weapon = makeItem(r, { base: k.weapon, ilvl: Math.max(1, h.level - 1), rarity: 'magic' });
+    h.equip.armor = makeItem(r, { base: k.armor, ilvl: Math.max(1, h.level - 1), rarity: 'magic' });
+    (h.legacy || []).forEach(function (L) {
+      if (h.bag.length >= BAG_MAX) return;
+      var o = { slot: L.slot, ilvl: L.ilvl, rarity: L.rarity, cls: cls };
+      if (L.slot === 'weapon') o.base = pick(r, C[cls].weapons);
+      var it = makeItem(r, o); if (it.slot !== L.slot && L.rarity !== 'legendary') it = makeItem(r, { slot: L.slot, ilvl: L.ilvl, rarity: L.rarity === 'legendary' ? 'epic' : L.rarity, cls: cls });
+      h.bag.push(it);
+    });
+    // auto-equip the best piece per slot
+    D.SLOTS.forEach(function (sl) {
+      var best = null;
+      h.bag.forEach(function (it) { if (it.slot === sl && canWield(h, it) && itemScore(it, cls) > itemScore(h.equip[sl], cls) && (!best || itemScore(it, cls) > itemScore(best, cls))) best = it; });
+      if (best) equip(h, best.uid);
+    });
+    delete h.needsClass; delete h.legacy;
+    h.hp = stats(h).maxHp; h.res = C[cls].res.start;
+    return true;
+  }
+  function newRoster() { return { v: SAVE_V, slots: {}, order: [], active: null, stash: [], stashRev: 0, daily: { days: {}, best: null }, deleted: {}, rev: 0 }; }
+  function normRoster(r) {
+    var o = newRoster();
+    if (!r || typeof r !== 'object') return o;
+    if (r.slots && typeof r.slots === 'object') for (var id in r.slots) { var h = normHero(r.slots[id]); if (h) { h.id = id; o.slots[id] = h; } }
+    o.deleted = (r.deleted && typeof r.deleted === 'object') ? r.deleted : {};
+    for (var d in o.deleted) delete o.slots[d];
+    o.order = (Array.isArray(r.order) ? r.order : []).filter(function (id) { return o.slots[id]; });
+    for (id in o.slots) if (o.order.indexOf(id) < 0) o.order.push(id);
+    o.active = o.slots[r.active] ? r.active : (o.order[0] || null);
+    o.stash = (Array.isArray(r.stash) ? r.stash : []).map(validItem).filter(Boolean).slice(0, STASH_MAX);
+    o.stashRev = +r.stashRev || 0;
+    if (r.daily && typeof r.daily === 'object') {
+      if (r.daily.days && typeof r.daily.days === 'object') for (var day in r.daily.days) { var v = r.daily.days[day]; if (v && typeof v.best === 'number') o.daily.days[day] = { best: v.best, tries: +v.tries || 0, cls: v.cls, depth: +v.depth || 0 }; }
+      if (r.daily.best && typeof r.daily.best.score === 'number') o.daily.best = r.daily.best;
+    }
+    // keep only the last 60 days
+    var days = Object.keys(o.daily.days).sort(); while (days.length > 60) delete o.daily.days[days.shift()];
+    o.rev = +r.rev || 0;
+    return o;
+  }
+  function betterHero(a, b) {
+    var pa = progressScore(a), pb = progressScore(b);
+    if (pa !== pb) return pa > pb ? a : b;
+    if ((a.rev || 0) !== (b.rev || 0)) return (a.rev || 0) > (b.rev || 0) ? a : b;
+    return (a.updated || 0) >= (b.updated || 0) ? a : b;
+  }
+  // merge(local, remote): union of heroes (each the more progressed copy),
+  // deletions win, the newer stash, the best daily scores. Local keeps `active`.
+  function mergeRoster(local, remote) {
+    var a = normRoster(local), b = normRoster(remote), o = newRoster();
+    var del = {}, k;
+    for (k in a.deleted) del[k] = Math.max(a.deleted[k], del[k] || 0);
+    for (k in b.deleted) del[k] = Math.max(b.deleted[k], del[k] || 0);
+    o.deleted = del;
+    var ids = a.order.concat(b.order.filter(function (id) { return a.order.indexOf(id) < 0; }));
+    ids.forEach(function (id) {
+      if (del[id]) return;
+      var x = a.slots[id], y = b.slots[id];
+      o.slots[id] = x && y ? betterHero(x, y) : (x || y);
+      o.order.push(id);
+    });
+    o.active = o.slots[a.active] ? a.active : (o.order[0] || null);
+    var sa = a.stashRev || 0, sb = b.stashRev || 0;
+    o.stash = sa >= sb ? a.stash : b.stash; o.stashRev = Math.max(sa, sb);
+    [a, b].forEach(function (src) {
+      for (var day in src.daily.days) {
+        var v = src.daily.days[day], cur = o.daily.days[day];
+        if (!cur) o.daily.days[day] = copy(v);
+        else { if (v.best > cur.best) { cur.best = v.best; cur.cls = v.cls; cur.depth = v.depth; } cur.tries = Math.max(cur.tries, v.tries); }
+      }
+      if (src.daily.best && (!o.daily.best || src.daily.best.score > o.daily.best.score)) o.daily.best = copy(src.daily.best);
+    });
+    o.rev = Math.max(a.rev, b.rev);
+    return o;
+  }
+  function recordDaily(roster, info, score, depth) {
+    var d = roster.daily.days[info.date] || { best: 0, tries: 0, cls: info.cls, depth: 0 };
+    d.tries++;
+    var isBest = score > d.best;
+    if (isBest) { d.best = score; d.depth = depth; d.cls = info.cls; }
+    roster.daily.days[info.date] = d;
+    var allTime = !roster.daily.best || score > roster.daily.best.score;
+    if (allTime) roster.daily.best = { score: score, date: info.date, cls: info.cls, depth: depth };
+    return { best: isBest, allTime: allTime };
+  }
+  function stashPut(roster, h, uid_) {
+    if (roster.stash.length >= STASH_MAX) return false;
+    var f = findItem(h, uid_); if (!f || f.where !== 'bag') return false;
+    h.bag.splice(f.idx, 1); delete f.it.fresh; roster.stash.push(f.it); roster.stashRev++; return true;
+  }
+  function stashTake(roster, h, uid_) {
+    if (h.bag.length >= BAG_MAX) return false;
+    for (var i = 0; i < roster.stash.length; i++) if (roster.stash[i].uid === uid_) { h.bag.push(roster.stash.splice(i, 1)[0]); roster.stashRev++; return true; }
+    return false;
+  }
+
+  // ===========================================================================
+  //  exports
+  // ===========================================================================
+  return {
+    D: D, T: T, WALKABLE: WALKABLE, OPAQUE: OPAQUE, DIRS4: DIRS4, MW: MW, MH: MH, SAVE_V: SAVE_V, BAG_MAX: BAG_MAX, STASH_MAX: STASH_MAX, ROSTER_MAX: ROSTER_MAX, LEVEL_CAP: LEVEL_CAP, TPL: TPL,
+    // utils
+    rng: rng, rf: rf, ri: ri, hashStr: hashStr, clamp: clamp, cheb: cheb, manh: manh,
+    // heroes
+    newHero: newHero, randomName: randomName, cleanName: cleanName, stats: stats, xpForLevel: xpForLevel, gainXp: gainXp, abilitiesFor: abilitiesFor,
+    talentPoints: talentPoints, chooseTalent: chooseTalent, talentFlags: talentFlags, hasTalentFlag: hasTalentFlag, setClass: setClass,
+    // items
+    makeItem: makeItem, itemStats: itemStats, itemLines: itemLines, itemName: itemName, itemScore: itemScore, itemValue: itemValue, mainValue: mainValue, canWield: canWield,
+    equip: equip, unequip: unequip, findItem: findItem, upgradeItem: upgradeItem, upgradeCost: upgradeCost, maxPlus: maxPlus, reforgeItem: reforgeItem, reforgeCost: reforgeCost,
+    salvageItem: salvageItem, salvageYield: salvageYield, sellItem: sellItem, craftItem: craftItem, craftCost: craftCost, hasMats: hasMats, setCounts: setCounts,
+    // world
+    biomeAt: biomeAt, actAt: actAt, isBossFloor: isBossFloor, startRun: startRun, genFloor: genFloor, newRunShell: newRunShell, computeFov: computeFov, visible: visible, monVisible: monVisible,
+    los: los, bfs: bfs, flood: flood, tile: tile, objAt: objAt, monAt: monAt, actorAt: actorAt, blocksObj: blocksObj, displayName: displayName, monDef: monDef, lightRadius: lightRadius,
+    hpCurve: hpCurve, powCurve: powCurve, spawnMon: spawnMon, spawnBoss: spawnBoss,
+    // turns
+    act: act, abilityState: abilityState, abilityTargets: abilityTargets, abilityCost: abilityCost, abilityRange: abilityRange, hostilesVisible: hostilesVisible,
+    eventChoice: eventChoice, closeModal: closeModal, travelPath: travelPath, explorePath: explorePath, strike: strike, killMon: killMon, addStatus: addStatus,
+    // town
+    townArrive: townArrive, shopStock: shopStock, buy: buy, consPrice: consPrice, templeCosts: templeCosts, uncurse: uncurse, buyBlessing: buyBlessing, respec: respec,
+    rollBoard: rollBoard, claimBounty: claimBounty, sideOffers: sideOffers, acceptSide: acceptSide, turnInSide: turnInSide, npcLine: npcLine, storyStage: storyStage,
+    // runs + saves
+    syncHero: syncHero, applyDeath: applyDeath, newGamePlus: newGamePlus, serializeRun: serializeRun, loadRun: loadRun,
+    normHero: normHero, migrateLegacy: migrateLegacy, newRoster: newRoster, normRoster: normRoster, mergeRoster: mergeRoster, progressScore: progressScore,
+    stashPut: stashPut, stashTake: stashTake,
+    dailyInfo: dailyInfo, dailyHero: dailyHero, dailyScore: dailyScore, recordDaily: recordDaily
+  };
+});

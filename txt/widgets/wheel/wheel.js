@@ -1031,7 +1031,7 @@
       return '<div class="wh-pl wc' + p.color + (on ? ' on' : '') + (locked ? ' lk' : '') + '" data-p="' + i + '">' +
         '<div class="wh-pn">' + (p.cpu ? '<i>&#129302;</i>' : '') + esc(p.name) + (p.wild ? '<em title="WILD card">W</em>' : '') + held + '</div>' +
         '<div class="wh-pr">' + (main || (r && r.t === 'bonus') ? money(r && r.t === 'bonus' ? p.total : p.round) : (r && r.t === 'toss' ? (locked ? 'LOCKED' : '&mdash;') : '$0')) + '</div>' +
-        '<div class="wh-pt">' + (main ? 'bank ' + money(p.total) : r && r.t === 'bonus' ? 'bonus' : 'bank ' + money(p.total)) + '<b class="wh-tm"></b></div></div>';
+        '<div class="wh-pt">' + (main ? 'bank ' + money(p.total) : r && r.t === 'bonus' ? (r.turn === i ? 'plays the bonus' : 'final bank') : 'bank ' + money(p.total)) + '<b class="wh-tm"></b></div></div>';
     }).join('');
     paintTimer(true);
   }

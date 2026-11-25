@@ -312,7 +312,7 @@
     });
     // ---- heights ----
     var amp = th.amp, elev = (r() - 0.4) * th.elev, gs = (0.008 + r() * 0.02) * D.slope, gsa = r() * Math.PI * 2, gsx = Math.sin(gsa) * gs, gsy = Math.cos(gsa) * gs;
-    var und = r() * 0.35, uph = r() * 6, valley = th.valley, dune = th.dune;
+    var und = r() * 0.12, uph = r() * 6, valley = th.valley, dune = th.dune;
     var hgt = new Float32Array(W * L);
     function hRaw(xx, yy, dd) {
       var s = clamp((yy - ty) / (gy - ty), 0, 1), ad = Math.abs(dd), fwh = fwAt[clamp(yy | 0, 0, L - 1)] || 11;
@@ -411,8 +411,10 @@
     var sp = Math.sqrt(rvx * rvx + rvy * rvy + rvz * rvz), hh = Math.sqrt(rvx * rvx + rvy * rvy) || 1e-6;
     var rx = rvy / hh, ry = -rvx / hh;
     var ax = -KD * sp * rvx, ay = -KD * sp * rvy, az = -G - KD * sp * rvz;
-    var lift = KL * b.sb * sp;
-    ax += lift * ry * rvz; ay += -lift * rx * rvz; az += lift * hh;
+    // lift from backspin rides on the ball's own speed (a tailwind cuts drag, not lift)
+    var bvx = b.vx, bvy = b.vy, bvz = b.vz, bs = Math.sqrt(bvx * bvx + bvy * bvy + bvz * bvz), bh = Math.sqrt(bvx * bvx + bvy * bvy) || 1e-6;
+    var lift = KL * b.sb * bs, lx = bvy / bh, ly = -bvx / bh;
+    ax += lift * ly * bvz; ay += -lift * lx * bvz; az += lift * bh;
     var side = KS * b.ss * sp;
     ax += side * rvy; ay += -side * rvx;
     b.vx += ax * DT; b.vy += ay * DT; b.vz += az * DT;
@@ -1163,9 +1165,10 @@
             var j = idx + (fx > 0.5 ? 1 : 0) + (fy > 0.5 ? W : 0);
             r = cr[j]; g = cg[j]; b = cb[j];
           }
-          if (grid && lie[idx] === GREEN) {
+          if (grid && z < 34 && lie[idx] === GREEN) {
             var mx = x - gpx, my = y - gpy, ax = mx - Math.round(mx), ay = my - Math.round(my);
-            if ((ax < 0 ? -ax : ax) < 0.045 * (1 + z * 0.06) || (ay < 0 ? -ay : ay) < 0.045 * (1 + z * 0.06)) { r = r * 0.62 + (dark ? 60 : 255) * 0.38; g = g * 0.62 + (dark ? 90 : 255) * 0.38; b = b * 0.62 + (dark ? 70 : 255) * 0.38; }
+            var gw = 0.035 + z * 0.0016, ga = 0.34 * (1 - z / 34);
+            if ((ax < 0 ? -ax : ax) < gw || (ay < 0 ? -ay : ay) < gw) { r = r * (1 - ga) + (dark ? 60 : 255) * ga; g = g * (1 - ga) + (dark ? 90 : 255) * ga; b = b * (1 - ga) + (dark ? 70 : 255) * ga; }
             var band = ((h * 12) | 0) & 1;
             if (band) { r *= 0.93; g *= 0.97; b *= 0.93; }
           }
@@ -1283,7 +1286,7 @@
 
   // ---- camera ----
   function camAim(b, yaw, putt) {
-    var H = S.H, back = putt ? 4.2 : 9, up = putt ? 1.6 : 4.2;
+    var H = S.H, tall = S.SH > S.SW * 1.05, back = putt ? (tall ? 5 : 4.2) : (tall ? 11 : 9), up = putt ? (tall ? 2.3 : 1.6) : (tall ? 6.5 : 4.2);
     var x = b.x - Math.sin(yaw) * back, y = b.y - Math.cos(yaw) * back, gz = Math.max(hAt(H, x, y), hAt(H, b.x, b.y));
     return { x: x, y: y, z: gz + up, yaw: yaw, hzf: putt ? 0.2 : 0.3 };
   }
@@ -1411,6 +1414,7 @@
     if (g && g.hs) for (i = 0; i < g.players.length; i++) {
       var b = ballPos(i);
       if (!b || b.st === 'done') continue;
+      if (i !== g.cur) { var cb = ballPos(g.cur); if (cb && Math.abs(cb.x - b.x) + Math.abs(cb.y - b.y) < 0.6) continue; }
       if (proj(b.x, b.y, b.z + 0.07, p)) OBJ.push({ k: 2, d: p.d, x: p.x, y: p.y, s: p.s, rx: p.rx, b: b, i: i, me: i === g.cur });
     }
     OBJ.sort(function (a, b2) { return b2.d - a.d; });
@@ -1546,6 +1550,8 @@
       if (!proj(x, y, z0, PJ)) continue;
       var ax = PJ.x, ay = PJ.y;
       if (!proj(x + ux * L, y + uy * L, z0, PJ)) continue;
+      var ql = Math.sqrt((PJ.x - ax) * (PJ.x - ax) + (PJ.y - ay) * (PJ.y - ay)), cap = 7 + 16 * Math.min(1, m / 0.035);
+      if (ql > cap) { PJ.x = ax + (PJ.x - ax) * cap / ql; PJ.y = ay + (PJ.y - ay) * cap / ql; }
       var t = Math.min(1, m / 0.04);
       c.strokeStyle = 'rgba(' + Math.round(255) + ',' + Math.round(255 - t * 150) + ',' + Math.round(255 - t * 200) + ',0.8)';
       c.beginPath(); c.moveTo(ax, ay); c.lineTo(PJ.x, PJ.y);
@@ -1828,10 +1834,10 @@
     S.ball = null; S.meter.st = 0; S.sw = null; S.cpuShot = null; S.plan = null;
     S.phase2 = p.cpu ? 'cpu' : 'aim';
     var cg = camAim(s, S.aim.yaw, S.putting); cg.k = 3;
-    setCam(cg, !!snap);
+    setCam(cg, !!snap || Math.abs(S.cam.x - cg.x) + Math.abs(S.cam.y - cg.y) > 60);
     if (p.cpu) { S.plan = newPlanner(H, s, S.eq, S.env, LEVELS[p.cpu] ? LEVELS[p.cpu].skill : 0.5); S.cpuT = 0; S.waitTxt = p.name + ' is lining up…'; setPad('wait'); }
     else setPad('aim');
-    if (g.players.length > 1 && !p.cpu) say(p.name + (humans() > 1 ? ' — your shot' : ' to play'), Math.round(distPin(H, s.x, s.y)) + ' yd · ' + LIE[s.lie].name, PCSS(g.cur), 1.3);
+    if (humans() > 1 && !p.cpu) say(p.name + (humans() > 1 ? ' — your shot' : ' to play'), Math.round(distPin(H, s.x, s.y)) + ' yd · ' + LIE[s.lie].name, PCSS(g.cur), 1.3);
     syncHud();
     saveRound();
   }
@@ -2172,7 +2178,7 @@
       if (g.tour) {
         var rows = tourBoard(g, g.hs && g.hs.b[0].done ? g.hi + 1 : g.hi), me = rows.filter(function (row) { return row.me; })[0];
         h += '<span class="tg-st">' + (me.tie ? 'T' : '') + me.pos + '<i>/' + rows.length + '</i> · lead <b>' + sgn(rows[0].toPar) + '</b></span>';
-      } else if (g.hs) h += '<span class="tg-st">stroke <b>' + (g.hs.b[g.cur].strokes + 1) + '</b></span>';
+      } else if (g.hs) { var cs0 = g.hs.b[g.cur]; h += '<span class="tg-st">shot <b>' + Math.min(cs0.strokes + (cs0.done ? 0 : 1), 99) + '</b></span>'; }
     }
     if (h !== S.hudHtml) { S.hudHtml = h; S.hud.innerHTML = h; }
   }
