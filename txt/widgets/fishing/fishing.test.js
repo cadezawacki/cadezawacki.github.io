@@ -382,4 +382,67 @@ test('legends: at most one per world, and only in their conditions', function ()
   assert.ok(!W2.legend);
 });
 
+test('fish spread across the whole water, in habitat, not bunched at the angler\'s feet', function () {
+  ['pond', 'river', 'lake', 'pier', 'ice', 'deep'].forEach(function (loc) {
+    var thirds = [0, 0, 0], n = 0, nearShore = 0;
+    for (var sd = 1; sd <= 6; sd++) {
+      var W = world(loc, { seed: sd, min: 420, lure: loc === 'deep' ? 'd' : loc === 'ice' ? 'j' : 'b' });
+      var W2 = world(loc, { seed: sd, min: 420 });
+      for (var t = 0; t < 180; t += E.STEP) {
+        var inp = {};
+        if (W.phase === 'ready') E.cast(W, 0.7, 0.8);
+        else if (W.phase === 'fishing') inp.reel = (W.t - W.lure.landT) > 20;
+        else if (W.phase !== 'flight') { W.phase = 'ready'; W.fight = null; W.lure = null; }
+        E.stepWorld(W, E.STEP, inp); E.stepWorld(W2, E.STEP, {});
+        W.ev.length = 0; W2.ev.length = 0;
+        if (t > 30 && Math.abs(t % 10) < E.STEP) {
+          W2.fish.forEach(function (f) { thirds[Math.min(2, Math.floor(f.x / W2.lay.W * 3))]++; n++; });
+          W.fish.forEach(function (f) { if (f.x < W.lay.W / 6) nearShore++; });
+        }
+      }
+    }
+    thirds.forEach(function (c, i) { assert.ok(c / n > 0.07, loc + ' third ' + i + ': ' + (c / n).toFixed(2)); });
+    // through the ice the jig hangs right under the angler, so curious fish gather there more
+    assert.ok(nearShore / n < (loc === 'ice' ? 0.4 : 0.2), loc + ' near the angler: ' + (nearShore / n).toFixed(2));
+  });
+});
+
+test('homes follow habitat: weed fish by the weeds, bottom fish over deep water', function () {
+  var W = world('lake', { seed: 4 }), deepX = 0, shelfX = 0, nd = 0, ns = 0;
+  for (var i = 0; i < 400; i++) {
+    var f1 = { sp: E.SP.laketrout }, f2 = { sp: E.SP.lmbass };
+    var a = E.pickHome(W, E.SP.laketrout), b = E.pickHome(W, E.SP.lmbass);
+    deepX += E.depthAt(W.lay, a); nd++; shelfX += E.depthAt(W.lay, b); ns++;
+  }
+  assert.ok(deepX / nd > shelfX / ns + 2, 'lake trout live deeper than bass');
+});
+
+test('an empty line comes home fast: one-tap reel in, and auto after the bait is stolen', function () {
+  function retrieve(quick) {
+    var W = world('lake', { lure: 's', cond: { band: E.DAY, wx: 0, wind: 0, wdir: 1, season: 1, loc: 'lake' } });
+    W.fish.length = 0; E.cast(W, 1, 1);
+    for (var i = 0; i < 200 && W.phase === 'flight'; i++) E.stepWorld(W, E.STEP, {});
+    if (quick) assert.ok(E.reelIn(W));
+    for (var t = 0; t < 120; t += E.STEP) { E.stepWorld(W, E.STEP, { reel: !quick }); W.fish.length = 0; if (W.phase === 'ready') return t; }
+    return 999;
+  }
+  var slow = retrieve(false), fast = retrieve(true);
+  assert.ok(fast < slow / 2.5 && fast < 8, 'quick ' + fast.toFixed(1) + 's vs ' + slow.toFixed(1) + 's');
+  // stolen bait: the line winds itself in
+  var W = world('pond', { lure: 'b', min: 420, day: 8 }), stolen = false;
+  E.cast(W, 0.7, 0.8);
+  for (var t = 0; t < 300 && W.phase !== 'ready'; t += E.STEP) {
+    E.stepWorld(W, E.STEP, {});
+    W.ev.forEach(function (e) { if (e.type === 'missed') stolen = true; });
+    W.ev.length = 0;
+    if (W.phase === 'fight') break;
+  }
+  if (stolen) assert.strictEqual(W.phase, 'ready', 'auto-retrieved after the bait went');
+  // nothing bites a lure on its way home
+  var W3 = world('river', { lure: 's' }); E.cast(W3, 0.8, 1);
+  for (var i = 0; i < 200 && W3.phase === 'flight'; i++) E.stepWorld(W3, E.STEP, {});
+  E.reelIn(W3);
+  W3.fish.forEach(function (f) { assert.strictEqual(E.appeal(W3, f), 0); });
+});
+
 console.log(passed + ' passed' + (process.exitCode ? '' : ', all ok'));
