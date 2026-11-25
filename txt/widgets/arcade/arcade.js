@@ -44,7 +44,7 @@
     snake: 'action', breakout: 'action', tetris: 'action', pong: 'action', flappy: 'action', asteroids: 'action',
     invaders: 'action', learntofly: 'action', uphill: 'action', duskdash: 'action', lander: 'action', roadhopper: 'action',
     mazemuncher: 'action', pinball: 'action', bugswarm: 'action', caveflyer: 'action', stacktower: 'action',
-    slingshot: 'action', crawler: 'action', towerdefense: 'action', towerdefense2: 'action',
+    slingshot: 'action', crawler: 'action', bubbles: 'action', povracer: 'action', towerdefense: 'action', towerdefense2: 'action',
     // puzzle
     g2048: 'puzzle', sudoku: 'puzzle', fifteen: 'puzzle', flowlines: 'puzzle', chesspuzzles: 'puzzle',
     bridge: 'puzzle', factory: 'puzzle', inkdrop: 'puzzle',
@@ -54,17 +54,17 @@
     spider: 'board', connect4: 'board', chess: 'board', checkers: 'board', seabattle: 'board', mancala: 'board',
     dotsboxes: 'board', blackjack: 'board', holdem: 'board', farkle: 'board', hearts: 'board', deckbuilder: 'board',
     // sports & physics
-    minigolf: 'sports', pool: 'sports', bowling: 'sports', darts: 'sports', curling: 'sports', papertoss: 'sports',
+    minigolf: 'sports', pool: 'sports', bowling: 'sports', darts: 'sports', curling: 'sports', papertoss: 'sports', teegolf: 'sports',
     // sims & idle
     lemonade: 'sims', tinyfarm: 'sims', spacetrader: 'sims',
     // story
     adventure: 'story', escaperoom: 'story',
     // party
-    partygames: 'party', autocomplete: 'party', trivia: 'party', plates: 'party',
+    partygames: 'party', wheel: 'party', autocomplete: 'party', trivia: 'party', plates: 'party',
     // learning
     geoquiz: 'learn', morse: 'learn', typing: 'learn',
     // toys
-    fallingsand: 'toys', marblerun: 'toys',
+    fallingsand: 'toys', etch: 'toys', marblerun: 'toys',
     // game tools
     scorekeeper: 'tools', chessclock: 'tools', remote: 'tools', arg: 'tools', picker: 'tools',
     'score keeper': 'tools', 'chess clock': 'tools', 'arg desk': 'tools', 'random picker': 'tools'

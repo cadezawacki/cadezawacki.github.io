@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.11.04-1",
+  "version": "2026.11.25-1",
   "modules": [
     {
       "id": "crawler",
@@ -4088,6 +4088,56 @@
           }
         ]
       }
+    },
+    {
+      "id": "bubbles",
+      "type": "widget",
+      "name": "Bubble Burst",
+      "description": "Aim, bank and pop matching bubbles — endless rising ceiling, powerups and a story-free chase for the high score",
+      "icon": "🫧",
+      "tags": "game,arcade,puzzle,bubble,shooter,match 3,endless,powerups,fun",
+      "entry": "widgets/bubbles/bubbles.js",
+      "css": "widgets/bubbles/bubbles.css"
+    },
+    {
+      "id": "povracer",
+      "type": "widget",
+      "name": "Apex Rush",
+      "description": "Behind-the-wheel pseudo-3D racer — endless highway, checkpoints, traffic and a career of tracks",
+      "icon": "🏎",
+      "tags": "game,arcade,racing,driving,car,endless,career,retro,fun",
+      "entry": "widgets/povracer/povracer.js",
+      "css": "widgets/povracer/povracer.css"
+    },
+    {
+      "id": "etch",
+      "type": "widget",
+      "name": "Etch Pad",
+      "description": "Twin-knob line drawing toy — turn the dials, shake to erase, save your sketches",
+      "icon": "✏",
+      "tags": "toy,drawing,sketch,etch,knobs,relax,doodle,fun",
+      "entry": "widgets/etch/etch.js",
+      "css": "widgets/etch/etch.css"
+    },
+    {
+      "id": "teegolf",
+      "type": "widget",
+      "name": "Tee Time Golf",
+      "description": "Arcade 3D golf — swipe-swing power and spin, wind, procedural 18-hole courses and a pro tour career",
+      "icon": "🏌",
+      "tags": "game,sport,golf,arcade,career,swing,course,2 player,cpu,fun",
+      "entry": "widgets/teegolf/teegolf.js",
+      "css": "widgets/teegolf/teegolf.css"
+    },
+    {
+      "id": "wheel",
+      "type": "widget",
+      "name": "Spin & Solve",
+      "description": "Spin the wheel, call letters, buy vowels and solve the puzzle — 1-4 players or vs CPU",
+      "icon": "🎡",
+      "tags": "game,word,party,puzzle,wheel,phrase,multiplayer,pass and play,cpu,2 player,fun",
+      "entry": "widgets/wheel/wheel.js",
+      "css": "widgets/wheel/wheel.css"
     }
   ]
 }
