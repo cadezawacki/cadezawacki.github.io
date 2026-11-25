@@ -690,7 +690,7 @@
   function fmax(W, f) { return f.sp.pow * 1.15 * Math.pow(f.w, 0.62) * W.diff.pow * (f.sp.rar === 4 ? 1.2 : 1); }
   function startFight(W, f, early) {
     var anc = W.st.anc, d = Math.hypot(f.x - anc.x, f.y - anc.y), s = f.sp;
-    var sta0 = s.sta * (6 + 3.4 * Math.sqrt(f.w)) * W.diff.sta;
+    var sta0 = s.sta * (6 + 5 * Math.pow(f.w, 0.38)) * W.diff.sta;
     W.biter = null;
     f.st = 'hooked';
     W.fight = { f: f, d: d + 0.3, T: 0.3, spike: 0, sta0: sta0, sta: sta0, mode: 'run', mT: 0.6 + W.r() * 1.2, dir: f.x > anc.x ? 1 : -1, slackT: 0, air: false, airT: 0, shake: 0,
@@ -755,7 +755,7 @@
       f.vx += (tvx - f.vx) * a; f.vy += (tvy - f.vy) * a;
       f.x += f.vx * dt; f.y += f.vy * dt;
       f.y = clamp(f.y, top, Math.max(top, bot));
-      f.x = clamp(f.x, W.st.minX + 0.2, W.lay.W - 0.3);
+      f.x = clamp(f.x, W.st.minX + 0.2, W.lay.W + 40);
       F.shake = Math.max(0, F.shake - dt * 0.2);
     }
     f.wig += dt * (6 + eff * 8);
@@ -778,7 +778,7 @@
       if (load > dragLb) {
         var ex = (load - dragLb) / dragLb;
         var pay = Math.min(burst * 1.2, (0.4 + ex * 2.6) * cr * 1.6);
-        F.d += pay * dt; F.slip = pay;
+        F.d = Math.min(F.d + pay * dt, Math.max(F.d, dist)); F.slip = pay;
         eload = dragLb + (load - dragLb) * (reeling ? 0.55 : 0.12) * (1.25 - g.reel.smooth);
       } else {
         F.slip = 0; eload = load;

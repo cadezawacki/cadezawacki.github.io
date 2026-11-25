@@ -725,3 +725,740 @@
     for (var i = 1; i <= R; i++) { var x = Math.round(x0 + dx / n * i), y = Math.round(y0 + dy / n * i); if (x < 0 || y < 0 || x >= G.w || y >= G.h || E.OPAQUE[G.t[y * G.w + x]]) break; out.push([x, y]); }
     return out;
   }
+
+  // ---- effects ---------------------------------------------------------------------
+  function burst(x, y, col, n, spd, life, size, grav) {
+    for (var i = 0; i < (n || 8); i++) {
+      var a = Math.random() * Math.PI * 2, v = (spd || 2.5) * (0.4 + Math.random() * 0.8);
+      S.fx.parts.push({ x: x + 0.5, y: y + 0.5, vx: Math.cos(a) * v, vy: Math.sin(a) * v - (grav ? 1.5 : 0), life: 0, max: (life || 0.5) * (0.7 + Math.random() * 0.6), col: col, size: size || 0.08, g: grav || 0 });
+    }
+    if (S.fx.parts.length > 400) S.fx.parts.splice(0, S.fx.parts.length - 400);
+  }
+  function floatText(x, y, s, col, big) { S.fx.texts.push({ x: x + 0.5 + (Math.random() - 0.5) * 0.3, y: y + 0.2, s: s, col: col, life: 0, max: big ? 1.4 : 0.9, big: !!big }); if (S.fx.texts.length > 40) S.fx.texts.shift(); }
+  function ring(x, y, r, col, dur) { S.fx.rings.push({ x: x + 0.5, y: y + 0.5, r: r || 1, col: col, t0: S.time, dur: dur || 380 }); }
+  function areaFlash(tiles, col, dur) { S.fx.areas.push({ tiles: tiles, col: col, t0: S.time, dur: dur || 320 }); }
+  function banner(title, sub, dur) { S.fx.banner = { title: title, sub: sub || '', t0: S.time, dur: dur || 2600 }; }
+  var ELEM_COL = { fire: '#ff8a3a', frost: '#9fdcff', shock: '#bfe0ff', holy: '#ffe08a', void: '#c08aff', poison: '#7ae07a', burn: '#ff8a3a', bleed: '#e04a4a', wave: '#6ab0ff', blood: '#e04a4a', trap: '#e0e0e0' };
+  var PROJ_COL = { fire: '#ff8a3a', arrow: '#e8d8b0', bigarrow: '#ffe08a', zap: '#bfe0ff', holy: '#ffe08a', bone: '#e8e0d0', knife: '#d0d0e0', drain: '#e04a6a', heal: '#7fe0a0', bomb: '#404048', beam: '#d0b0ff' };
+  function drainEvents() {
+    var G = S.G; if (!G || !G.ev.length) return;
+    var evs = G.ev; G.ev = [];
+    for (var i = 0; i < evs.length; i++) handleEvent(evs[i]);
+  }
+  function handleEvent(e) {
+    var G = S.G, snd = S.snd, vis = function (x, y) { return G.vis && G.vis[y * G.w + x]; };
+    switch (e.t) {
+      case 'log': addLog(e.s, e.c); break;
+      case 'dmg':
+        if (!vis(e.x, e.y) && !e.p) break;
+        var col = e.p ? '#ff6a5a' : e.crit ? '#ffe06a' : (ELEM_COL[e.elem] || (S.th.dark ? '#ffffff' : '#ffffff'));
+        floatText(e.x, e.y, (e.crit ? e.n + '!' : String(e.n)), col, e.crit);
+        if (e.ab) floatText(e.x, e.y - 0.3, '(' + e.ab + ')', '#9fd8ff');
+        var a = G.p.x === e.x && G.p.y === e.y ? 0 : null; G.mons.forEach(function (m) { if (m.x === e.x && m.y === e.y) a = m.id; });
+        if (a != null) S.flash[a] = S.time;
+        burst(e.x, e.y, ELEM_COL[e.elem] || (e.p ? '#e04a4a' : '#e8d0b0'), e.crit ? 12 : 5, e.crit ? 3.5 : 2.2, 0.4, 0.07);
+        if (e.p) { snd.play('hurt'); S.shake = Math.max(S.shake, e.crit ? 7 : 4); Cade.haptic && Cade.haptic(15); S.hurtT = S.time; }
+        else snd.play(e.crit ? 'crit' : 'hit');
+        if (e.crit && !e.p) S.shake = Math.max(S.shake, 3);
+        break;
+      case 'miss': if (vis(e.x, e.y)) { floatText(e.x, e.y, 'miss', '#b0b0b0'); snd.play('miss'); } break;
+      case 'block': floatText(e.x, e.y, 'block', '#9fd8ff'); snd.play('miss'); break;
+      case 'immune': floatText(e.x, e.y, 'immune', '#9fdcff'); break;
+      case 'heal': if (!e.quiet || e.n >= 3) floatText(e.x, e.y, '+' + e.n, '#7fe0a0'); if (!e.quiet) { burst(e.x, e.y, '#7fe0a0', 8, 1.5, 0.6, 0.07, -0.5); snd.play('heal'); } break;
+      case 'atk': S.lunge[e.id] = { dx: Math.sign(e.tx - e.x), dy: Math.sign(e.ty - e.y), t0: S.time }; if (e.id === 0) snd.play('swing'); break;
+      case 'proj':
+        S.fx.projs.push({ x0: e.x0 + 0.5, y0: e.y0 + 0.5, x1: e.x1 + 0.5, y1: e.y1 + 0.5, t0: S.time + (e.delay || 0), dur: Math.max(90, Math.hypot(e.x1 - e.x0, e.y1 - e.y0) * 28), k: e.k, col: PROJ_COL[e.k] || '#ffffff' });
+        snd.play(e.k === 'fire' ? 'fire' : e.k === 'zap' ? 'zap' : e.k === 'holy' || e.k === 'heal' ? 'holy' : e.k === 'drain' || e.k === 'beam' ? 'dark' : 'bow');
+        break;
+      case 'die':
+        S.fx.ghosts.push({ x: e.x, y: e.y, ch: e.ch, col: e.col, t0: S.time, dur: e.boss ? 1400 : 420, big: e.boss });
+        if (vis(e.x, e.y) || e.boss) { burst(e.x, e.y, e.col, e.boss ? 60 : 14, e.boss ? 5 : 3, e.boss ? 1.4 : 0.6, 0.09, 3); snd.play(e.boss ? 'boom' : 'kill'); }
+        break;
+      case 'fx': fxEvent(e); break;
+      case 'area':
+        var ac = e.k === 'boom' ? 'rgba(255,140,50,' : e.k === 'gas' ? 'rgba(120,230,90,' : e.k === 'wave' ? 'rgba(90,170,255,' : e.k === 'void' ? 'rgba(180,110,255,' : 'rgba(255,90,70,';
+        areaFlash(e.tiles, ac, 380);
+        e.tiles.forEach(function (q, ix) { if (ix % 2 === 0 && vis(q[0], q[1])) burst(q[0], q[1], ac + '1)', 4, 2.4, 0.4, 0.08); });
+        if (!e.small) snd.play(e.k === 'boom' ? 'boom' : e.k === 'wave' ? 'frost' : e.k === 'void' ? 'dark' : 'hit');
+        break;
+      case 'shake': S.shake = Math.max(S.shake, e.n); break;
+      case 'level': ring(G.p.x, G.p.y, 2, '#ffe08a', 700); burst(G.p.x, G.p.y, '#ffe08a', 30, 3, 1.1, 0.08, -0.5); banner('LEVEL ' + e.lvl, 'You grow stronger.', 1800); snd.play('level'); refreshBars(); break;
+      case 'floor': S.vis = {}; S.snapCam = true; S.tilesDirty = true; S.fx.parts = []; S.fx.projs = []; S.fx.areas = []; snd.play('stairs'); S.auto = null; break;
+      case 'act':
+        var A = D.STORY.acts[e.act - 1]; if (A) banner(A.name.toUpperCase(), D.BIOMES[e.biome].name, 3600); break;
+      case 'intent': var m = mon(e.id); if (m && vis(m.x, m.y)) snd.play('warn'); stopAuto(); break;
+      case 'alert': if (vis(e.x, e.y)) floatText(e.x, e.y - 0.2, '!', '#ffd040', true); break;
+      case 'spot': stopAuto('spot'); break;
+      case 'status': if (vis(e.x, e.y) && (e.k === 'stun' || e.k === 'frozen' || e.k === 'root' || e.k === 'mark')) floatText(e.x, e.y - 0.3, e.k === 'frozen' ? 'frozen' : e.k === 'mark' ? 'marked' : e.k + 'ed', '#d0d0ff'); break;
+      case 'pick':
+        if (e.k === 'gold') { floatText(e.x, e.y, '+' + e.n + 'g', '#f0c840'); snd.play('gold'); }
+        else if (e.k === 'item') { snd.play(e.rarity === 'common' || e.rarity === 'magic' ? 'pick' : 'rare'); if (e.rarity !== 'common' && e.rarity !== 'magic') { ring(e.x, e.y, 1, rarCol(e.rarity), 500); burst(e.x, e.y, rarCol(e.rarity), 16, 2.5, 0.8, 0.07, -0.5); } }
+        else snd.play('pick');
+        break;
+      case 'cast': break;
+      case 'boss': snd.play('boss'); S.shake = 6; break;
+      case 'phase': banner(e.name.toUpperCase(), e.line, 3000); snd.play('boss'); break;
+      case 'bounty': snd.play('solve'); break;
+      case 'snd': snd.play(e.k === 'push' ? 'door' : e.k); break;
+      case 'dash': for (var k = 0; k <= 6; k++) { var tx = e.x0 + (e.x1 - e.x0) * k / 6, ty = e.y0 + (e.y1 - e.y0) * k / 6; burst(tx, ty, '#e0d0b0', 2, 1, 0.35, 0.07); } snd.play('swing'); break;
+      case 'bump': break;
+    }
+  }
+  function mon(id) { var G = S.G; for (var i = 0; i < G.mons.length; i++) if (G.mons[i].id === id) return G.mons[i]; return null; }
+  function fxEvent(e) {
+    var snd = S.snd;
+    switch (e.k) {
+      case 'nova': ring(e.x, e.y, e.r + 0.5, e.col, 420); burst(e.x, e.y, e.col, 24, 4, 0.5, 0.07); snd.play(e.col === '#9fdcff' ? 'frost' : 'holy'); break;
+      case 'boom': ring(e.x, e.y, (e.r || 1) + 0.5, e.col, 380); burst(e.x, e.y, e.col, 30, 4.5, 0.6, 0.1); burst(e.x, e.y, '#555', 10, 2, 0.9, 0.12, -0.3); snd.play('boom'); break;
+      case 'sweep': ring(e.x, e.y, 1.5, e.col, 260); snd.play('swing'); break;
+      case 'smoke': burst(e.x, e.y, 'rgba(160,160,170,0.8)', 26, 1.6, 1.0, 0.18, -0.6); break;
+      case 'blink': burst(e.x, e.y, '#c0a0ff', 16, 2.5, 0.5, 0.06); snd.play('zap'); break;
+      case 'sparkle': burst(e.x, e.y, e.col || '#ffe08a', 12, 2, 0.6, 0.06, -0.5); snd.play('chest'); break;
+      case 'heal': ring(e.x, e.y, 1, '#7fe0a0', 400); break;
+      case 'shield': ring(e.x, e.y, 0.9, e.col || '#ffe08a', 500); snd.play('holy'); break;
+      case 'shieldbreak': burst(e.x, e.y, '#9fd8ff', 14, 3, 0.5, 0.07); break;
+      case 'raise': burst(e.x, e.y, e.col || '#a8e0c8', 16, 1.8, 0.8, 0.07, -0.8); snd.play('dark'); break;
+      case 'rain': var tl = []; for (var y = e.y - e.r; y <= e.y + e.r; y++) for (var x = e.x - e.r; x <= e.x + e.r; x++) tl.push([x, y]); areaFlash(tl, 'rgba(230,215,170,', 300); snd.play('bow'); break;
+      case 'meteor': ring(e.x, e.y, e.r + 1, '#ff8a3a', 500); burst(e.x, e.y, '#ff8a3a', 50, 5, 0.9, 0.12); burst(e.x, e.y, '#ffe08a', 20, 3, 0.6, 0.08); snd.play('boom'); break;
+      case 'flash': S.fx.flash = { col: e.col, t0: S.time, dur: 450 }; break;
+      case 'gate': burst(e.x, e.y, '#d0d0d8', 10, 2, 0.6, 0.06); snd.play('solve'); break;
+      case 'rune': ring(e.x, e.y, 0.8, '#9fdcff', 400); snd.play('holy'); break;
+      case 'trap': burst(e.x, e.y, '#e05050', 12, 2.5, 0.5, 0.07); snd.play('bad'); break;
+      case 'revive': ring(e.x, e.y, 2, '#ffe08a', 800); burst(e.x, e.y, '#ffe08a', 40, 3.5, 1.2, 0.08, -0.6); snd.play('level'); break;
+      case 'steal': burst(e.x, e.y, '#f0c840', 10, 2.5, 0.6, 0.06); break;
+    }
+  }
+  function drawFx(c, G, ox, oy, s, t, dt) {
+    var fx = S.fx;
+    fx.areas = fx.areas.filter(function (a) {
+      var k = (t - a.t0) / a.dur; if (k >= 1) return false;
+      c.fillStyle = a.col + (0.55 * (1 - k)) + ')';
+      a.tiles.forEach(function (q) { c.fillRect(ox + q[0] * s, oy + q[1] * s, s, s); });
+      return true;
+    });
+    fx.ghosts = fx.ghosts.filter(function (g) {
+      var k = (t - g.t0) / g.dur; if (k >= 1) return false;
+      c.globalAlpha = 1 - k; drawToken(c, ox + g.x * s, oy + g.y * s - k * s * 0.3, s, g.col, g.ch, { big: g.big }); c.globalAlpha = 1; return true;
+    });
+    fx.rings = fx.rings.filter(function (r) {
+      var k = (t - r.t0) / r.dur; if (k >= 1) return false;
+      c.strokeStyle = r.col; c.globalAlpha = 1 - k; c.lineWidth = 3 * (1 - k) + 1;
+      c.beginPath(); c.arc(ox + r.x * s, oy + r.y * s, Math.max(1, r.r * s * (0.3 + 0.7 * k)), 0, 7); c.stroke(); c.globalAlpha = 1; return true;
+    });
+    fx.projs = fx.projs.filter(function (p) {
+      if (t < p.t0) return true;
+      var k = (t - p.t0) / p.dur; if (k >= 1) { burst(p.x1 - 0.5, p.y1 - 0.5, p.col, 6, 2, 0.35, 0.06); return false; }
+      var x = p.x0 + (p.x1 - p.x0) * k, y = p.y0 + (p.y1 - p.y0) * k, tx = p.x0 + (p.x1 - p.x0) * Math.max(0, k - 0.25), ty = p.y0 + (p.y1 - p.y0) * Math.max(0, k - 0.25);
+      c.strokeStyle = p.col; c.lineWidth = p.k === 'bigarrow' || p.k === 'beam' ? 4 : 2.5; c.lineCap = 'round';
+      if (p.k === 'zap') { c.beginPath(); c.moveTo(ox + p.x0 * s, oy + p.y0 * s); for (var j = 1; j <= 5; j++) { var f = j / 5 * k; c.lineTo(ox + (p.x0 + (p.x1 - p.x0) * f + (Math.random() - 0.5) * 0.3) * s, oy + (p.y0 + (p.y1 - p.y0) * f + (Math.random() - 0.5) * 0.3) * s); } c.stroke(); }
+      else { c.beginPath(); c.moveTo(ox + tx * s, oy + ty * s); c.lineTo(ox + x * s, oy + y * s); c.stroke(); }
+      c.fillStyle = p.col; c.beginPath(); c.arc(ox + x * s, oy + y * s, p.k === 'fire' || p.k === 'bomb' ? s * 0.14 : s * 0.07, 0, 7); c.fill();
+      if (p.k === 'fire' && Math.random() < 0.6) burst(x - 0.5, y - 0.5, '#ffb050', 1, 0.5, 0.3, 0.06);
+      return true;
+    });
+    for (var i = fx.parts.length - 1; i >= 0; i--) {
+      var q = fx.parts[i]; q.life += dt; if (q.life >= q.max) { fx.parts.splice(i, 1); continue; }
+      q.x += q.vx * dt; q.y += q.vy * dt; q.vy += q.g * dt; q.vx *= 0.92; q.vy *= 0.92;
+      c.globalAlpha = 1 - q.life / q.max; c.fillStyle = q.col; var ps = q.size * s; c.fillRect(ox + q.x * s - ps / 2, oy + q.y * s - ps / 2, ps, ps);
+    }
+    c.globalAlpha = 1;
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    fx.texts = fx.texts.filter(function (x) {
+      x.life += dt; if (x.life >= x.max) return false;
+      var k = x.life / x.max, yy = oy + (x.y - k * 0.9) * s, sz = s * (x.big ? 0.52 : 0.38) * (k < 0.15 ? 0.7 + k * 2 : 1);
+      c.font = glyphFont(sz, true); c.globalAlpha = 1 - Math.max(0, k - 0.6) / 0.4;
+      c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.7)'; c.strokeText(x.s, ox + x.x * s, yy); c.fillStyle = x.col; c.fillText(x.s, ox + x.x * s, yy);
+      c.globalAlpha = 1; return true;
+    });
+    // hurt vignette
+    if (S.hurtT && t - S.hurtT < 350) { var hk = 1 - (t - S.hurtT) / 350; var gw = c.createRadialGradient(S.cw / 2, S.chh / 2, Math.min(S.cw, S.chh) * 0.3, S.cw / 2, S.chh / 2, Math.max(S.cw, S.chh) * 0.7); gw.addColorStop(0, 'rgba(200,0,0,0)'); gw.addColorStop(1, 'rgba(200,0,0,' + 0.35 * hk + ')'); c.fillStyle = gw; c.fillRect(0, 0, S.cw, S.chh); }
+    var s2 = E.stats(G.hero, G);
+    if (G.p.hp < s2.maxHp * 0.25) { var lw = 0.18 + 0.1 * Math.sin(t / 250); var gl = c.createRadialGradient(S.cw / 2, S.chh / 2, Math.min(S.cw, S.chh) * 0.35, S.cw / 2, S.chh / 2, Math.max(S.cw, S.chh) * 0.75); gl.addColorStop(0, 'rgba(150,0,0,0)'); gl.addColorStop(1, 'rgba(150,0,0,' + lw + ')'); c.fillStyle = gl; c.fillRect(0, 0, S.cw, S.chh); }
+    if (fx.flash) { var fk = (t - fx.flash.t0) / fx.flash.dur; if (fk >= 1) fx.flash = null; else { c.globalAlpha = 0.5 * (1 - fk); c.fillStyle = fx.flash.col; c.fillRect(0, 0, S.cw, S.chh); c.globalAlpha = 1; } }
+    if (fx.banner) {
+      var bk = (t - fx.banner.t0) / fx.banner.dur;
+      if (bk >= 1) fx.banner = null;
+      else {
+        var al = bk < 0.12 ? bk / 0.12 : bk > 0.8 ? (1 - bk) / 0.2 : 1;
+        c.globalAlpha = al * 0.8; c.fillStyle = S.th.dark ? '#000' : rgb(S.th.bg); c.fillRect(0, S.chh * 0.36, S.cw, S.chh * 0.22);
+        c.globalAlpha = al; c.fillStyle = rgb(S.th.accent); c.font = glyphFont(Math.min(22, S.cw / (fx.banner.title.length * 0.7 + 2)), true);
+        c.fillText(fx.banner.title, S.cw / 2, S.chh * 0.44);
+        c.fillStyle = S.th.dark ? '#e8e8e8' : rgb(S.th.text); c.font = glyphFont(12, false);
+        wrapText(c, fx.banner.sub, S.cw / 2, S.chh * 0.52, S.cw - 30, 15);
+        c.globalAlpha = 1;
+      }
+    }
+  }
+  function wrapText(c, s, x, y, maxW, lh) {
+    var words = String(s).split(' '), line = '', lines = [];
+    words.forEach(function (w) { var tst = line ? line + ' ' + w : w; if (c.measureText(tst).width > maxW && line) { lines.push(line); line = w; } else line = tst; });
+    if (line) lines.push(line);
+    lines.slice(0, 3).forEach(function (l, i) { c.fillText(l, x, y + i * lh); });
+  }
+  function drawMini() {
+    var G = S.G, mc = S.mini; if (!mc) return;
+    var cell = S.cw < 420 ? 2 : 3, w = G.w * cell, h = G.h * cell;
+    if (mc.width !== w * S.dpr) { mc.width = w * S.dpr; mc.height = h * S.dpr; mc.style.width = w + 'px'; mc.style.height = h + 'px'; }
+    var c = mc.getContext('2d'); c.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
+    c.clearRect(0, 0, w, h);
+    c.fillStyle = S.th.dark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.65)'; c.fillRect(0, 0, w, h);
+    var P = S.pal, fl = S.th.dark ? 'rgba(200,190,170,0.55)' : 'rgba(80,70,60,0.45)';
+    for (var y = 0; y < G.h; y++) for (var x = 0; x < G.w; x++) {
+      var i = y * G.w + x; if (!G.seen[i]) continue;
+      var t = G.t[i];
+      if (t === T.WALL || t === T.CRACK) continue;
+      c.fillStyle = t === T.STAIRS ? '#ffd040' : t === T.WATER || t === T.DEEP ? '#4a90d0' : t === T.LAVA ? '#ff6a2a' : t === T.CHASM ? '#000' : t === T.GATE ? '#c0c0c8' : t === T.PORTAL ? '#9fd0ff' : fl;
+      c.fillRect(x * cell, y * cell, cell, cell);
+    }
+    G.objs.forEach(function (o) {
+      if (!G.seen[o.y * G.w + o.x]) return;
+      var col = o.k === 'chest' ? '#c9a23a' : o.k === 'event' && !o.used ? '#c070ff' : o.k === 'lever' && !o.on ? '#70d0ff' : o.k === 'item' ? rarCol(o.it.rarity) : o.k === 'lore' || o.k === 'quest' ? '#ffe08a' : null;
+      if (col) { c.fillStyle = col; c.fillRect(o.x * cell, o.y * cell, cell, cell); }
+    });
+    G.mons.forEach(function (m) { if (E.monVisible(G, m)) { c.fillStyle = m.ally ? '#7fe0a0' : m.boss ? '#ff3030' : '#e05050'; c.fillRect(m.x * cell - 0.5, m.y * cell - 0.5, cell + 1, cell + 1); } });
+    c.fillStyle = rgb(S.th.accent); c.fillRect(G.p.x * cell - 1, G.p.y * cell - 1, cell + 2, cell + 2);
+  }
+
+  // ===========================================================================
+  //  HUD, ability bar, log
+  // ===========================================================================
+  function svg(path, fill) { return '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="' + (fill ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + path + '</svg>'; }
+  var IC_SND_ON = svg('<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>');
+  var IC_SND_OFF = svg('<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/>');
+  var IC_HELP = svg('<circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.6M12 17h.01"/>');
+  var IC_MENU = svg('<path d="M4 7h16M4 12h16M4 17h16"/>');
+  var ART = [
+    ' ___  ___ ___ ___  ___  ___ _ __   __ ___',
+    '|   \\| __| __| _ \\|   \\| __| |\\ \\ / /| __|',
+    '| |) | _|| _||  _/| |) | _|| |_\\ V / | _|',
+    '|___/|___|___|_|  |___/|___|____\\_/  |___|'].join('\n');
+
+  function hero() { return S.G ? S.G.hero : S.hero; }
+  function refreshHud() { refreshBars(); refreshAbil(); refreshChips(); }
+  function refreshBars() {
+    if (!S) return;
+    var h = hero(); if (!h) return;
+    var G = S.G, s = E.stats(h, G), cr = D.CLASSES[h.cls].res;
+    var hp = G ? G.p.hp : h.hp, res = G ? G.p.res : h.res;
+    S.hpFill.style.width = clamp(hp / s.maxHp * 100, 0, 100) + '%';
+    S.hpLbl.textContent = 'HP ' + Math.max(0, Math.round(hp)) + '/' + s.maxHp;
+    S.hpEl.classList.toggle('low', hp < s.maxHp * 0.3);
+    S.resFill.style.width = clamp(res / s.maxRes * 100, 0, 100) + '%';
+    S.resFill.style.background = cr.color;
+    S.resLbl.textContent = cr.name + ' ' + Math.round(res) + '/' + s.maxRes;
+    S.xpFill.style.width = (h.level >= E.LEVEL_CAP ? 100 : clamp(h.xp / E.xpForLevel(h.level) * 100, 0, 100)) + '%';
+    var where;
+    if (G) where = (G.mode === 'daily' ? '☀ ' : '') + 'B' + G.depth + ' · ' + D.BIOMES[G.biome].short;
+    else where = 'Lanternfall';
+    S.whereEl.textContent = where;
+    S.goldEl.innerHTML = G && G.mode === 'daily' ? 'score <b>' + E.dailyScore(G) + '</b>' : 'Lv <b>' + h.level + '</b> · <b>' + h.gold + '</b>g';
+    // boss bar
+    var boss = G && G.mons.filter(function (m) { return m.boss && m.aware; })[0];
+    if (boss) { S.bossEl.hidden = false; S.bossName.textContent = boss.name + (boss.phase ? ' — phase ' + (boss.phase + 1) : ''); S.bossFill.style.width = clamp(boss.hp / boss.maxHp * 100, 0, 100) + '%'; }
+    else S.bossEl.hidden = true;
+  }
+  function refreshChips() {
+    if (!S || !S.G) { if (S) S.chipsEl.innerHTML = ''; return; }
+    var G = S.G, h = G.hero, out = [];
+    (h.bless || []).forEach(function (b) { var B = D.BLESSINGS[b.id]; out.push('<span class="cr-chip ' + (B.good ? 'good' : 'bad') + '" title="' + esc(B.name + ': ' + B.desc + ' (' + b.n + ' floors)') + '">' + B.icon + '<i>' + b.n + '</i></span>'); });
+    var st = G.p.st, map = { poison: ['☠', 'bad'], burn: ['🔥', 'bad'], bleed: ['🩸', 'bad'], stun: ['✶', 'bad'], frozen: ['❄', 'bad'], root: ['⛓', 'bad'], slow: ['🐌', 'bad'], weaken: ['↓', 'bad'], dark: ['🌑', 'bad'], invis: ['👁', 'good'], unbreak: ['🛡', 'good'], inv: ['✧', 'good'], haste: ['⚡', 'good'], regen: ['✚', 'good'], shield: ['🔰', 'good'], sanct: ['✺', 'good'] };
+    for (var k in st) {
+      var m = map[k]; if (!m) continue;
+      var v = st[k], n = typeof v === 'number' ? v : v.t != null ? (v.t > 900 ? '' : v.t) : '';
+      out.push('<span class="cr-chip ' + m[1] + '" title="' + k + '">' + m[0] + '<i>' + n + '</i></span>');
+    }
+    if (G.p.st.ramp) out.push('<span class="cr-chip good" title="Rampage">⚔<i>' + G.p.st.ramp.n + '</i></span>');
+    var html = out.join('');
+    if (html !== S.chipsHtml) { S.chipsHtml = html; S.chipsEl.innerHTML = html; }
+  }
+  function refreshAbil() {
+    if (!S) return;
+    var h = hero(); if (!h) { S.abilEl.innerHTML = ''; return; }
+    var G = S.G, list = E.abilitiesFor(h), html = '';
+    list.forEach(function (a, i) {
+      var A = D.ABILITIES[a.id], st = G ? E.abilityState(G, a.id) : { ok: a.known }, cost = G ? E.abilityCost(G, a.id) : A.cost;
+      var cls = 'cr-ab' + (!a.known ? ' locked' : st.cd ? ' cd' : st.short ? ' short' : '') + (S.tgt && S.tgt.id === a.id ? ' on' : '');
+      html += '<button type="button" class="' + cls + '" data-act="ab" data-id="' + a.id + '" title="' + esc(A.name + ' — ' + A.desc) + '">' +
+        '<span class="cr-abk">' + (i + 1) + '</span><span class="cr-abi">' + (a.known ? A.icon : '🔒') + '</span>' +
+        '<span class="cr-abc">' + (!a.known ? 'Lv' + a.lvl : st.cd ? st.cd + 't' : cost ? cost : 'free') + '</span>' +
+        (st.cd ? '<span class="cr-abcd"></span>' : '') + '</button>';
+    });
+    var pots = h.cons.potion || 0;
+    html += '<button type="button" class="cr-ab pot' + (pots ? '' : ' short') + '" data-act="potion" title="Health Potion (Q)"><span class="cr-abk">Q</span><span class="cr-abi">🧪</span><span class="cr-abc">×' + pots + '</span></button>';
+    if (html !== S.abilHtml) { S.abilHtml = html; S.abilEl.innerHTML = html; }
+  }
+  function addLog(s, c) {
+    if (!S) return;
+    S.logLines.push({ s: s, c: c || '' }); if (S.logLines.length > 150) S.logLines.shift();
+    var el = document.createElement('div');
+    el.className = 'cr-ln ' + String(c || '').replace(/[^a-z:]/g, '').replace(':', ' r-');
+    el.textContent = s;
+    S.logEl.appendChild(el);
+    while (S.logEl.children.length > 4) S.logEl.removeChild(S.logEl.firstChild);
+    setTimeout(function () { el.classList.add('old'); }, 5000);
+  }
+
+  // ===========================================================================
+  //  actions — every player turn goes through here
+  // ===========================================================================
+  function doAct(a) {
+    if (!S || !S.G || S.G.over || S.G.modal) return false;
+    S.snd.ensure();
+    var hpBefore = S.G.p.hp;
+    var ok = E.act(S.G, a);
+    afterAct();
+    if (S && S.auto && S.G && S.G.p.hp < hpBefore) stopAuto();
+    return ok;
+  }
+  function afterAct() {
+    if (!S || !S.G) return;
+    S.tilesDirty = true;
+    drainEvents();
+    if (!S.G) return;
+    refreshHud();
+    if (S.G.over) { finishRun(); return; }
+    if (S.G.modal) { stopAuto(); showModal(); }
+    saveRunSoon();
+  }
+  function move(dx, dy) {
+    if (S.tgt) { moveCursor(dx, dy); return; }
+    stopAuto();
+    doAct({ t: 'move', dx: dx, dy: dy });
+  }
+  function useKey() { if (S.tgt) { confirmTarget(); return; } stopAuto(); doAct({ t: 'use' }); }
+  function restKey() {
+    if (S.tgt) { confirmTarget(); return; }
+    if (S.auto) { stopAuto(); return; }
+    var G = S.G; if (!G) return;
+    if (E.hostilesVisible(G).length) { doAct({ t: 'wait' }); return; }
+    var s = E.stats(G.hero, G), cr = D.CLASSES[G.hero.cls].res;
+    var resFull = cr.decay ? true : G.p.res >= s.maxRes;
+    if (G.p.hp >= s.maxHp && resFull) { doAct({ t: 'wait' }); return; }
+    S.auto = { k: 'rest', n: 0, next: 0 };
+    addLog('You rest… (any key to stop)', 'info');
+  }
+  function usePotion() { stopAuto(); if (S.G) doAct({ t: 'cons', id: 'potion' }); }
+
+  // ---- auto: travel / explore / rest -------------------------------------------------
+  function stopAuto(why) { if (S && S.auto) { S.auto = null; } }
+  function startTravel(x, y) {
+    var path = E.travelPath(S.G, x, y);
+    if (!path || !path.length) return false;
+    S.auto = { k: 'path', path: path, next: 0 };
+    return true;
+  }
+  function startExplore() {
+    var G = S.G; if (!G) return;
+    if (E.hostilesVisible(G).length) { addLog('Not with enemies in sight.', 'warn'); return; }
+    S.auto = { k: 'explore', next: 0 };
+  }
+  function tickAuto(t) {
+    var A = S.auto, G = S.G;
+    if (!A || !G) return;
+    if (G.over || G.modal || S.ovlOpen || S.screen) { S.auto = null; return; }
+    if (t < A.next) return;
+    A.next = t + (A.k === 'rest' ? 28 : 72);
+    if (A.k === 'rest') {
+      var s = E.stats(G.hero, G), cr = D.CLASSES[G.hero.cls].res;
+      if (E.hostilesVisible(G).length || A.n++ > 150) { S.auto = null; return; }
+      if (G.p.hp >= s.maxHp && (cr.decay || G.p.res >= s.maxRes)) { S.auto = null; addLog('You feel rested.', 'good'); return; }
+      doAct({ t: 'wait' }); return;
+    }
+    if (A.k === 'explore') {
+      var path = E.explorePath(G);
+      if (!path || !path.length) {
+        S.auto = null;
+        addLog(G.stairs && G.seen[G.stairs[1] * G.w + G.stairs[0]] ? 'Nothing left to explore here. The stairs are on your map.' : 'Nothing more to explore that you can reach.', 'info');
+        if (G.stairs && G.seen[G.stairs[1] * G.w + G.stairs[0]]) startTravel(G.stairs[0], G.stairs[1]);
+        return;
+      }
+      var st = path[0];
+      if (!doAct({ t: 'move', dx: st[0] - G.p.x, dy: st[1] - G.p.y })) S.auto = null;
+      return;
+    }
+    if (A.k === 'path') {
+      var q = A.path.shift();
+      if (!q) { S.auto = null; return; }
+      if (Math.abs(q[0] - G.p.x) + Math.abs(q[1] - G.p.y) !== 1) { S.auto = null; return; }
+      var last = !A.path.length;
+      var ok = doAct({ t: 'move', dx: q[0] - G.p.x, dy: q[1] - G.p.y });
+      if (!ok || last) S.auto = null;
+    }
+  }
+
+  // ---- abilities & targeting ---------------------------------------------------------
+  function abilityPress(id) {
+    var G = S.G; if (!G) return;
+    stopAuto();
+    if (S.tgt && S.tgt.id === id) { confirmTarget(); return; }
+    var st = E.abilityState(G, id);
+    if (!st.ok) { addLog(st.why, 'info'); S.snd.play('bad'); return; }
+    var A = D.ABILITIES[id];
+    if (A.target === 'self') { doAct({ t: 'ability', id: id }); return; }
+    var tg = E.abilityTargets(G, id);
+    if (!tg.list.length) { addLog(A.target === 'corpse' ? 'No corpse within reach.' : A.target === 'enemy' ? 'No target in range.' : 'Nowhere to aim.', 'info'); S.snd.play('bad'); return; }
+    if (A.target === 'enemy' && S.set.quick && tg.def) { doAct({ t: 'ability', id: id, x: tg.def.x, y: tg.def.y }); return; }
+    S.tgt = { id: id, list: tg.list, cur: tg.def || tg.list[0], radius: A.target === 'tile' || A.target === 'corpse' ? (id === 'corpseboom' ? (A.radius || 1) : (A.radius || 0)) : 0, line: A.target === 'line', range: E.abilityRange(G, id), enemy: A.target === 'enemy' };
+    showTgtBar(A.name);
+    refreshAbil();
+  }
+  function bombPress() {
+    var G = S.G; if (!G || !G.hero.cons.bomb) { addLog('No bombs.', 'info'); return; }
+    var list = [];
+    for (var y = G.p.y - 4; y <= G.p.y + 4; y++) for (var x = G.p.x - 4; x <= G.p.x + 4; x++) if (E.visible(G, x, y) && !E.OPAQUE[E.tile(G, x, y)]) list.push({ x: x, y: y });
+    var foes = E.hostilesVisible(G).filter(function (m) { return Math.max(Math.abs(m.x - G.p.x), Math.abs(m.y - G.p.y)) <= 4; });
+    S.tgt = { id: 'bomb', list: list, cur: foes[0] ? { x: foes[0].x, y: foes[0].y } : list[0], radius: 1 };
+    showTgtBar('Fire Bomb');
+  }
+  function showTgtBar(name) {
+    S.tgtEl.hidden = false;
+    S.tgtEl.innerHTML = '<span>◎ <b>' + esc(name) + '</b> — ' + (S.coarse ? 'tap a target' : 'arrows aim · Enter casts') + '</span><button type="button" data-act="tgtgo">Cast</button><button type="button" data-act="tgtx">✕</button>';
+  }
+  function cancelTarget() { S.tgt = null; S.tgtEl.hidden = true; refreshAbil(); }
+  function confirmTarget(x, y) {
+    var tg = S.tgt; if (!tg) return;
+    if (x != null) tg.cur = { x: x, y: y };
+    var ok = tg.cur && tg.list.some(function (q) { return q.x === tg.cur.x && q.y === tg.cur.y; });
+    if (!ok) { addLog('Out of range.', 'info'); S.snd.play('bad'); return; }
+    var id = tg.id, cx = tg.cur.x, cy = tg.cur.y;
+    cancelTarget();
+    if (id === 'bomb') doAct({ t: 'cons', id: 'bomb', x: cx, y: cy });
+    else doAct({ t: 'ability', id: id, x: cx, y: cy });
+  }
+  function moveCursor(dx, dy) {
+    var tg = S.tgt; if (!tg || !tg.cur) return;
+    if (tg.enemy) {
+      // jump to the nearest valid target in that direction
+      var best = null, bd = 1e9;
+      tg.list.forEach(function (q) { var vx = q.x - tg.cur.x, vy = q.y - tg.cur.y; if (vx * dx + vy * dy <= 0) return; var d = Math.abs(vx) + Math.abs(vy) + Math.abs(dx ? vy : vx) * 2; if (d < bd) { bd = d; best = q; } });
+      if (best) tg.cur = best;
+      return;
+    }
+    tg.cur = { x: tg.cur.x + dx, y: tg.cur.y + dy };
+  }
+  function cycleTarget() {
+    var G = S.G; if (!G) return;
+    if (S.tgt && S.tgt.enemy) { var l = S.tgt.list, i = 0; for (var k = 0; k < l.length; k++) if (l[k].x === S.tgt.cur.x && l[k].y === S.tgt.cur.y) i = k; S.tgt.cur = l[(i + 1) % l.length]; return; }
+    var hv = E.hostilesVisible(G); if (!hv.length) return;
+    hv.sort(function (a, b) { return Math.abs(a.x - G.p.x) + Math.abs(a.y - G.p.y) - Math.abs(b.x - G.p.x) - Math.abs(b.y - G.p.y); });
+    var ix = 0; for (var j = 0; j < hv.length; j++) if (hv[j].id === G.p.target) ix = j + 1;
+    G.p.target = hv[ix % hv.length].id;
+  }
+
+  // ===========================================================================
+  //  screens (full panel) and overlays (modal cards)
+  // ===========================================================================
+  function B(act, label, extra, cls) { return '<button type="button" class="' + (cls || 'cr-b') + '" data-act="' + act + '"' + (extra || '') + '>' + label + '</button>'; }
+  function dat(k, v) { return ' data-' + k + '="' + esc(v) + '"'; }
+  function tok(col, ch, big) { return '<span class="cr-tok' + (big ? ' big' : '') + '" style="--c:' + col + '">' + esc(ch) + '</span>'; }
+  function actName(h) {
+    if (h.story.ended) return 'Story complete' + (h.story.ng ? ' · NG+' + h.story.ng : '');
+    return 'Act ' + ['I', 'II', 'III', 'IV', 'V'][Math.min(4, h.story.cleared)] + (h.story.ng ? ' · NG+' + h.story.ng : '');
+  }
+  function heroChip(h, extra) {
+    var c = D.CLASSES[h.cls];
+    return '<div class="cr-hchip">' + tok(c.color, h.needsClass ? '?' : '@', true) + '<div><b>' + esc(h.name) + '</b><span>' +
+      (h.needsClass ? 'Lv ' + h.level + ' Veteran' : 'Lv ' + h.level + ' ' + c.name) + ' · ' + actName(h) + ' · deepest B' + (h.story.deepest || 0) + ' · ' + D.DIFFICULTIES[h.difficulty].name + '</span>' + (extra || '') + '</div></div>';
+  }
+  function showScreen(name) { S.screen = name; S.scrEl.hidden = false; S.ovlOpen = false; S.ovlEl.hidden = true; S.ov = null; renderScreen(); }
+  function hideScreen() { S.screen = null; S.scrEl.hidden = true; S.scrEl.innerHTML = ''; S.sceneCv = null; }
+  function renderScreen() {
+    if (!S || !S.screen) return;
+    var fk = focusKey(S.scrEl), html = '';
+    switch (S.screen) {
+      case 'loading': html = '<div class="cr-card"><pre class="cr-art">' + esc(ART) + '</pre><p class="cr-p cr-c">Lighting the torches…</p></div>'; break;
+      case 'error': html = '<div class="cr-card"><p class="cr-p">Couldn\'t load the dungeon (offline before it was ever cached?).</p>' + B('retry', 'Try again', '', 'cr-go') + '</div>'; break;
+      case 'title': html = scrTitle(); break;
+      case 'roster': html = scrRoster(); break;
+      case 'create': html = scrCreate(); break;
+      case 'town': html = scrTown(); break;
+      case 'death': html = scrDeath(); break;
+      case 'daily': html = scrDaily(); break;
+      case 'dailyover': html = scrDailyOver(); break;
+      case 'ending': html = scrEnding(); break;
+    }
+    S.scrEl.innerHTML = html;
+    S.sceneCv = S.scrEl.querySelector('.cr-scene');
+    if (S.sceneCv) sizeScene();
+    restoreFocus(S.scrEl, fk);
+  }
+  function sizeScene() {
+    var cv = S.sceneCv, w = Math.max(200, S.scrEl.clientWidth - 24), h = Math.round(Math.min(150, w * 0.36));
+    cv.style.width = w + 'px'; cv.style.height = h + 'px'; cv.width = Math.round(w * S.dpr); cv.height = Math.round(h * S.dpr);
+  }
+  function focusKey(root) { var a = document.activeElement; return a && root.contains(a) ? (a.getAttribute('data-act') || '') + '|' + (a.getAttribute('data-id') || a.getAttribute('data-uid') || a.getAttribute('data-i') || a.getAttribute('data-t') || '') : null; }
+  function restoreFocus(root, fk) {
+    if (!S.kbd) return;
+    var els = root.querySelectorAll('button:not([disabled])'), pick = null;
+    if (fk) for (var i = 0; i < els.length; i++) { var e = els[i], k = (e.getAttribute('data-act') || '') + '|' + (e.getAttribute('data-id') || e.getAttribute('data-uid') || e.getAttribute('data-i') || e.getAttribute('data-t') || ''); if (k === fk) { pick = e; break; } }
+    if (!pick) pick = root.querySelector('.cr-go:not([disabled])') || els[0];
+    if (pick) try { pick.focus({ preventScroll: false }); } catch (e2) {}
+  }
+  function openOvl(k, o) { S.ov = o || {}; S.ov.k = k; S.ovlOpen = true; S.ovlEl.hidden = false; stopAuto(); if (S.tgt) cancelTarget(); renderOvl(true); }
+  function closeOvl() {
+    if (!S.ovlOpen) return;
+    var ov = S.ov; S.ovlOpen = false; S.ovlEl.hidden = true; S.ovlEl.innerHTML = ''; S.ov = null;
+    if (ov && ov.onClose) ov.onClose();
+    if (S.screen) { renderScreen(); }
+    else { refreshHud(); try { S.cv.focus({ preventScroll: true }); } catch (e) {} if (S.G && S.G.modal) showModal(); }
+  }
+  function renderOvl(first) {
+    if (!S.ovlOpen || !S.ov) return;
+    var fk = first ? null : focusKey(S.ovlEl), k = S.ov.k, html;
+    if (k.indexOf('npc:') === 0) html = ovNpc(k.slice(4));
+    else html = ({ sheet: ovSheet, event: ovEvent, dialog: ovDialog, tablet: ovTablet, lore: ovLore, found: ovFound, dshop: ovDShop, map: ovMap, log: ovLog, menu: ovMenu, help: ovHelp, stash: ovStash, prologue: ovPrologue, msg: ovMsg }[k] || ovMsg)();
+    var scroll = S.ovlEl.firstChild ? S.ovlEl.firstChild.scrollTop : 0;
+    S.ovlEl.innerHTML = '<div class="cr-card cr-ovc' + (S.ov.wide ? ' wide' : '') + '">' + html + '</div>';
+    if (!first && S.ovlEl.firstChild) S.ovlEl.firstChild.scrollTop = scroll;
+    if (k === 'map') drawBigMap();
+    restoreFocus(S.ovlEl, fk);
+  }
+  function msg(title, text, onClose) { openOvl('msg', { title: title, text: text, onClose: onClose }); }
+  function ovMsg() { return '<div class="cr-title">' + esc(S.ov.title || '') + '</div><div class="cr-p">' + S.ov.text + '</div>' + B('close', 'Continue', '', 'cr-go'); }
+
+  // ---- title ------------------------------------------------------------------------
+  function runSnapFor(h) {
+    var s = jget(K_RUN + h.id); if (!s || s.heroId !== h.id) return null;
+    if (h.client && h.client !== S.client && (h.updated || 0) > (s.time || 0)) return null;   // another device played on since
+    return s;
+  }
+  function setRow() {
+    var st = S.set;
+    return '<div class="cr-sets">' + B('set', (st.sound ? '🔊' : '🔇') + ' Sound', dat('k', 'sound'), 'cr-chipb' + (st.sound ? ' on' : '')) +
+      B('set', '⚡ Quick-cast', dat('k', 'quick'), 'cr-chipb' + (st.quick ? ' on' : '')) + B('set', '▦ Minimap', dat('k', 'mini'), 'cr-chipb' + (st.mini ? ' on' : '')) + '</div>';
+  }
+  function scrTitle() {
+    var R = S.R, h = R.slots[R.active], html = '<div class="cr-card cr-titlec"><canvas class="cr-scene"></canvas><pre class="cr-art">' + esc(ART) + '</pre><div class="cr-sub">— the descent beneath Lanternfall —</div>';
+    if (h) {
+      var snap = runSnapFor(h);
+      html += heroChip(h) + B('continue', h.needsClass ? '▶ A veteran returns — choose a calling' : snap ? '▶ Resume the delve — floor ' + snap.depth : '▶ Enter Lanternfall', '', 'cr-go');
+    } else html += '<p class="cr-p cr-c">Six callings. Five acts. One hollow king.</p>' + B('new', '▶ Create your hero', '', 'cr-go');
+    var dinfo = E.dailyInfo(today()), dd = R.daily.days[today()];
+    html += '<div class="cr-row">' + B('heroes', '⇄ Heroes ' + R.order.length + '/' + E.ROSTER_MAX) + B('daily', '☀ Daily' + (dd ? ' · ' + dd.best : '')) + B('help', '? How to play') + '</div>';
+    html += setRow() + '<div class="cr-note">Heroes sync across devices when Cade.txt cloud sync is on.</div></div>';
+    return html;
+  }
+  // ---- roster -------------------------------------------------------------------------
+  function scrRoster() {
+    var R = S.R, html = '<div class="cr-card"><div class="cr-title">HEROES</div>';
+    if (!R.order.length) html += '<p class="cr-p cr-c">No heroes yet.</p>';
+    R.order.forEach(function (id) {
+      var h = R.slots[id], armed = S.delArm === id;
+      html += '<div class="cr-slot' + (id === R.active ? ' on' : '') + '">' + heroChip(h) + '<div class="cr-row">' + B('pick', id === R.active ? 'Selected ▶' : 'Play ▶', dat('id', id), 'cr-b pri') +
+        B('del', armed ? 'Really delete?' : 'Delete', dat('id', id), 'cr-b' + (armed ? ' danger' : '')) + '</div></div>';
+    });
+    if (R.order.length < E.ROSTER_MAX) html += B('new', '+ New hero', '', 'cr-go');
+    html += '<div class="cr-note">Up to ' + E.ROSTER_MAX + ' heroes. They share one stash in Lanternfall.</div>' + B('back', '← Back') + '</div>';
+    return html;
+  }
+  // ---- create -------------------------------------------------------------------------
+  function scrCreate() {
+    var cr = S.create, vet = cr.vet, html = '<div class="cr-card"><div class="cr-title">' + (vet ? 'A VETERAN RETURNS' : 'CHOOSE A CALLING') + '</div>';
+    if (vet) html += '<p class="cr-p">' + esc(vet.name) + ' (level ' + vet.level + ') has delved before — but the Deep has changed, and so must they. Choose a calling; your old gear is reforged to match it.</p>';
+    html += '<div class="cr-classes">';
+    D.CLASS_ORDER.forEach(function (k) { var c = D.CLASSES[k]; html += '<button type="button" class="cr-cls' + (cr.cls === k ? ' on' : '') + '" data-act="cls" data-id="' + k + '" style="--c:' + c.color + '"><span class="cr-clsi">' + c.icon + '</span><b>' + c.name + '</b><i>' + c.res.name + '</i></button>'; });
+    html += '</div>';
+    var C = D.CLASSES[cr.cls];
+    if (C) {
+      var tmp = E.newHero(cr.cls, 'x', 'normal', E.rng(1)), st = E.stats(tmp);
+      html += '<div class="cr-clsinfo" style="--c:' + C.color + '"><p class="cr-p"><b>' + C.name + '.</b> ' + esc(C.blurb) + '</p><p class="cr-p">' + esc(C.play) + '</p>' +
+        '<div class="cr-kv"><span>Health <b>' + st.maxHp + '</b></span><span>Power <b>' + Math.round(st.pow) + '</b></span><span>Armor <b>' + Math.round(st.arm) + '</b></span><span>' + C.res.name + ' <b>' + st.maxRes + '</b></span></div><ul class="cr-abl">';
+      C.abilities.forEach(function (id, i) { var A = D.ABILITIES[id]; html += '<li><span>' + A.icon + '</span><b>' + A.name + '</b> <i>Lv ' + D.ABILITY_LEVELS[i] + '</i> — ' + esc(A.desc) + '</li>'; });
+      html += '</ul></div>';
+    }
+    if (!vet) {
+      html += '<div class="cr-h">Name</div><div class="cr-namebox">' + (cr.typing ? '<input class="cr-in" maxlength="18" value="' + esc(cr.name) + '" aria-label="Hero name">' : '<b>' + esc(cr.name) + '</b>') +
+        B('rname', '🎲', ' title="Random name"', 'cr-sq') + (cr.typing ? '' : B('tname', '✎', ' title="Type a name"', 'cr-sq')) + '</div>';
+      html += '<div class="cr-h">Difficulty</div><div class="cr-sets">';
+      D.DIFF_ORDER.forEach(function (k) { html += B('diff', D.DIFFICULTIES[k].name, dat('id', k), 'cr-chipb' + (cr.diff === k ? ' on' : '')); });
+      html += '</div><p class="cr-note">' + esc(D.DIFFICULTIES[cr.diff].desc) + '</p>';
+    }
+    html += '<div class="cr-row">' + B('back', '← Back') + B('begin', vet ? 'Choose this calling ▶' : 'Begin the descent ▶', C ? '' : ' disabled', 'cr-go') + '</div></div>';
+    return html;
+  }
+  // ---- town ---------------------------------------------------------------------------
+  var SUN = ['The Sunstone gutters, barely brighter than a candle.', 'The Sunstone flickers — a little steadier tonight.', 'The Sunstone burns amber over the rooftops.', 'The Sunstone is bright enough to read by.', 'The Sunstone blazes; the shaft below has gone quiet.', 'The Sunstone burns white. Lanternfall sleeps.', 'The Sunstone burns white. The Deep, patient, dreams again.'];
+  function placeBadge(h, id) {
+    if (id === 'board') return h.quests.board.some(function (b) { return b.done; }) ? '<i class="cr-bdg">!</i>' : '';
+    var sq = E.sideOffers(h, id);
+    if (sq.some(function (q) { return q.state === 'new' || q.state === 'found'; })) return '<i class="cr-bdg">!</i>';
+    return '';
+  }
+  function scrTown() {
+    var h = S.hero, st = E.storyStage(h), html = '<div class="cr-town"><canvas class="cr-scene"></canvas>';
+    html += '<div class="cr-townh"><b>LANTERNFALL</b><span>' + esc(SUN[st]) + '</span></div>';
+    html += heroChip(h, '<span class="cr-mats">◆ ' + h.gold + 'g · ⚙ ' + h.mats.scrap + ' · ✨ ' + h.mats.dust + ' · 🔥 ' + h.mats.soul + '</span>');
+    html += '<div class="cr-places">';
+    D.TOWN_ORDER.forEach(function (id) { var N = D.NPCS[id]; html += '<button type="button" class="cr-place" data-act="place" data-id="' + id + '"><span class="cr-pi">' + N.icon + '</span><b>' + esc(N.place) + '</b><i>' + esc(id === 'board' ? N.role : N.name + ', ' + N.role) + '</i>' + placeBadge(h, id) + '</button>'; });
+    html += '<button type="button" class="cr-place" data-act="place" data-id="stash"><span class="cr-pi">🧰</span><b>Shared Stash</b><i>' + S.R.stash.length + '/' + E.STASH_MAX + ' items</i></button>';
+    html += '<button type="button" class="cr-place" data-act="sheet"><span class="cr-pi">🎒</span><b>' + esc(h.name) + '</b><i>gear, talents, journal</i>' + (E.talentPoints(h) ? '<i class="cr-bdg">★</i>' : '') + '</button>';
+    html += '</div><div class="cr-desc"><div class="cr-h">The Deepdelve</div><div class="cr-sets">';
+    var wps = h.story.waypoints.slice();
+    if (S.wp == null || wps.indexOf(S.wp) < 0) S.wp = wps[wps.length - 1];
+    wps.forEach(function (w) { html += B('wp', 'B' + w + ' · ' + D.BIOMES[E.biomeAt(w)].short, dat('id', w), 'cr-chipb' + (S.wp === w ? ' on' : '')); });
+    html += '</div>';
+    var b = D.BIOMES[E.biomeAt(S.wp)];
+    html += B('descend', '⬇ Descend — floor ' + S.wp + ' · ' + b.name, '', 'cr-go');
+    if (h.story.ended && !h.story.ng && false) html += '';
+    if (h.story.ended) html += '<div class="cr-row">' + B('ngplus', S.ngArm ? 'Really begin New Game+?' : '✦ New Game+', '', 'cr-b' + (S.ngArm ? ' danger' : '')) + '</div><div class="cr-note">The Endless Descent continues past floor 25 (waypoints every 5 floors). New Game+ restarts the story with far deadlier foes — and far better loot.</div>';
+    html += '</div><div class="cr-row">' + B('heroes', '⇄ Heroes') + B('daily', '☀ Daily') + B('help', '? Help') + '</div></div>';
+    return html;
+  }
+  // ---- NPCs -----------------------------------------------------------------------------
+  function npcHead(id) {
+    var N = D.NPCS[id], h = S.hero;
+    if (!S.ov.line) S.ov.line = E.npcLine(h, id, E.rng(Date.now() & 0xffff));
+    return '<div class="cr-npc">' + tok(N.col, N.ch, true) + '<div><b>' + esc(N.name) + '</b><i>' + esc(N.role) + '</i></div>' + B('close', '✕', ' aria-label="Close"', 'cr-x') + '</div><p class="cr-quote">' + esc(S.ov.line) + '</p>';
+  }
+  function sideBox(id) {
+    var h = S.hero, out = '';
+    E.sideOffers(h, id).forEach(function (q) {
+      var SQ = D.SIDEQUESTS[q.id];
+      if (q.state === 'new') out += '<div class="cr-quest"><b>' + esc(SQ.name) + '</b><p>' + esc(SQ.text) + '</p>' + B('sq-accept', 'Accept', dat('id', q.id), 'cr-b pri') + '</div>';
+      else if (q.state === 'active') out += '<div class="cr-quest dim"><b>' + esc(SQ.name) + '</b><p>Find the ' + esc(SQ.item) + ' in ' + D.BIOMES[D.BIOME_ORDER[SQ.act - 1]].name + '.</p></div>';
+      else if (q.state === 'found') out += '<div class="cr-quest"><b>' + esc(SQ.name) + '</b><p>You have the ' + esc(SQ.item) + '.</p>' + B('sq-turn', 'Hand it over', dat('id', q.id), 'cr-b pri') + '</div>';
+    });
+    return out;
+  }
+  function tabs(list, cur) { return '<div class="cr-tabs">' + list.map(function (t) { return B('otab', t[1], dat('t', t[0]), cur === t[0] ? 'on' : ''); }).join('') + '</div>'; }
+  function itemRow(it, opts) {
+    opts = opts || {};
+    var R = D.RARITIES[it.rarity], B_ = D.BASES[it.base], main = B_.main ? Math.round(E.mainValue(it)) + (B_.main === 'pow' ? ' pow' : ' arm') : '';
+    var sel = S.ov && S.ov.sel === it.uid;
+    return '<button type="button" class="cr-it' + (sel ? ' on' : '') + '" data-act="' + (opts.act || 'isel') + '" data-uid="' + it.uid + '" style="--r:' + R.col + '">' +
+      '<span class="cr-iti">' + ({ weapon: '/', armor: '[', helm: '^', charm: '"' }[it.slot]) + '</span><span class="cr-itn">' + esc(it.name) + (it.plus ? ' +' + it.plus : '') + (it.fresh ? ' <em>new</em>' : '') + '</span>' +
+      '<span class="cr-itm">' + (opts.right != null ? opts.right : main + ' · i' + it.ilvl) + '</span></button>';
+  }
+  function compareLines(it, h) {
+    var cur = h.equip[it.slot]; if (!cur || cur === it) return '';
+    var a = E.itemStats(it), b = E.itemStats(cur), keys = {}, out = [];
+    for (var k in a) keys[k] = 1; for (k in b) keys[k] = 1;
+    for (k in keys) {
+      var d = (a[k] || 0) - (b[k] || 0); if (Math.abs(d) < 0.005) continue;
+      var A = D.AFFIXES[k], txt;
+      if (k === 'pow' || k === 'arm') txt = (d > 0 ? '+' : '') + Math.round(d) + ' ' + (k === 'pow' ? 'power' : 'armor');
+      else if (A && A.pct) txt = (d > 0 ? '+' : '') + Math.round(d * 100) + '% ' + A.name.toLowerCase();
+      else txt = (d > 0 ? '+' : '') + Math.round(d) + ' ' + (A ? A.name.toLowerCase() : k);
+      out.push('<span class="' + (d > 0 ? 'up' : 'dn') + '">' + txt + '</span>');
+    }
+    var ds = E.itemScore(it, h.cls) - E.itemScore(cur, h.cls);
+    return '<div class="cr-cmp"><i>vs ' + esc(cur.name) + ':</i> ' + (out.join(' ') || 'same stats') + ' <b class="' + (ds >= 0 ? 'up' : 'dn') + '">' + (ds >= 0 ? '▲' : '▼') + '</b></div>';
+  }
+  function itemDetail(it, h, actions) {
+    var R = D.RARITIES[it.rarity], lines = E.itemLines(it), extra = '';
+    if (it.uq) extra = '<p class="cr-lore">' + esc(D.UNIQUES[it.uq].lore) + '</p>';
+    if (it.set) { var Sx = D.SETS[it.set], n = E.setCounts(h)[it.set] || 0; extra = '<p class="cr-set">' + esc(Sx.name) + ' (' + n + '/3 worn) — 2: ' + esc(Sx.b2.desc) + ' · 3: ' + esc(Sx.b3.desc) + '</p>'; }
+    var warn = it.slot === 'weapon' && !E.canWield(h, it) ? '<p class="cr-warn">Your class can\'t wield this.</p>' : '';
+    return '<div class="cr-idet" style="--r:' + R.col + '"><b>' + esc(it.name) + (it.plus ? ' +' + it.plus : '') + '</b><i>' + R.name + ' ' + D.SLOT_NAMES[it.slot].toLowerCase() + ' · item level ' + it.ilvl + ' · worth ' + E.itemValue(it) + 'g</i><ul>' +
+      lines.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' + extra + warn + compareLines(it, h) + '<div class="cr-row">' + (actions || '') + '</div></div>';
+  }
+  function ovNpc(id) {
+    var h = S.hero, ov = S.ov, html;
+    if (id === 'stash') return ovStash();
+    html = npcHead(id) + sideBox(id);
+    if (id === 'maren') {
+      html += '<div class="cr-row">' + B('story', '📖 The story so far') + B('rest', '🛏 Rest (free)') + '</div>';
+      if (ov.story) html += '<div class="cr-story">' + storyRecap(h) + '</div>';
+      if (ov.rested) html += '<p class="cr-note">You sleep like the dead. (Fully restored — you always are, back in town.)</p>';
+    } else if (id === 'torvald') {
+      ov.tab = ov.tab || 'up';
+      html += tabs([['up', 'Upgrade'], ['ref', 'Reforge'], ['salv', 'Salvage'], ['craft', 'Craft']], ov.tab);
+      html += '<div class="cr-note">◆ ' + h.gold + 'g · ⚙ ' + h.mats.scrap + ' scrap · ✨ ' + h.mats.dust + ' dust · 🔥 ' + h.mats.soul + ' soul embers</div>';
+      if (ov.flash) html += '<p class="cr-flash">' + esc(ov.flash) + '</p>';
+      var items = D.SLOTS.map(function (s) { return h.equip[s]; }).filter(Boolean).concat(h.bag);
+      if (ov.tab === 'craft') {
+        html += '<p class="cr-p">Torvald forges a random piece at your deepest item level.</p>';
+        ['rare', 'epic'].forEach(function (kind) {
+          var c = E.craftCost(kind), costTxt = c.gold + 'g ' + Object.keys(c.mats).map(function (m) { return c.mats[m] + ' ' + D.MATERIALS[m].name; }).join(', ');
+          html += '<div class="cr-h">' + (kind === 'rare' ? 'Rare' : 'Epic') + ' piece — ' + costTxt + '</div><div class="cr-row">';
+          D.SLOTS.forEach(function (sl) { html += B('craft', D.SLOT_NAMES[sl], dat('id', sl) + dat('t', kind) + (E.hasMats(h, c) && h.bag.length < E.BAG_MAX ? '' : ' disabled')); });
+          html += '</div>';
+        });
+      } else {
+        items.forEach(function (it) {
+          var right, ok = true;
+          if (ov.tab === 'up') { var c = E.upgradeCost(h, it); if ((it.plus || 0) >= E.maxPlus(h)) { right = 'max +' + E.maxPlus(h); ok = false; } else { right = c.gold + 'g ' + matTxt(c.mats); ok = E.hasMats(h, c); } }
+          else if (ov.tab === 'ref') { if (it.uq || it.rarity === 'common') { right = '—'; ok = false; } else { var c2 = E.reforgeCost(h, it); right = c2.gold + 'g ' + matTxt(c2.mats); ok = E.hasMats(h, c2); } }
+          else { if (D.SLOTS.some(function (s) { return h.equip[s] === it; })) { right = 'equipped'; ok = false; } else right = '→ ' + matTxt(E.salvageYield(it)); }
+          html += itemRow(it, { right: right });
+          if (ov.sel === it.uid) html += itemDetail(it, h, ok ? B(ov.tab === 'up' ? 'up' : ov.tab === 'ref' ? 'ref' : 'salv', ov.tab === 'up' ? '⚒ Upgrade to +' + ((it.plus || 0) + 1) : ov.tab === 'ref' ? '🔮 Reforge affixes' : '♻ Salvage', dat('uid', it.uid), 'cr-b pri') : '');
+        });
+      }
+    } else if (id === 'pip') {
+      ov.tab = ov.tab || 'buy';
+      if (!S.stock) S.stock = E.shopStock(h);
+      html += tabs([['buy', 'Buy'], ['sell', 'Sell']], ov.tab) + '<div class="cr-note">◆ ' + h.gold + ' gold · pack ' + h.bag.length + '/' + E.BAG_MAX + '</div>';
+      if (ov.flash) html += '<p class="cr-flash">' + esc(ov.flash) + '</p>';
+      if (ov.tab === 'buy') {
+        S.stock.cons.forEach(function (e, i) { var C_ = D.CONSUMABLES[e.cons]; html += '<div class="cr-cons"><span>' + C_.icon + '</span><div><b>' + C_.name + '</b> <i>×' + (h.cons[e.cons] || 0) + '</i><p>' + esc(C_.desc) + '</p></div>' + B('buy', e.price + 'g', dat('i', 'c' + i) + (h.gold >= e.price ? '' : ' disabled'), 'cr-b pri') + '</div>'; });
+        html += '<div class="cr-h">Wares</div>';
+        S.stock.items.forEach(function (e, i) {
+          if (e.sold) return;
+          html += itemRow(e.it, { right: e.price + 'g' });
+          if (ov.sel === e.it.uid) html += itemDetail(e.it, h, B('buy', 'Buy for ' + e.price + 'g', dat('i', 'i' + i) + (h.gold >= e.price ? '' : ' disabled'), 'cr-b pri'));
+        });
+      } else {
+        if (!h.bag.length) html += '<p class="cr-p">Your pack is empty.</p>';
+        else html += B('sellcommons', 'Sell all Common items', '', 'cr-b');
+        h.bag.forEach(function (it) { html += itemRow(it, { right: E.itemValue(it) + 'g' }); if (ov.sel === it.uid) html += itemDetail(it, h, B('sell', 'Sell for ' + E.itemValue(it) + 'g', dat('uid', it.uid), 'cr-b pri')); });
+      }
+    } else if (id === 'ilse') {
+      var tc = E.templeCosts(h), curses = (h.bless || []).filter(function (b) { return !D.BLESSINGS[b.id].good; });
+      if (ov.flash) html += '<p class="cr-flash">' + esc(ov.flash) + '</p>';
+      html += '<div class="cr-h">Curses</div>' + (curses.length ? curses.map(function (b) { return '<p class="cr-p">' + D.BLESSINGS[b.id].icon + ' ' + esc(D.BLESSINGS[b.id].name) + ' — ' + esc(D.BLESSINGS[b.id].desc) + ' (' + b.n + ' floors)</p>'; }).join('') + B('uncurse', 'Lift all curses — ' + tc.uncurse + 'g', h.gold >= tc.uncurse ? '' : ' disabled', 'cr-b pri') : '<p class="cr-note">You carry no curses.</p>');
+      html += '<div class="cr-h">Blessings for your next descent (3 floors) — ' + tc.bless + 'g</div><div class="cr-row wrap">';
+      ['might', 'ward', 'fortune', 'vigor', 'swift', 'clarity'].forEach(function (b) { var Bl = D.BLESSINGS[b]; html += B('bless', Bl.icon + ' ' + Bl.desc, dat('id', b) + (h.gold >= tc.bless ? '' : ' disabled')); });
+      html += '</div><div class="cr-h">Retrace your path</div><p class="cr-note">Forget every talent you have chosen and choose again. ' + tc.respec + 'g</p>' + B('respec', S.respecArm ? 'Really forget all talents?' : 'Respec talents — ' + tc.respec + 'g', h.gold >= tc.respec && h.talents.some(Boolean) ? '' : ' disabled', 'cr-b' + (S.respecArm ? ' danger' : ''));
+    } else if (id === 'odo') {
+      ov.tab = ov.tab || 'lore';
+      html += tabs([['lore', 'Lore ' + h.lore.length + '/' + D.LORE.length], ['beast', 'Bestiary'], ['rec', 'Records']], ov.tab);
+      if (ov.tab === 'lore') {
+        for (var a = 1; a <= 5; a++) {
+          html += '<div class="cr-h">' + D.STORY.acts[a - 1].name + '</div>';
+          D.LORE.forEach(function (L, i) {
+            if (L.act !== a) return;
+            if (h.lore.indexOf(i) < 0) { html += '<p class="cr-note">— a missing page —</p>'; return; }
+            html += B('lore', '📜 ' + esc(L.title), dat('i', i), 'cr-lnk');
+            if (ov.page === i) html += '<p class="cr-lore">' + esc(L.text) + '</p>';
+          });
+        }
+      } else if (ov.tab === 'beast') {
+        var seen = Object.keys(h.bestiary);
+        if (!seen.length) html += '<p class="cr-note">Nothing recorded yet. Go and meet something.</p>';
+        seen.sort(function (a2, b2) { return h.bestiary[b2] - h.bestiary[a2]; }).forEach(function (k) {
+          var isB = k.indexOf('boss:') === 0, M = isB ? D.BOSSES[k.slice(5)] : D.MONSTERS[k]; if (!M) return;
+          html += '<div class="cr-beast">' + tok(M.col, M.ch) + '<b>' + esc(M.name) + '</b><i>' + (isB ? 'defeated ' : 'slain ') + h.bestiary[k] + '×</i></div>';
+        });
+      } else {
+        var s = h.stats;
+        html += '<div class="cr-kv col"><span>Kills <b>' + s.kills + '</b></span><span>Elites <b>' + s.elites + '</b></span><span>Bosses <b>' + s.bosses + '</b></span><span>Deaths <b>' + s.deaths + '</b></span><span>Floors <b>' + s.floors + '</b></span><span>Delves <b>' + s.runs + '</b></span><span>Puzzles <b>' + s.puzzles + '</b></span><span>Shrines <b>' + s.events + '</b></span><span>Gold found <b>' + s.gold + '</b></span><span>Bounties <b>' + h.quests.done + '</b></span><span>Turns <b>' + s.turns + '</b></span><span>Deepest <b>B' + h.story.deepest + '</b></span></div>';
+      }
+    } else if (id === 'board') {
+      if (ov.flash) html += '<p class="cr-flash">' + esc(ov.flash) + '</p>';
+      h.quests.board.forEach(function (b) {
+        html += '<div class="cr-quest' + (b.done ? ' done' : '') + '"><b>' + esc(b.name) + '</b><p>' + esc(b.text) + '</p><div class="cr-prog"><i style="width:' + Math.round(b.have / b.need * 100) + '%"></i><span>' + (b.tpl === 'depth' ? (b.done ? 'done' : 'not yet') : b.have + '/' + b.need) + '</span></div>' +
+          '<p class="cr-note">Reward: ' + b.reward.gold + 'g, ' + b.reward.xp + ' XP</p>' + (b.done ? B('claim', 'Claim reward', dat('id', b.id), 'cr-b pri') : '') + '</div>';
+      });
+      var sides = Object.keys(h.quests.side).filter(function (q) { return h.quests.side[q] !== 'done'; });
+      if (sides.length) { html += '<div class="cr-h">Errands</div>'; sides.forEach(function (q) { var SQ = D.SIDEQUESTS[q]; html += '<p class="cr-p">' + esc(SQ.name) + ' — ' + (h.quests.side[q] === 'found' ? 'return to ' + D.NPCS[SQ.giver].name : 'search ' + D.BIOMES[D.BIOME_ORDER[SQ.act - 1]].name) + '</p>'; }); }
+    }
+    html += B('close', 'Leave', '', 'cr-b');
+    return html;
+  }
+  function matTxt(m) { var o = []; for (var k in m) if (m[k]) o.push(m[k] + D.MATERIALS[k].icon); return o.join(' '); }
+  function storyRecap(h) {
+    var out = D.STORY.prologue.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('');
+    for (var a = 1; a <= h.story.cleared; a++) out += '<div class="cr-h">' + esc(D.STORY.acts[a - 1].name) + '</div>' + (D.STORY.cleared[a] || []).map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('');
+    if (h.story.ended) out += D.STORY.ending.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('');
+    return out;
+  }
+  function ovStash() {
+    var h = S.hero, R = S.R, html = '<div class="cr-npc">' + tok('#c0a070', '▤', true) + '<div><b>Shared Stash</b><i>every hero in your roster can use it</i></div>' + B('close', '✕', ' aria-label="Close"', 'cr-x') + '</div>';
+    html += '<div class="cr-h">Your pack ' + h.bag.length + '/' + E.BAG_MAX + ' — tap to store</div>';
+    if (!h.bag.length) html += '<p class="cr-note">Empty.</p>';
+    h.bag.forEach(function (it) { html += itemRow(it, { act: 'stash-put', right: R.stash.length < E.STASH_MAX ? '→ stash' : 'full' }); });
+    html += '<div class="cr-h">Stash ' + R.stash.length + '/' + E.STASH_MAX + ' — tap to take</div>';
+    if (!R.stash.length) html += '<p class="cr-note">Empty.</p>';
+    R.stash.forEach(function (it) { html += itemRow(it, { act: 'stash-take', right: h.bag.length < E.BAG_MAX ? '→ pack' : 'pack full' }); });
+    return html + B('close', 'Done', '', 'cr-b');
+  }
