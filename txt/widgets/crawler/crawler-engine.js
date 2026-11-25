@@ -872,3 +872,185 @@
     if (G.depth <= D.STORY_FLOORS) return D.BIOMES[biomeAt(G.depth)].boss;
     return D.ECHO_ORDER[Math.floor((G.depth - D.STORY_FLOORS - 1) / 5) % 5];
   }
+
+  // ===========================================================================
+  //  monsters
+  // ===========================================================================
+  function curve(L, a, b) { return 1 + a * (L - 1) + b * (L - 1) * (L - 1); }
+  function hpCurve(L) { return curve(L, 0.22, 0.008); }
+  function powCurve(L) { return curve(L, 0.2, 0.006); }
+  function monAt(G, x, y) { for (var i = 0; i < G.mons.length; i++) { var m = G.mons[i]; if (m.x === x && m.y === y && m.hp > 0) return m; } return null; }
+  function actorAt(G, x, y) { if (G.p.x === x && G.p.y === y && G.p.hp > 0) return G.p; return monAt(G, x, y); }
+  function eliteChance(G, s) {
+    var d = difficulty(G.hero), base = 0.05 + Math.min(0.12, G.depth * 0.004);
+    if (G.daily && G.daily.mod === 'elites') base *= 3;
+    return Math.min(0.5, base * d.elite * (1 + (s.eliteFind || 0) * 2));
+  }
+  function eliteAffixes(G, r) {
+    var keys = Object.keys(D.ELITE), n = 1;
+    var d = G.hero.difficulty;
+    if (G.depth >= 11 || d === 'hard') n = 2;
+    if (d === 'nightmare' && G.depth >= 16) n = 3;
+    shuffle(r, keys); return keys.slice(0, n);
+  }
+  function spawnMon(G, k, x, y, o) {
+    o = o || {};
+    var M = MON[k], h = G.hero, diff = difficulty(h);
+    var ally = !!o.ally, ml = ally ? h.level + (G.hero.story.ng || 0) * 3 : (o.lvl || G.ml);
+    var hpM = ally ? 1 + 0.18 * (ml - 1) : hpCurve(ml) * diff.hp, powM = ally ? 1 + 0.14 * (ml - 1) : powCurve(ml) * diff.pow;
+    var m = {
+      id: G.nid++, k: k, name: M.name, ch: M.ch, col: M.col, fam: M.fam, ai: M.ai, x: x, y: y, lvl: ml,
+      maxHp: Math.max(1, Math.round(M.hp * hpM)), pow: M.pow * powM, arm: Math.round(M.arm * (1 + 0.07 * (ml - 1))), spd: M.spd,
+      energy: ri(G.r, 100), xp: Math.round(M.xp * (1 + 0.33 * (ml - 1))), gold: M.gold, st: {}, cd: {}, aware: !!o.aware, asleep: false, intent: null,
+      range: M.range || 0, ally: ally, owner: ally ? 'p' : null, ttl: o.ttl || 0, elite: null
+    };
+    if (G.daily && G.daily.mod === 'haste' && !ally) m.spd = Math.round(m.spd * 1.25);
+    if (o.elite && o.elite.length) {
+      m.elite = o.elite; m.maxHp = Math.round(m.maxHp * 2.4); m.pow *= 1.3; m.xp *= 3; m.gold *= 3;
+      if (m.elite.indexOf('hasted') >= 0) m.spd = Math.min(220, m.spd * 2);
+      if (m.elite.indexOf('shielded') >= 0) m.st.shield = { v: Math.round(m.maxHp * 0.3), t: 999 };
+    }
+    if (o.scale) { m.maxHp = Math.max(1, Math.round(m.maxHp * o.scale)); m.pow *= Math.sqrt(o.scale); m.xp = Math.round(m.xp * o.scale); }
+    if (k === 'mimic') m.disguised = true;
+    if (M.ai === 'ambush' || M.ai === 'ghost') m.lurk = true;
+    m.hp = m.maxHp;
+    G.mons.push(m);
+    return m;
+  }
+  function spawnBoss(G, id, x, y) {
+    var B = D.BOSSES[id], diff = difficulty(G.hero), ml = G.ml;
+    var echo = G.depth > D.STORY_FLOORS && G.mode !== 'daily';
+    var mult = (echo ? 1.35 : 1) * (G.mode === 'daily' ? 0.7 : 1);
+    var m = {
+      id: G.nid++, k: 'boss', boss: id, name: (echo ? 'Echo of ' : '') + B.name, ch: B.ch, col: B.col, fam: B.fam, ai: 'boss', x: x, y: y, lvl: ml,
+      maxHp: Math.round(B.hp * hpCurve(ml) * diff.hp * mult), pow: B.pow * powCurve(ml) * diff.pow * (echo ? 1.15 : 1), arm: Math.round(B.arm * (1 + 0.07 * (ml - 1))),
+      spd: B.spd, energy: 0, xp: Math.round(B.xp * (1 + 0.33 * (ml - 1))), gold: B.gold, st: {}, cd: {}, aware: false, asleep: true, intent: null, range: 7,
+      phase: 0, mcd: {}, gcd: 0, elite: null, fireproof: B.fireproof
+    };
+    m.hp = m.maxHp;
+    G.mons.push(m);
+    return m;
+  }
+  function monDef(m) { return m.boss ? D.BOSSES[m.boss] : MON[m.k]; }
+  function hostile(a, b) { var ap = a.id === 0 || a.ally, bp = b.id === 0 || b.ally; return ap !== bp; }
+  function hasElite(m, a) { return m.elite && m.elite.indexOf(a) >= 0; }
+  function displayName(m) {
+    if (!m.elite) return m.name;
+    return m.elite.map(function (e) { return D.ELITE[e].name; }).join(' ') + ' ' + m.name;
+  }
+
+  // ===========================================================================
+  //  field of view, line of sight, distance maps
+  // ===========================================================================
+  function lightRadius(G) {
+    var s = stats(G.hero, G), L = D.BIOMES[G.biome].light + s.light;
+    if (G.p.st.dark) L -= 3;
+    return clamp(L, 2, 9);
+  }
+  function emitsLight(G, x, y) {
+    var t = tile(G, x, y);
+    if (t === T.LAVA || t === T.PORTAL) return true;
+    if (G.fire[y * G.w + x]) return true;
+    return false;
+  }
+  function computeFov(G) {
+    var n = G.w * G.h, vis = new Uint8Array(n), los = new Uint8Array(n), p = G.p, R = 12, L = lightRadius(G);
+    var px = p.x, py = p.y;
+    function trace(tx, ty) {
+      var x0 = px, y0 = py, dx = Math.abs(tx - x0), dy = -Math.abs(ty - y0), sx = x0 < tx ? 1 : -1, sy = y0 < ty ? 1 : -1, err = dx + dy;
+      for (;;) {
+        if (!inb(G, x0, y0)) return;
+        var d2 = (x0 - px) * (x0 - px) + (y0 - py) * (y0 - py);
+        if (d2 > R * R) return;
+        los[y0 * G.w + x0] = 1;
+        if ((x0 !== px || y0 !== py) && OPAQUE[tile(G, x0, y0)]) return;
+        if (x0 === tx && y0 === ty) return;
+        var e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+      }
+    }
+    for (var i = -R; i <= R; i++) { trace(px + i, py - R); trace(px + i, py + R); trace(px - R, py + i); trace(px + R, py + i); }
+    // light: inside the torch radius, or glowing tiles (and their neighbors)
+    var glow = [];
+    for (var y = Math.max(0, py - R); y <= Math.min(G.h - 1, py + R); y++) for (var x = Math.max(0, px - R); x <= Math.min(G.w - 1, px + R); x++) {
+      var k = y * G.w + x; if (!los[k]) continue;
+      var d2 = (x - px) * (x - px) + (y - py) * (y - py);
+      if (d2 <= L * L + L) vis[k] = 1;
+      else if (emitsLight(G, x, y)) { vis[k] = 1; glow.push(x, y); }
+    }
+    for (i = 0; i < glow.length; i += 2) for (var k2 = 0; k2 < 8; k2++) { var gx = glow[i] + DIRS8[k2][0], gy = glow[i + 1] + DIRS8[k2][1]; if (inb(G, gx, gy) && los[gy * G.w + gx]) vis[gy * G.w + gx] = 1; }
+    // walls next to visible floor light up too (fixes ray-cast corner gaps)
+    for (y = Math.max(0, py - L - 1); y <= Math.min(G.h - 1, py + L + 1); y++) for (x = Math.max(0, px - L - 1); x <= Math.min(G.w - 1, px + L + 1); x++) {
+      var kk = y * G.w + x; if (vis[kk] || !OPAQUE[tile(G, x, y)]) continue;
+      for (var k3 = 0; k3 < 8; k3++) { var nx = x + DIRS8[k3][0], ny = y + DIRS8[k3][1]; if (inb(G, nx, ny) && vis[ny * G.w + nx] && !OPAQUE[tile(G, nx, ny)] && (nx - px) * (nx - px) + (ny - py) * (ny - py) <= (L + 1) * (L + 1)) { vis[kk] = 1; break; } }
+    }
+    G.vis = vis;
+    for (i = 0; i < n; i++) if (vis[i] && !G.seen[i]) G.seen[i] = 1;
+    // traps within 2 tiles may be spotted
+    var s = stats(G.hero, G);
+    G.objs.forEach(function (o) {
+      if (o.k === 'trap' && o.hidden && vis[o.y * G.w + o.x] && cheb(o.x, o.y, px, py) <= 2) {
+        var c = G.hero.cls === 'rogue' ? 0.45 : 0.22;
+        if (s.flags.traps || s.flags.u_eye || chance(G.r, c)) { o.hidden = false; log(G, 'You spot a ' + D.TRAPS[o.id].name.toLowerCase() + '.', 'info'); }
+      }
+    });
+    return vis;
+  }
+  function visible(G, x, y) { return !!(G.vis && inb(G, x, y) && G.vis[y * G.w + x]); }
+  function monVisible(G, m) {
+    if (!visible(G, m.x, m.y)) return false;
+    if (m.ally) return true;
+    var s = stats(G.hero, G);
+    if (m.k === 'lurker' && (tile(G, m.x, m.y) === T.WATER || tile(G, m.x, m.y) === T.DEEP) && manh(m.x, m.y, G.p.x, G.p.y) > 1 && !s.flags.u_eye) return false;
+    if (m.k === 'shade' && cheb(m.x, m.y, G.p.x, G.p.y) > 2 && !m.revealed && !s.flags.u_eye) return false;
+    return true;
+  }
+  function los(G, x0, y0, x1, y1) {
+    var dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
+    for (;;) {
+      if (x0 === x1 && y0 === y1) return true;
+      var e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+      if (x0 === x1 && y0 === y1) return true;
+      if (OPAQUE[tile(G, x0, y0)]) return false;
+    }
+  }
+  function lineTiles(G, x0, y0, x1, y1, maxLen, throughActors) {
+    // tiles from (x0,y0) toward (x1,y1), extended to maxLen, stopping at walls
+    var out = [], dx = x1 - x0, dy = y1 - y0, n = Math.max(Math.abs(dx), Math.abs(dy));
+    if (!n) return out;
+    var sx = dx / n, sy = dy / n;
+    for (var i = 1; i <= maxLen; i++) {
+      var x = Math.round(x0 + sx * i), y = Math.round(y0 + sy * i);
+      if (!inb(G, x, y) || OPAQUE[tile(G, x, y)] || tile(G, x, y) === T.GATE) break;
+      out.push([x, y]);
+    }
+    return out;
+  }
+  function bfs(G, sx, sy, pass, maxD) {
+    var n = G.w * G.h, dist = new Int16Array(n); for (var i = 0; i < n; i++) dist[i] = 9999;
+    var q = [sx, sy]; dist[sy * G.w + sx] = 0; maxD = maxD || 9999;
+    for (var qi = 0; qi < q.length; qi += 2) {
+      var x = q[qi], y = q[qi + 1], d = dist[y * G.w + x];
+      if (d >= maxD) continue;
+      for (var k = 0; k < 4; k++) {
+        var nx = x + DIRS4[k][0], ny = y + DIRS4[k][1];
+        if (!inb(G, nx, ny)) continue;
+        var j = ny * G.w + nx; if (dist[j] <= d + 1 || !pass(nx, ny)) continue;
+        dist[j] = d + 1; q.push(nx, ny);
+      }
+    }
+    return dist;
+  }
+  function canEnter(G, m, x, y) {
+    var t = tile(G, x, y);
+    if (m.ai === 'ghost' || m.boss === 'aurel' && G.mons.length < 0) return inb(G, x, y) && x > 0 && y > 0 && x < G.w - 1 && y < G.h - 1;
+    if (m.k === 'lurker') return t === T.WATER || t === T.DEEP;
+    if (!WALKABLE[t]) return false;
+    if (t === T.CHASM) return false;
+    if (t === T.LAVA && !m.fireproof && !(MON[m.k] && MON[m.k].fireproof)) return false;
+    if (blocksObj(G, x, y)) return false;
+    return true;
+  }

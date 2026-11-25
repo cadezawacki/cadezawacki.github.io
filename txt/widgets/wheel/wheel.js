@@ -2405,6 +2405,12 @@
       }
     });
 
+    // the stylesheet arrives asynchronously: re-read the theme and fit once it applies
+    (function waitCss(n) {
+      if (!S || S.panel !== p) return;
+      if (getComputedStyle(p).getPropertyValue('--wh-w0').trim() || n > 80) { readTheme(); layout(); drawWheel(); requestAnimationFrame(function () { if (S && S.panel === p) layout(); }); return; }
+      setTimeout(function () { waitCss(n + 1); }, 50);
+    })(0);
     say('Loading puzzles&hellip;');
     loadData().then(function (d) {
       if (!S || S.panel !== p) return;
