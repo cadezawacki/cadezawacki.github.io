@@ -542,11 +542,20 @@
       if (G.start && x === G.start[0] && y === G.start[1]) continue;
       if (opts.wallAdj === false) { var nb = 0; for (var k = 0; k < 4; k++) if (tile(G, x + DIRS4[k][0], y + DIRS4[k][1]) !== T.FLOOR) nb++; if (nb) continue; }
       if (opts.notNear && cheb(x, y, opts.notNear[0], opts.notNear[1]) < (opts.dist || 6)) continue;
+      if (opts.block && !okToBlock(G, x, y)) continue;
       return [x, y];
     }
     return null;
   }
 
+  // would a blocking object at (x,y) cut the floor in two? (articulation check)
+  function okToBlock(G, x, y) {
+    if (!G.start) return true;
+    var pass = function (bx, by) { var t = tile(G, bx, by); return WALKABLE[t] && t !== T.LAVA && t !== T.CHASM && !(blocksObj(G, bx, by) && blocksObj(G, bx, by).k !== 'boulder'); };
+    var a = flood(G, G.start[0], G.start[1], pass), b = flood(G, G.start[0], G.start[1], function (bx, by) { return !(bx === x && by === y) && pass(bx, by); });
+    var na = 0, nb = 0; for (var i = 0; i < a.length; i++) { na += a[i]; nb += b[i]; }
+    return nb >= na - 1;
+  }
   function newRunShell(h, o) {
     o = o || {};
     var seed = o.seed != null ? o.seed >>> 0 : (hashStr(h.id + ':' + Date.now() + ':' + Math.random()) >>> 0);
@@ -577,7 +586,7 @@
     G.boss = isBossFloor(depth) && !(G.mode === 'daily' && depth % 5 !== 0);
     var r = rng(hashStr(G.seed + ':' + depth));
     G.objs = []; G.mons = []; G.deco = []; G.gas = {}; G.fire = {}; G.holy = {}; G.delayed = []; G.pz = {}; G.start = null; G.stairs = null;
-    G.floorTurns = 0; G.wanderT = 0; G.wanderers = 0; G.bossSeen = false; G.arena = null; G.seenMons = []; G.mapped = false;
+    G.floorTurns = 0; G.wanderT = 0; G.wanderers = 0; G.xt = null; G.bossSeen = false; G.arena = null; G.seenMons = []; G.mapped = false;
     if (G.boss) genBossFloor(G, r);
     else {
       var ok = false;
@@ -726,7 +735,7 @@
       var n = G.depth >= 8 && chance(r, 0.5) ? 2 : 1, cands = rooms.filter(function (q) { return q !== startRoom; });
       shuffle(r, cands);
       for (var i = 0; i < n && i < cands.length; i++) {
-        var spot = freeFloor(G, cands[i], r);
+        var spot = freeFloor(G, cands[i], r, { block: true });
         if (spot) addObj(G, { k: 'lever', x: spot[0], y: spot[1], pz: pz, on: false });
       }
       if (!G.objs.some(function (o) { return o.k === 'lever' && o.pz === pz; })) {   // no room for a lever: just open it
@@ -792,7 +801,7 @@
     // chests (some are mimics)
     var nChest = rr(r, 2, 3) + (chance(r, 0.3) ? 1 : 0);
     for (var c = 0; c < nChest; c++) {
-      var sp2 = freeFloor(G, pick(r, others), r);
+      var sp2 = freeFloor(G, pick(r, others), r, { block: true });
       if (sp2) addObj(G, { k: 'chest', x: sp2[0], y: sp2[1], mimic: d >= 3 && chance(r, 0.12) ? 1 : 0 });
     }
     // gold, a consumable or two
@@ -802,7 +811,7 @@
     var nev = (chance(r, 0.75) ? 1 : 0) + (chance(r, 0.3) ? 1 : 0);
     var evs = D.EVENT_ORDER.filter(function (id) { var e = D.EVENTS[id]; return !e.biomes || e.biomes.indexOf(G.biome) >= 0; });
     for (c = 0; c < nev; c++) {
-      var sp5 = freeFloor(G, pick(r, others), r, { wallAdj: false }) || freeFloor(G, pick(r, others), r);
+      var sp5 = freeFloor(G, pick(r, others), r, { wallAdj: false, block: true }) || freeFloor(G, pick(r, others), r, { block: true });
       if (sp5) addObj(G, { k: 'event', x: sp5[0], y: sp5[1], id: pick(r, evs), used: false });
     }
     // lore page
@@ -877,8 +886,8 @@
   //  monsters
   // ===========================================================================
   function curve(L, a, b) { return 1 + a * (L - 1) + b * (L - 1) * (L - 1); }
-  function hpCurve(L) { return curve(L, 0.22, 0.008); }
-  function powCurve(L) { return curve(L, 0.2, 0.006); }
+  function hpCurve(L) { return curve(L, 0.2, 0.005); }
+  function powCurve(L) { return curve(L, 0.22, 0.007); }
   function monAt(G, x, y) { for (var i = 0; i < G.mons.length; i++) { var m = G.mons[i]; if (m.x === x && m.y === y && m.hp > 0) return m; } return null; }
   function actorAt(G, x, y) { if (G.p.x === x && G.p.y === y && G.p.hp > 0) return G.p; return monAt(G, x, y); }
   function eliteChance(G, s) {
@@ -901,7 +910,7 @@
     var m = {
       id: G.nid++, k: k, name: M.name, ch: M.ch, col: M.col, fam: M.fam, ai: M.ai, x: x, y: y, lvl: ml,
       maxHp: Math.max(1, Math.round(M.hp * hpM)), pow: M.pow * powM, arm: Math.round(M.arm * (1 + 0.07 * (ml - 1))), spd: M.spd,
-      energy: ri(G.r, 100), xp: Math.round(M.xp * (1 + 0.33 * (ml - 1))), gold: M.gold, st: {}, cd: {}, aware: !!o.aware, asleep: false, intent: null,
+      energy: ri(G.r, 100), xp: Math.round(M.xp * (1 + 0.3 * (ml - 1))), gold: M.gold, st: {}, cd: {}, aware: !!o.aware, asleep: false, intent: null,
       range: M.range || 0, ally: ally, owner: ally ? 'p' : null, ttl: o.ttl || 0, elite: null
     };
     if (G.daily && G.daily.mod === 'haste' && !ally) m.spd = Math.round(m.spd * 1.25);
@@ -1694,6 +1703,12 @@
       } else if (hv.length) {
         var bc = -1; hv.forEach(function (m) { var n = hv.filter(function (o) { return cheb(o.x, o.y, m.x, m.y) <= (A.radius || 1); }).length; if (n > bc) { bc = n; def = { x: m.x, y: m.y }; } });
       } else if (out.length) def = out[0];
+      if (def && !out.some(function (o) { return o.x === def.x && o.y === def.y; })) {
+        // e.g. a snare can't go under a monster: use the valid tile nearest to it, on our side
+        var nd = null, bd2 = 1e9;
+        out.forEach(function (o) { var d2 = cheb(o.x, o.y, def.x, def.y) * 10 + cheb(o.x, o.y, p.x, p.y); if (d2 < bd2) { bd2 = d2; nd = o; } });
+        def = nd;
+      }
       return { list: out, def: def };
     }
     return { list: [], def: null };
@@ -1978,7 +1993,7 @@
     if (tile(G, x, y) === T.DOOR) setT(G, x, y, T.ODOOR);
     m.x = x; m.y = y;
     var M = MON[m.k];
-    if (M && M.trail === 'fire') fireAt(G, m.x, m.y, 0, 3, m.pow * 0.3);
+    if (M && M.trail === 'fire') fireAt(G, m.x, m.y, 0, 3, m.pow * 0.2);
     if (hasElite(m, 'molten') && chance(G.r, 0.3)) fireAt(G, m.x, m.y, 0, 3, m.pow * 0.25);
     var sn = objAt(G, x, y, 'snare');
     if (sn && !m.ally) { rm(G, sn); log(G, displayName(m) + ' is caught in your snare!', 'good'); strike(G, G.p, m, { flat: Math.round(sn.d), kind: 'true' }); if (m.hp > 0) { addStatus(G, m, 'root', sn.turns); if (sn.barbed) addStatus(G, m, 'bleed', 4, sn.d * 0.25); } }
@@ -2101,7 +2116,7 @@
         if (it.k === 'slam' || it.k === 'sweep' || it.k === 'bigslam') emit(G, { t: 'shake', n: 5 });
         it.tiles.forEach(function (q) { hitTile(q[0], q[1], it.mult, it.status); });
         if (it.gas) it.tiles.forEach(function (q) { gasAt(G, q[0], q[1], 0, it.gas, m.pow * 0.3); });
-        if (it.fire) it.tiles.forEach(function (q) { fireAt(G, q[0], q[1], 0, it.fire, m.pow * 0.3); });
+        if (it.fire) it.tiles.forEach(function (q) { fireAt(G, q[0], q[1], 0, it.fire, m.pow * 0.2); });
     }
   }
   function monTurn(G, m) {
@@ -2111,11 +2126,11 @@
     if (m.intent) { resolveIntent(G, m); return; }
     if (m.disguised) return;
     var p = G.p, M = MON[m.k] || {};
+    if (m.boss) return bossTurn(G, m);
     if (m.asleep) {
       if (visible(G, m.x, m.y) && cheb(m.x, m.y, p.x, p.y) <= 3 && !p.st.invis && chance(G.r, G.hero.cls === 'rogue' ? 0.25 : 0.5)) { m.asleep = false; m.aware = true; emit(G, { t: 'alert', id: m.id, x: m.x, y: m.y }); }
       return;
     }
-    if (m.boss) return bossTurn(G, m);
     var t = pickTarget(G, m);
     if (!m.aware) {
       if (t === p && cheb(m.x, m.y, p.x, p.y) <= 8 && los(G, m.x, m.y, p.x, p.y)) { m.aware = true; emit(G, { t: 'alert', id: m.id, x: m.x, y: m.y }); }
@@ -2248,10 +2263,11 @@
   function bossTurn(G, m) {
     var p = G.p, B = D.BOSSES[m.boss], ph = B.phases[m.phase];
     var d = manh(m.x, m.y, p.x, p.y), ch = cheb(m.x, m.y, p.x, p.y), sight = los(G, m.x, m.y, p.x, p.y);
-    if (!m.aware) {
-      if (sight && ch <= 7) { m.aware = true; if (!G.bossSeen) { G.bossSeen = true; G.modal = { k: 'dialog', who: m.boss, lines: B.intro, intro: true }; emit(G, { t: 'boss', id: m.id }); } }
+    if (!G.bossSeen) {
+      if ((sight && ch <= 7) || m.hp < m.maxHp) { G.bossSeen = true; m.aware = true; m.asleep = false; G.modal = { k: 'dialog', who: m.boss, lines: B.intro, intro: true }; emit(G, { t: 'boss', id: m.id }); }
       return;
     }
+    if (!m.aware) { m.aware = true; m.asleep = false; }
     if (m.gcd > 0) { m.gcd--; }
     else {
       var cands = ph.moves.filter(function (mv) {
@@ -2339,7 +2355,7 @@
     if (G.mode === 'story' && G.depth <= D.STORY_FLOORS) {
       var act = G.depth / 5;
       if (h.story.cleared < act) { h.story.cleared = act; lines = lines.concat(D.STORY.cleared[act] || []); }
-      if (B.final) { h.story.ended = true; G.ending = true; }
+      if (B.final && !h.story.ended) { h.story.ended = true; G.ending = true; }
     }
     G.modal = { k: 'dialog', who: m.boss, lines: lines, outro: true, ending: !!G.ending };
     log(G, B.name + ' falls! A portal home shimmers open — and stairs lead deeper.', 'good');
@@ -2456,7 +2472,7 @@
       if (o.ph === 3) {
         var a = actorAt(G, o.x, o.y);
         if (visible(G, o.x, o.y)) emit(G, { t: 'area', k: o.kind === 'gas' ? 'gas' : o.kind === 'flame' ? 'boom' : o.kind === 'void' ? 'void' : 'slam', tiles: [[o.x, o.y]], small: true });
-        if (o.kind === 'gas') gasAt(G, o.x, o.y, 1, 3, Math.max(2, G.ml * 1.2));
+        if (o.kind === 'gas') gasAt(G, o.x, o.y, 1, 3, Math.max(2, G.ml * 0.8));
         if (a) {
           var mx = a === p ? s.maxHp : a.maxHp;
           if (a === p) G.lastHazard = 'a ' + o.kind + ' vent';
@@ -2731,11 +2747,12 @@
   // ===========================================================================
   //  travel & auto-explore (paths over what you've seen)
   // ===========================================================================
-  function knownSafe(G, x, y) {
+  // bold: allow known traps, vents and gas when there is no cleaner way
+  function knownSafe(G, x, y, bold) {
     var i = y * G.w + x; if (!G.seen[i]) return false;
     var t = G.t[i]; if (!WALKABLE[t] || t === T.LAVA || t === T.CHASM) return false;
-    if (G.gas[i] || G.fire[i]) return false;
-    for (var k = 0; k < G.objs.length; k++) { var o = G.objs[k]; if (o.x === x && o.y === y && ((o.k === 'trap' && !o.hidden) || BLOCKING[o.k] || o.k === 'vent')) return false; }
+    if (!bold && (G.gas[i] || G.fire[i])) return false;
+    for (var k = 0; k < G.objs.length; k++) { var o = G.objs[k]; if (o.x === x && o.y === y && (BLOCKING[o.k] || (!bold && ((o.k === 'trap' && !o.hidden) || o.k === 'vent')))) return false; }
     var m = monAt(G, x, y); if (m && !m.ally && monVisible(G, m)) return false;
     return true;
   }
@@ -2751,18 +2768,33 @@
   }
   function travelPath(G, tx, ty) {
     if (!inb(G, tx, ty) || !G.seen[ty * G.w + tx]) return null;
-    var dist = bfs(G, G.p.x, G.p.y, function (x, y) { return (x === tx && y === ty) || knownSafe(G, x, y); });
-    return pathFrom(G, dist, tx, ty);
+    for (var bold = 0; bold < 2; bold++) {
+      var dist = bfs(G, G.p.x, G.p.y, function (x, y) { return (x === tx && y === ty) || knownSafe(G, x, y, bold); });
+      var p = pathFrom(G, dist, tx, ty); if (p) return p;
+    }
+    return null;
   }
   var LOOT_K = { gold: 1, item: 1, cons: 1, lore: 1, quest: 1 };
-  function explorePath(G) {
-    var dist = bfs(G, G.p.x, G.p.y, function (x, y) { return knownSafe(G, x, y); }), best = null, bd = 9999;
+  function exploreTarget(G, x, y) {
+    if (G.objs.some(function (o) { return o.x === x && o.y === y && LOOT_K[o.k] && !(o.k === 'item' && G.hero.bag.length >= BAG_MAX); })) return true;
+    for (var k = 0; k < 4; k++) { var nx = x + DIRS4[k][0], ny = y + DIRS4[k][1]; if (inb(G, nx, ny) && !G.seen[ny * G.w + nx]) return true; }
+    return false;
+  }
+  // explorePath: keep heading for the last target while it is still worth it
+  // (no dithering between two equally near frontiers)
+  function explorePath(G, bold) {
+    if (!bold && G.xt && !(G.xt[0] === G.p.x && G.xt[1] === G.p.y) && exploreTarget(G, G.xt[0], G.xt[1])) {
+      var keep = travelPath(G, G.xt[0], G.xt[1]); if (keep && keep.length) return keep;
+    }
+    G.xt = null;
+    var dist = bfs(G, G.p.x, G.p.y, function (x, y) { return knownSafe(G, x, y, bold); }), best = null, bd = 9999;
     for (var i = 0; i < G.objs.length; i++) { var o = G.objs[i]; if (LOOT_K[o.k] && G.seen[o.y * G.w + o.x] && !(o.k === 'item' && G.hero.bag.length >= BAG_MAX)) { var d = dist[o.y * G.w + o.x]; if (d > 0 && d < bd) { bd = d; best = [o.x, o.y]; } } }
     if (!best) for (var y = 0; y < G.h; y++) for (var x = 0; x < G.w; x++) {
       var j = y * G.w + x, dj = dist[j]; if (dj >= 9999 || dj === 0 || dj >= bd) continue;
       for (var k = 0; k < 4; k++) { var nx = x + DIRS4[k][0], ny = y + DIRS4[k][1]; if (inb(G, nx, ny) && !G.seen[ny * G.w + nx]) { bd = dj; best = [x, y]; break; } }
     }
-    if (!best) return null;
+    if (!best) return bold ? null : explorePath(G, true);
+    G.xt = best;
     return pathFrom(G, dist, best[0], best[1]);
   }
 
@@ -2789,6 +2821,7 @@
     if (G.t.length !== G.w * G.h || G.seen.length !== G.t.length) return null;
     G.hero = o.dailyHero ? normHero(o.dailyHero) : h; delete G.dailyHero;
     if (!G.hero) return null;
+    G.time = clamp(+G.time || 0, 0, 99); delete G.savedAt; delete G.heroRev;
     G.ev = []; G._ps = null; G.modal = G.modal && G.modal.k === 'dialog' ? null : G.modal;
     computeFov(G);
     return G;
@@ -2813,7 +2846,7 @@
   function normHero(h) {
     if (!h || typeof h !== 'object') return null;
     var base = newHero(C[h.cls] ? h.cls : 'warrior', h.name, h.difficulty, rng(hashStr(String(h.id || 'x'))));
-    var out = base;
+    var out = base, kitWeapon = base.equip.weapon;
     out.id = typeof h.id === 'string' ? h.id.slice(0, 40) : base.id;
     out.name = cleanName(h.name);
     out.cls = C[h.cls] ? h.cls : 'warrior';
@@ -2822,7 +2855,7 @@
     out.gold = Math.max(0, Math.floor(+h.gold || 0));
     out.equip = { weapon: null, armor: null, helm: null, charm: null };
     if (h.equip) D.SLOTS.forEach(function (sl) { var it = validItem(h.equip[sl]); if (it && it.slot === sl) out.equip[sl] = it; });
-    if (!out.equip.weapon || C[out.cls].weapons.indexOf(out.equip.weapon.base) < 0) out.equip.weapon = out.equip.weapon && C[out.cls].weapons.indexOf(out.equip.weapon.base) >= 0 ? out.equip.weapon : base.equip.weapon || makeItem(rng(7), { base: C[out.cls].kit.weapon, ilvl: 1, rarity: 'common' });
+    if (!out.equip.weapon || C[out.cls].weapons.indexOf(out.equip.weapon.base) < 0) out.equip.weapon = kitWeapon;
     out.bag = (Array.isArray(h.bag) ? h.bag : []).map(validItem).filter(Boolean).slice(0, BAG_MAX + 8);
     out.cons = {}; if (h.cons) D.CONS_ORDER.forEach(function (k) { if (h.cons[k] > 0) out.cons[k] = Math.min(99, Math.floor(h.cons[k])); });
     out.mats = { scrap: 0, dust: 0, soul: 0 }; if (h.mats) for (var mk in out.mats) out.mats[mk] = Math.max(0, Math.floor(+h.mats[mk] || 0));
@@ -2923,6 +2956,7 @@
     // keep only the last 60 days
     var days = Object.keys(o.daily.days).sort(); while (days.length > 60) delete o.daily.days[days.shift()];
     o.rev = +r.rev || 0;
+    if (r.migrated) o.migrated = 1;
     return o;
   }
   function betterHero(a, b) {
@@ -2958,6 +2992,7 @@
       if (src.daily.best && (!o.daily.best || src.daily.best.score > o.daily.best.score)) o.daily.best = copy(src.daily.best);
     });
     o.rev = Math.max(a.rev, b.rev);
+    if (a.migrated || b.migrated) o.migrated = 1;
     return o;
   }
   function recordDaily(roster, info, score, depth) {

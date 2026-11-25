@@ -147,15 +147,19 @@
   }
   function detachFb() { try { if (S && S.fbRef && S.fbCb) S.fbRef.off('value', S.fbCb); } catch (e) {} if (S) { S.fbRef = null; S.fbCb = null; } }
   function markDirty() { if (!S) return; S.dirty = true; if (!S.saveT) S.saveT = setTimeout(function () { if (S) { S.saveT = 0; saveNow(); } }, 1800); }
-  function saveNow() {
+  function saveNow(force) {
     if (!S || !S.R) return;
     S.dirty = false;
     if (S.G && S.G.mode === 'story') E.syncHero(S.G);
-    var h = S.R.slots[S.R.active]; if (h) { h.rev = (h.rev || 1) + 1; h.updated = Date.now(); }
+    var h = S.R.slots[S.R.active]; if (h) { h.rev = (h.rev || 1) + 1; h.updated = Date.now(); h.client = S.client; }
     S.R.rev = (S.R.rev || 0) + 1; S.R.client = S.client;
     var json = JSON.stringify(S.R);
     sset(K_ROSTER, json);
     var db = fbDb(); if (!db) return;
+    // mid-delve the cloud copy is refreshed at most every 15 s (and always on the way out)
+    var tnow = Date.now();
+    if (!force && S.G && S.lastFb && tnow - S.lastFb < 15000) { if (!S.fbT) S.fbT = setTimeout(function () { if (S) { S.fbT = 0; saveNow(true); } }, 15000 - (tnow - S.lastFb)); return; }
+    S.lastFb = tnow; if (S.fbT) { clearTimeout(S.fbT); S.fbT = 0; }
     var mine = JSON.parse(json);
     try {
       db.ref(FB_ROSTER).transaction(function (cur) {
@@ -171,6 +175,7 @@
     if (!S || !S.G || S.G.over) return;
     try {
       var snap = E.serializeRun(S.G);
+      snap.savedAt = Date.now();
       if (S.G.mode === 'story') snap.heroRev = S.G.hero.rev || 0;
       sset(runKey(), JSON.stringify(snap));
     } catch (e) {}
@@ -275,14 +280,14 @@
   function biomePal(biome) {
     var B = D.BIOMES[biome] || D.BIOMES.crypt, dk = S.th.dark, bg = S.th.bg;
     var P = {
-      fog: dk ? [8, 8, 12] : mix(bg, [60, 50, 40], 0.08),
-      floor: dk ? hsl(B.hue, B.sat, 15) : hsl(B.hue, B.sat * 0.7, 84),
-      floor2: dk ? hsl(B.hue, B.sat, 18) : hsl(B.hue, B.sat * 0.7, 80),
-      speck: dk ? hsl(B.hue, B.sat, 24) : hsl(B.hue, B.sat * 0.6, 70),
-      wall: dk ? hsl(B.wallHue, B.sat * 0.8, 30) : hsl(B.wallHue, B.sat * 0.6, 52),
-      wallTop: dk ? hsl(B.wallHue, B.sat * 0.8, 38) : hsl(B.wallHue, B.sat * 0.6, 62),
-      wallFace: dk ? hsl(B.wallHue, B.sat * 0.8, 20) : hsl(B.wallHue, B.sat * 0.6, 40),
-      line: dk ? hsl(B.wallHue, B.sat * 0.8, 16) : hsl(B.wallHue, B.sat * 0.6, 36),
+      fog: dk ? [8, 8, 12] : mix(bg, [96, 80, 60], 0.3),
+      floor: dk ? hsl(B.hue, B.sat, 21) : hsl(B.hue, B.sat * 0.6 + 10, 90),
+      floor2: dk ? hsl(B.hue, B.sat, 24) : hsl(B.hue, B.sat * 0.6 + 10, 86),
+      speck: dk ? hsl(B.hue, B.sat, 31) : hsl(B.hue, B.sat * 0.5 + 8, 74),
+      wall: dk ? hsl(B.wallHue, B.sat * 0.8, 34) : hsl(B.wallHue, B.sat * 0.5 + 8, 40),
+      wallTop: dk ? hsl(B.wallHue, B.sat * 0.8, 42) : hsl(B.wallHue, B.sat * 0.5 + 8, 46),
+      wallFace: dk ? hsl(B.wallHue, B.sat * 0.8, 24) : hsl(B.wallHue, B.sat * 0.5 + 8, 30),
+      line: dk ? hsl(B.wallHue, B.sat * 0.8, 16) : hsl(B.wallHue, B.sat * 0.5 + 8, 30),
       water: dk ? [26, 70, 104] : [120, 180, 220], deep: dk ? [12, 34, 66] : [60, 120, 180],
       lava: [226, 88, 30], lava2: [255, 190, 70], chasm: dk ? [2, 2, 6] : [40, 34, 50],
       fungus: dk ? hsl(300, 40, 40) : hsl(300, 40, 55), fungus2: dk ? hsl(160, 50, 45) : hsl(160, 45, 40),
@@ -313,7 +318,7 @@
     var H = Math.floor(Math.max(200, Math.min(room - chrome, W * 1.35)));
     if (!phone) H = Math.max(260, Math.min(H, 560));
     var dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
-    var ts = clamp(Math.floor(W / (phone ? 11 : 15)), 26, 44);
+    var ts = clamp(Math.floor(W / (phone ? 13 : 17)), 24, 44);
     S.cw = W; S.chh = H; S.dpr = dpr; S.ts = ts;
     S.cv.style.width = W + 'px'; S.cv.style.height = H + 'px';
     S.stage.style.height = H + 'px';
@@ -436,14 +441,15 @@
     var dt = S.lastT ? Math.min(0.05, (t - S.lastT) / 1000) : 0.016; S.lastT = t;
     S.time = t;
     tickAuto(t);
-    if (S.G) draw(dt, t); else drawIdle(dt, t);
+    if (S.G && !S.screen) draw(dt, t);
+    if (S.sceneCv && S.sceneCv.isConnected) drawIdle(S.sceneCv, t);
     S.raf = requestAnimationFrame(frame);
   }
   function startLoop() { if (S && !S.raf) { S.lastT = 0; S.raf = requestAnimationFrame(frame); } }
 
-  function drawIdle(dt, t) {
+  function drawIdle(cv, t) {
     // the town / title backdrop: a starry rim, the Sunstone, the shaft
-    var c = S.ctx, W = S.cw, H = S.chh, dpr = S.dpr, dk = S.th.dark;
+    var c = cv.getContext('2d'), dpr = S.dpr, W = cv.width / dpr, H = cv.height / dpr, dk = S.th.dark;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     var sky = c.createLinearGradient(0, 0, 0, H);
     sky.addColorStop(0, dk ? '#0b1020' : rgb(mix(S.th.bg, [120, 150, 200], 0.25)));
@@ -455,17 +461,18 @@
     var gr = c.createRadialGradient(gx, gy, 0, gx, gy, R);
     gr.addColorStop(0, 'rgba(255,230,150,' + glow + ')'); gr.addColorStop(1, 'rgba(255,200,100,0)');
     c.fillStyle = gr; c.fillRect(0, 0, W, H);
-    // town silhouette
-    c.fillStyle = dk ? '#06070c' : rgb(mix(S.th.bg, [40, 40, 60], 0.55));
-    c.beginPath(); c.moveTo(0, H * 0.72);
-    var bx = 0; for (i = 0; bx < W; i++) { var bw = 24 + th(i, 1) * 40, bh = 30 + th(i, 2) * 50; c.lineTo(bx, H * 0.72 - bh); c.lineTo(bx + bw * 0.5, H * 0.72 - bh - 14); c.lineTo(bx + bw, H * 0.72 - bh); bx += bw; }
-    c.lineTo(W, H); c.lineTo(0, H); c.fill();
     // the tower + Sunstone
-    c.fillRect(gx - 9, gy, 18, H * 0.5); c.beginPath(); c.arc(gx, gy, 8 + Math.sin(t / 400) * 1.5, 0, 7); c.fillStyle = 'rgba(255,236,170,' + (0.6 + glow * 0.4) + ')'; c.fill();
-    // windows
-    for (i = 0; i < 18; i++) { var wx = th(i, 5) * W, wy = H * 0.72 - 10 - th(i, 6) * 40; c.fillStyle = 'rgba(255,200,110,' + (0.5 + 0.4 * Math.sin(t / 700 + i)) + ')'; c.fillRect(wx, wy, 3, 4); }
-    // the shaft
-    c.fillStyle = '#000'; c.beginPath(); c.ellipse(W * 0.5, H * 0.9, W * 0.22, H * 0.05, 0, 0, 7); c.fill();
+    var sil = dk ? '#06070c' : rgb(mix(S.th.bg, [40, 40, 60], 0.6)), hz = H * 0.8;
+    c.fillStyle = sil; c.fillRect(gx - 7, gy + 6, 14, hz - gy); c.beginPath(); c.moveTo(gx - 11, gy + 8); c.lineTo(gx, gy - 4); c.lineTo(gx + 11, gy + 8); c.fill();
+    c.beginPath(); c.arc(gx, gy, 6 + Math.sin(t / 400) * 1.2, 0, 7); c.fillStyle = 'rgba(255,236,170,' + (0.7 + glow * 0.3) + ')'; c.fill();
+    // rooftops, leaving a gap for the shaft
+    c.fillStyle = sil; c.beginPath(); c.moveTo(0, H);
+    var bx = 0; for (i = 0; bx < W; i++) { var bw = 18 + th(i, 1) * 26, bh = H * (0.08 + th(i, 2) * 0.16); if (Math.abs(bx + bw / 2 - gx) < W * 0.12) bh *= 0.4; c.lineTo(bx, hz - bh); c.lineTo(bx + bw * 0.5, hz - bh - 8); c.lineTo(bx + bw, hz - bh); bx += bw; }
+    c.lineTo(W, H); c.fill();
+    for (i = 0; i < 16; i++) { var wx = th(i, 5) * W; if (Math.abs(wx - gx) < W * 0.12) continue; var wy = hz - 6 - th(i, 6) * H * 0.12; c.fillStyle = 'rgba(255,200,110,' + (0.55 + 0.35 * Math.sin(t / 700 + i)) + ')'; c.fillRect(wx, wy, 2.5, 3.5); }
+    // the shaft: a black mouth with a faint glow from below
+    var sg = c.createRadialGradient(gx, H * 0.93, 2, gx, H * 0.93, W * 0.2); sg.addColorStop(0, '#000'); sg.addColorStop(0.7, 'rgba(0,0,0,0.9)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = sg; c.beginPath(); c.ellipse(gx, H * 0.93, W * 0.2, H * 0.07, 0, 0, 7); c.fill();
   }
 
   function draw(dt, t) {
@@ -534,13 +541,29 @@
     var L = E.lightRadius(G), vp = S.vis[0] || G.p, fogA = S.th.dark ? 0.62 : 0.55;
     for (y = y0; y <= y1; y++) for (x = x0; x <= x1; x++) {
       var j = y * w + x, a2;
-      if (!seen[j]) a2 = 1; else if (!vis[j]) a2 = fogA; else { var dd = Math.sqrt((x - vp.x) * (x - vp.x) + (y - vp.y) * (y - vp.y)); a2 = clamp((dd - L * 0.45) / (L * 0.9), 0, 1) * 0.42; }
+      if (!seen[j]) a2 = 1; else if (!vis[j]) a2 = fogA; else { var dd = Math.sqrt((x - vp.x) * (x - vp.x) + (y - vp.y) * (y - vp.y)); a2 = clamp((dd - L * 0.55) / (L * 0.9), 0, 1) * 0.36; }
       if (a2 <= 0.01) continue;
       c.fillStyle = rgb(P.fog, a2); c.fillRect(Math.floor(ox + x * ts), Math.floor(oy + y * ts), Math.ceil(ts) + 1, Math.ceil(ts) + 1);
     }
     drawFx(c, G, ox, oy, ts, t, dt);
+    drawEdgeArrows(c, G, ox, oy, ts, t);
     c.setTransform(1, 0, 0, 1, 0, 0);
     if (S.set.mini) drawMini();
+  }
+  // visible enemies outside the view get a pointer at the stage edge
+  function drawEdgeArrows(c, G, ox, oy, s, t) {
+    var W = S.cw, H = S.chh, m = 12;
+    G.mons.forEach(function (mo) {
+      if (mo.ally || !E.monVisible(G, mo)) return;
+      var x = ox + (mo.x + 0.5) * s, y = oy + (mo.y + 0.5) * s;
+      if (x >= 0 && x <= W && y >= 0 && y <= H) return;
+      var cx = W / 2, cy = H / 2, dx = x - cx, dy = y - cy, k = Math.min((W / 2 - m) / Math.abs(dx || 1e-6), (H / 2 - m) / Math.abs(dy || 1e-6));
+      var ax = cx + dx * k, ay = cy + dy * k, a = Math.atan2(dy, dx);
+      c.save(); c.translate(ax, ay); c.rotate(a);
+      c.fillStyle = mo.boss ? '#ffd86a' : mo.intent ? '#ff4040' : '#e86050'; c.globalAlpha = 0.75 + 0.25 * Math.sin(t / 200);
+      c.beginPath(); c.moveTo(9, 0); c.lineTo(-5, -6); c.lineTo(-5, 6); c.closePath(); c.fill();
+      c.restore(); c.globalAlpha = 1;
+    });
   }
   function glyphFont(px, bold) { return (bold ? '700 ' : '') + Math.round(px) + 'px ' + S.th.font; }
   function drawDeco(c, d, X, Y, s) {
@@ -928,10 +951,9 @@
   var IC_HELP = svg('<circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.6M12 17h.01"/>');
   var IC_MENU = svg('<path d="M4 7h16M4 12h16M4 17h16"/>');
   var ART = [
-    ' ___  ___ ___ ___  ___  ___ _ __   __ ___',
-    '|   \\| __| __| _ \\|   \\| __| |\\ \\ / /| __|',
-    '| |) | _|| _||  _/| |) | _|| |_\\ V / | _|',
-    '|___/|___|___|_|  |___/|___|____\\_/  |___|'].join('\n');
+    '╔╦╗╔═╗╔═╗╔═╗╔╦╗╔═╗╦  ╦  ╦╔═╗',
+    ' ║║║╣ ║╣ ╠═╝ ║║║╣ ║  ╚╗╔╝║╣ ',
+    '═╩╝╚═╝╚═╝╩  ═╩╝╚═╝╩═╝ ╚╝ ╚═╝'].join('\n');
 
   function hero() { return S.G ? S.G.hero : S.hero; }
   function refreshHud() { refreshBars(); refreshAbil(); refreshChips(); }
@@ -956,6 +978,7 @@
     var boss = G && G.mons.filter(function (m) { return m.boss && m.aware; })[0];
     if (boss) { S.bossEl.hidden = false; S.bossName.textContent = boss.name + (boss.phase ? ' — phase ' + (boss.phase + 1) : ''); S.bossFill.style.width = clamp(boss.hp / boss.maxHp * 100, 0, 100) + '%'; }
     else S.bossEl.hidden = true;
+    S.stage.classList.toggle('boss', !S.bossEl.hidden);
   }
   function refreshChips() {
     if (!S || !S.G) { if (S) S.chipsEl.innerHTML = ''; return; }
@@ -1049,7 +1072,8 @@
   }
   function startExplore() {
     var G = S.G; if (!G) return;
-    if (E.hostilesVisible(G).length) { addLog('Not with enemies in sight.', 'warn'); return; }
+    var near = E.hostilesVisible(G).filter(function (m) { return !m.asleep && Math.max(Math.abs(m.x - G.p.x), Math.abs(m.y - G.p.y)) <= 8; });
+    if (near.length) { addLog('Not with ' + E.displayName(near[0]).toLowerCase() + ' in sight.', 'warn'); return; }
     S.auto = { k: 'explore', next: 0 };
   }
   function tickAuto(t) {
@@ -1134,7 +1158,10 @@
       if (best) tg.cur = best;
       return;
     }
-    tg.cur = { x: tg.cur.x + dx, y: tg.cur.y + dy };
+    for (var k = 1; k <= 3; k++) {
+      var nx = tg.cur.x + dx * k, ny = tg.cur.y + dy * k;
+      if (tg.list.some(function (q) { return q.x === nx && q.y === ny; })) { tg.cur = { x: nx, y: ny }; return; }
+    }
   }
   function cycleTarget() {
     var G = S.G; if (!G) return;
@@ -1160,7 +1187,7 @@
     return '<div class="cr-hchip">' + tok(c.color, h.needsClass ? '?' : '@', true) + '<div><b>' + esc(h.name) + '</b><span>' +
       (h.needsClass ? 'Lv ' + h.level + ' Veteran' : 'Lv ' + h.level + ' ' + c.name) + ' · ' + actName(h) + ' · deepest B' + (h.story.deepest || 0) + ' · ' + D.DIFFICULTIES[h.difficulty].name + '</span>' + (extra || '') + '</div></div>';
   }
-  function showScreen(name) { S.screen = name; S.scrEl.hidden = false; S.ovlOpen = false; S.ovlEl.hidden = true; S.ov = null; renderScreen(); }
+  function showScreen(name) { var was = S.screen; S.screen = name; S.scrEl.hidden = false; if (was !== name) S.scrEl.scrollTop = 0; S.ovlOpen = false; S.ovlEl.hidden = true; S.ov = null; renderScreen(); }
   function hideScreen() { S.screen = null; S.scrEl.hidden = true; S.scrEl.innerHTML = ''; S.sceneCv = null; }
   function renderScreen() {
     if (!S || !S.screen) return;
@@ -1219,7 +1246,7 @@
   // ---- title ------------------------------------------------------------------------
   function runSnapFor(h) {
     var s = jget(K_RUN + h.id); if (!s || s.heroId !== h.id) return null;
-    if (h.client && h.client !== S.client && (h.updated || 0) > (s.time || 0)) return null;   // another device played on since
+    if (h.client && h.client !== S.client && (h.updated || 0) > (s.savedAt || 0)) return null;   // another device played on since
     return s;
   }
   function setRow() {
@@ -1325,7 +1352,7 @@
     opts = opts || {};
     var R = D.RARITIES[it.rarity], B_ = D.BASES[it.base], main = B_.main ? Math.round(E.mainValue(it)) + (B_.main === 'pow' ? ' pow' : ' arm') : '';
     var sel = S.ov && S.ov.sel === it.uid;
-    return '<button type="button" class="cr-it' + (sel ? ' on' : '') + '" data-act="' + (opts.act || 'isel') + '" data-uid="' + it.uid + '" style="--r:' + R.col + '">' +
+    return '<button type="button" class="cr-it r-' + it.rarity + (sel ? ' on' : '') + '" data-act="' + (opts.act || 'isel') + '" data-uid="' + it.uid + '">' +
       '<span class="cr-iti">' + ({ weapon: '/', armor: '[', helm: '^', charm: '"' }[it.slot]) + '</span><span class="cr-itn">' + esc(it.name) + (it.plus ? ' +' + it.plus : '') + (it.fresh ? ' <em>new</em>' : '') + '</span>' +
       '<span class="cr-itm">' + (opts.right != null ? opts.right : main + ' · i' + it.ilvl) + '</span></button>';
   }
@@ -1349,7 +1376,7 @@
     if (it.uq) extra = '<p class="cr-lore">' + esc(D.UNIQUES[it.uq].lore) + '</p>';
     if (it.set) { var Sx = D.SETS[it.set], n = E.setCounts(h)[it.set] || 0; extra = '<p class="cr-set">' + esc(Sx.name) + ' (' + n + '/3 worn) — 2: ' + esc(Sx.b2.desc) + ' · 3: ' + esc(Sx.b3.desc) + '</p>'; }
     var warn = it.slot === 'weapon' && !E.canWield(h, it) ? '<p class="cr-warn">Your class can\'t wield this.</p>' : '';
-    return '<div class="cr-idet" style="--r:' + R.col + '"><b>' + esc(it.name) + (it.plus ? ' +' + it.plus : '') + '</b><i>' + R.name + ' ' + D.SLOT_NAMES[it.slot].toLowerCase() + ' · item level ' + it.ilvl + ' · worth ' + E.itemValue(it) + 'g</i><ul>' +
+    return '<div class="cr-idet r-' + it.rarity + '"><b>' + esc(it.name) + (it.plus ? ' +' + it.plus : '') + '</b><i>' + R.name + ' ' + D.SLOT_NAMES[it.slot].toLowerCase() + ' · item level ' + it.ilvl + ' · worth ' + E.itemValue(it) + 'g</i><ul>' +
       lines.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' + extra + warn + compareLines(it, h) + '<div class="cr-row">' + (actions || '') + '</div></div>';
   }
   function ovNpc(id) {
@@ -1462,3 +1489,685 @@
     R.stash.forEach(function (it) { html += itemRow(it, { act: 'stash-take', right: h.bag.length < E.BAG_MAX ? '→ pack' : 'pack full' }); });
     return html + B('close', 'Done', '', 'cr-b');
   }
+
+  // ---- the hero sheet: gear / talents / skills / stats / journal -------------------------
+  function ovSheet() {
+    var h = hero(), ov = S.ov, G = S.G, s = E.stats(h, G), c = D.CLASSES[h.cls];
+    ov.tab = ov.tab || 'gear';
+    var tp = E.talentPoints(h);
+    var html = '<div class="cr-npc">' + tok(c.color, '@', true) + '<div><b>' + esc(h.name) + '</b><i>Level ' + h.level + ' ' + c.name + ' · ' + h.xp + '/' + E.xpForLevel(h.level) + ' XP</i></div>' + B('close', '✕', ' aria-label="Close"', 'cr-x') + '</div>';
+    html += tabs([['gear', 'Gear'], ['tal', 'Talents' + (tp ? ' ★' : '')], ['skills', 'Skills'], ['stats', 'Stats'], ['jour', 'Journal']], ov.tab);
+    if (ov.flash) html += '<p class="cr-flash">' + esc(ov.flash) + '</p>';
+    if (ov.tab === 'gear') {
+      D.SLOTS.forEach(function (sl) {
+        var it = h.equip[sl];
+        if (!it) { html += '<div class="cr-it empty"><span class="cr-iti">·</span><span class="cr-itn">' + D.SLOT_NAMES[sl] + ' — empty</span></div>'; return; }
+        html += itemRow(it);
+        if (ov.sel === it.uid) html += itemDetail(it, h, sl === 'helm' || sl === 'charm' ? B('unequip', 'Take off', dat('id', sl)) : '');
+      });
+      html += '<div class="cr-h">Pack ' + h.bag.length + '/' + E.BAG_MAX + (G ? ' · ◆ ' + h.gold + 'g' : '') + '</div>';
+      if (!h.bag.length) html += '<p class="cr-note">Nothing in your pack. Monsters, chests and vaults drop gear.</p>';
+      var bag = h.bag.slice().sort(function (a, b) { return D.SLOTS.indexOf(a.slot) - D.SLOTS.indexOf(b.slot) || E.itemScore(b, h.cls) - E.itemScore(a, h.cls); });
+      bag.forEach(function (it) {
+        var better = E.canWield(h, it) && E.itemScore(it, h.cls) > E.itemScore(h.equip[it.slot], h.cls);
+        html += itemRow(it, { right: (better ? '▲ ' : '') + (D.BASES[it.base].main ? Math.round(E.mainValue(it)) + (D.BASES[it.base].main === 'pow' ? ' pow' : ' arm') : '') + ' · i' + it.ilvl });
+        if (ov.sel === it.uid) html += itemDetail(it, h, (E.canWield(h, it) ? B('equip', 'Equip', dat('uid', it.uid), 'cr-b pri') : '') + B('drop', S.dropArm === it.uid ? 'Really discard?' : 'Discard', dat('uid', it.uid), 'cr-b' + (S.dropArm === it.uid ? ' danger' : '')));
+      });
+      var cons = D.CONS_ORDER.filter(function (k) { return h.cons[k]; });
+      if (cons.length) { html += '<div class="cr-h">Consumables</div><div class="cr-row wrap">'; cons.forEach(function (k) { var C_ = D.CONSUMABLES[k]; html += G ? B('usecons', C_.icon + ' ' + C_.name + ' ×' + h.cons[k], dat('id', k) + ' title="' + esc(C_.desc) + '"') : '<span class="cr-pill" title="' + esc(C_.desc) + '">' + C_.icon + ' ' + C_.name + ' ×' + h.cons[k] + '</span>'; }); html += '</div>'; }
+      html += '<div class="cr-note">Materials: ⚙ ' + h.mats.scrap + ' · ✨ ' + h.mats.dust + ' · 🔥 ' + h.mats.soul + '</div>';
+    } else if (ov.tab === 'tal') {
+      html += '<p class="cr-note">One talent per tier. Choices are permanent — Sister Ilse in Lanternfall can help you respec.</p>';
+      D.TALENTS[h.cls].forEach(function (tier, ti) {
+        var lv = D.TALENT_LEVELS[ti], chosen = h.talents[ti], open = h.level >= lv;
+        html += '<div class="cr-h">Tier ' + (ti + 1) + ' · level ' + lv + (open && !chosen ? ' — choose one!' : '') + '</div><div class="cr-tal">';
+        tier.forEach(function (t) {
+          var on = chosen === t.id, armed = S.talArm === t.id;
+          html += '<button type="button" class="cr-talb' + (on ? ' on' : '') + (chosen && !on ? ' off' : '') + '" data-act="talent" data-i="' + ti + '" data-id="' + t.id + '"' + (open && !chosen ? '' : ' disabled') + '><b>' + esc(t.name) + (armed ? ' — tap again' : '') + '</b><span>' + esc(t.desc) + '</span></button>';
+        });
+        html += '</div>';
+      });
+    } else if (ov.tab === 'skills') {
+      E.abilitiesFor(h).forEach(function (a, i) {
+        var A = D.ABILITIES[a.id];
+        html += '<div class="cr-skill' + (a.known ? '' : ' dim') + '"><span class="cr-ski">' + A.icon + '</span><div><b>' + (i + 1) + '. ' + A.name + '</b> <i>' + (a.known ? (A.cost ? A.cost + ' ' + c.res.name.toLowerCase() : 'free') + (A.cd ? ' · ' + A.cd + ' turn cooldown' : '') : 'unlocks at level ' + a.lvl) + '</i><p>' + esc(A.desc) + '</p></div></div>';
+      });
+      html += '<p class="cr-note">' + esc(c.res.name) + ': ' + esc(resHelp(h.cls)) + '</p>';
+    } else if (ov.tab === 'stats') {
+      var row = function (k, v) { return '<span>' + k + ' <b>' + v + '</b></span>'; }, pc = function (v) { return Math.round(v * 100) + '%'; };
+      html += '<div class="cr-kv col">' + row('Health', s.maxHp) + row('Power', Math.round(s.pow)) + row('Armor', Math.round(s.arm)) + row(c.res.name, s.maxRes) + row('Crit chance', pc(s.crit)) + row('Crit damage', '+' + pc(0.5 + s.critDmg)) +
+        row('Dodge', pc(s.dodge)) + (s.block ? row('Block', pc(s.block)) : '') + (s.lifesteal ? row('Lifesteal', pc(s.lifesteal)) : '') + (s.regen ? row('Regen', s.regen + '/4t') : '') + row(c.res.name + ' regen', s.resRegen + '/t') +
+        (s.thorns ? row('Thorns', pc(s.thorns)) : '') + (s.abilPct ? row('Ability dmg', '+' + pc(s.abilPct)) : '') + (s.goldFind ? row('Gold find', '+' + pc(s.goldFind)) : '') + (s.magicFind ? row('Magic find', '+' + pc(s.magicFind)) : '') +
+        (s.resist ? row('Resilience', pc(s.resist)) : '') + (s.elite ? row('vs elites', '+' + pc(s.elite)) : '') + row('Light', (D.BIOMES[G ? G.biome : 'crypt'].light + s.light)) + '</div>';
+      var sc = E.setCounts(h); for (var sid in sc) html += '<p class="cr-set">' + esc(D.SETS[sid].name) + ' ' + sc[sid] + '/3</p>';
+    } else {
+      html += '<div class="cr-h">Story</div><p class="cr-p">' + esc(actName(h)) + '. ' + (h.story.ended ? 'The Hollow King has fallen.' : 'Next: ' + D.BOSSES[D.BIOMES[D.BIOME_ORDER[Math.min(4, h.story.cleared)]].boss].name + ', at the bottom of ' + D.BIOMES[D.BIOME_ORDER[Math.min(4, h.story.cleared)]].name + ' (floor ' + (Math.min(4, h.story.cleared) + 1) * 5 + ').') + '</p>';
+      html += '<div class="cr-h">Bounties</div>';
+      h.quests.board.forEach(function (b) { html += '<p class="cr-p">' + (b.done ? '✔ ' : '· ') + esc(b.name) + ' — ' + esc(b.text) + ' <i>' + (b.tpl === 'depth' ? '' : b.have + '/' + b.need) + '</i></p>'; });
+      var sides = Object.keys(h.quests.side).filter(function (q) { return h.quests.side[q] !== 'done'; });
+      if (sides.length) { html += '<div class="cr-h">Errands</div>'; sides.forEach(function (q) { var SQ = D.SIDEQUESTS[q]; html += '<p class="cr-p">' + esc(SQ.name) + ' — ' + (h.quests.side[q] === 'found' ? 'bring the ' + SQ.item + ' to ' + D.NPCS[SQ.giver].name : 'find the ' + SQ.item + ' in ' + D.BIOMES[D.BIOME_ORDER[SQ.act - 1]].name) + '</p>'; }); }
+      var bl = h.bless || [];
+      if (bl.length) { html += '<div class="cr-h">Blessings & curses</div>'; bl.forEach(function (b) { var Bl = D.BLESSINGS[b.id]; html += '<p class="cr-p">' + Bl.icon + ' ' + esc(Bl.name) + ' — ' + esc(Bl.desc) + ' <i>(' + b.n + ' floors)</i></p>'; }); }
+    }
+    return html + B('close', 'Close', '', 'cr-b');
+  }
+  function resHelp(cls) {
+    return { warrior: 'builds as you hit and get hit; drains away when no enemy is in sight.', rogue: 'refills quickly every turn.', mage: 'trickles back slowly; kills and tonics restore it.', ranger: 'builds each turn, much faster when you stand your ground.', cleric: 'builds each turn and with every blow you land.', necro: 'flows in when anything dies near you.' }[cls];
+  }
+
+  // ---- dungeon modals ---------------------------------------------------------------------
+  function showModal() {
+    var G = S.G, md = G && G.modal; if (!md || S.ovlOpen) return;
+    stopAuto(); if (S.tgt) cancelTarget();
+    if (md.k === 'event') openOvl('event', { id: md.id });
+    else if (md.k === 'dialog') openOvl('dialog', { who: md.who, lines: md.lines, i: 0, ending: md.ending, onClose: function () { E.closeModal(G); if (md.ending) toEnding(); } });
+    else if (md.k === 'tablet') openOvl('tablet', { pz: md.pz, onClose: function () { E.closeModal(G); } });
+    else if (md.k === 'lore') openOvl('lore', { idx: md.idx, onClose: function () { E.closeModal(G); } });
+    else if (md.k === 'found') openOvl('found', { q: md.q, onClose: function () { E.closeModal(G); } });
+    else if (md.k === 'shop') openOvl('dshop', { onClose: function () { E.closeModal(G); } });
+  }
+  function ovEvent() {
+    var ov = S.ov, EV = D.EVENTS[ov.id], html = '<div class="cr-npc">' + tok(EV.col, EV.ch, true) + '<div><b>' + esc(EV.name) + '</b><i>' + esc(D.BIOMES[S.G.biome].name) + '</i></div></div>';
+    if (ov.result) {
+      html += '<p class="cr-quote">' + esc(ov.result.text) + '</p>';
+      if (ov.result.gains && ov.result.gains.length) html += '<p class="cr-gain">' + ov.result.gains.map(esc).join(' · ') + '</p>';
+      return html + B('evdone', 'Continue', '', 'cr-go');
+    }
+    html += '<p class="cr-quote">' + esc(EV.text) + '</p>';
+    if (ov.err) html += '<p class="cr-warn">' + esc(ov.err) + '</p>';
+    EV.choices.forEach(function (ch, i) {
+      var cost = ch.ops && ch.ops.pay ? ' (' + Math.round(ch.ops.pay * (1 + 0.3 * (S.G.ml - 1))) + 'g)' : '';
+      html += B('evc', esc(ch.label) + cost, dat('i', i), 'cr-choice');
+    });
+    return html;
+  }
+  function ovDialog() {
+    var ov = S.ov, who = ov.who, Bs = D.BOSSES[who], N = D.NPCS[who], name = Bs ? Bs.name : N ? N.name : (ov.name || ''), col = Bs ? Bs.col : N ? N.col : '#c0c0c0', ch = Bs ? Bs.ch : N ? N.ch : '?';
+    var html = '<div class="cr-npc">' + tok(col, ch, true) + '<div><b>' + esc(name) + '</b><i>' + esc(Bs ? Bs.title : '') + '</i></div></div>';
+    html += '<p class="cr-quote big">' + esc(ov.lines[ov.i] || '') + '</p><div class="cr-dots">' + ov.lines.map(function (_, i) { return '<i class="' + (i === ov.i ? 'on' : '') + '"></i>'; }).join('') + '</div>';
+    return html + B('dlgnext', ov.i < ov.lines.length - 1 ? 'Continue ▸' : (ov.ending ? 'The end…' : 'Face it'), '', 'cr-go');
+  }
+  function ovTablet() {
+    var P = S.G.pz[S.ov.pz];
+    return '<div class="cr-title">RUNE TABLET</div><p class="cr-quote">Four glyphs are carved here, worn but legible. Beneath them: <i>“Walk the order, or burn.”</i></p><div class="cr-runes">' +
+      (P ? P.order.map(function (s) { return '<span>' + RUNE_SYM[s] + '</span>'; }).join('<b>→</b>') : '') + '</div><p class="cr-note">Step on the floor runes in this order. A wrong step resets them — painfully.</p>' + B('close', 'Got it', '', 'cr-go');
+  }
+  function ovLore() { var L = D.LORE[S.ov.idx]; return '<div class="cr-title">LORE</div><div class="cr-h">' + esc(L.title) + '</div><p class="cr-lore big">' + esc(L.text) + '</p><p class="cr-note">Added to Odo\'s archive (' + hero().lore.length + '/' + D.LORE.length + ').</p>' + B('close', 'Continue', '', 'cr-go'); }
+  function ovFound() { var SQ = D.SIDEQUESTS[S.ov.q]; return '<div class="cr-title">FOUND</div><p class="cr-quote">' + esc(SQ.ch) + ' ' + esc(SQ.item) + '</p><p class="cr-p">Bring it back to ' + esc(D.NPCS[SQ.giver].name) + ' in Lanternfall.</p>' + B('close', 'Continue', '', 'cr-go'); }
+  function ovDShop() {
+    var G = S.G, md = G.modal, h = G.hero, html = '<div class="cr-npc">' + tok('#f0d060', '$', true) + '<div><b>Wandering Peddler</b><i>“Prices are steep down here.”</i></div>' + B('close', '✕', ' aria-label="Close"', 'cr-x') + '</div><div class="cr-note">◆ ' + h.gold + ' gold</div>';
+    if (S.ov.flash) html += '<p class="cr-flash">' + esc(S.ov.flash) + '</p>';
+    (md && md.stock || []).forEach(function (e, i) {
+      if (e.sold) return;
+      if (e.it) { html += itemRow(e.it, { right: e.price + 'g' }); if (S.ov.sel === e.it.uid) html += itemDetail(e.it, h, B('dbuy', 'Buy for ' + e.price + 'g', dat('i', i) + (h.gold >= e.price ? '' : ' disabled'), 'cr-b pri')); }
+      else { var C_ = D.CONSUMABLES[e.cons]; html += '<div class="cr-cons"><span>' + C_.icon + '</span><div><b>' + C_.name + '</b><p>' + esc(C_.desc) + '</p></div>' + B('dbuy', e.price + 'g', dat('i', i) + (h.gold >= e.price ? '' : ' disabled'), 'cr-b pri') + '</div>'; }
+    });
+    return html + B('close', 'Leave', '', 'cr-b');
+  }
+  function ovMap() { return '<div class="cr-title">FLOOR ' + S.G.depth + ' — ' + esc(D.BIOMES[S.G.biome].name.toUpperCase()) + '</div><canvas class="cr-bigmap"></canvas><p class="cr-note">◆ you · red: foes · gold: stairs / chests · violet: shrines · cyan: levers</p>' + B('close', 'Close', '', 'cr-go'); }
+  function drawBigMap() {
+    var cv = S.ovlEl.querySelector('.cr-bigmap'); if (!cv || !S.G) return;
+    var G = S.G, w = Math.min(S.cw - 40, 520), cell = Math.max(3, Math.floor(w / G.w)), W = cell * G.w, H = cell * G.h;
+    cv.width = W * S.dpr; cv.height = H * S.dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    var c = cv.getContext('2d'); c.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
+    c.fillStyle = S.th.dark ? '#08080c' : rgb(mix(S.th.bg, [0, 0, 0], 0.06)); c.fillRect(0, 0, W, H);
+    var fl = S.th.dark ? 'rgba(200,190,170,0.5)' : 'rgba(80,70,60,0.4)';
+    for (var y = 0; y < G.h; y++) for (var x = 0; x < G.w; x++) {
+      var i = y * G.w + x; if (!G.seen[i]) continue; var t = G.t[i];
+      if (t === T.WALL || t === T.CRACK) { c.fillStyle = S.th.dark ? 'rgba(120,110,100,0.35)' : 'rgba(60,50,40,0.25)'; }
+      else c.fillStyle = t === T.STAIRS ? '#ffd040' : t === T.WATER || t === T.DEEP ? '#4a90d0' : t === T.LAVA ? '#ff6a2a' : t === T.CHASM ? '#000' : t === T.GATE ? '#c0c0c8' : t === T.PORTAL ? '#9fd0ff' : fl;
+      c.fillRect(x * cell, y * cell, cell, cell);
+    }
+    G.objs.forEach(function (o) { if (!G.seen[o.y * G.w + o.x]) return; var col = o.k === 'chest' ? '#c9a23a' : o.k === 'event' && !o.used ? '#c070ff' : o.k === 'lever' && !o.on ? '#70d0ff' : o.k === 'lore' || o.k === 'quest' ? '#ffe08a' : o.k === 'item' ? rarCol(o.it.rarity) : null; if (col) { c.fillStyle = col; c.fillRect(o.x * cell, o.y * cell, cell, cell); } });
+    G.mons.forEach(function (m) { if (E.monVisible(G, m)) { c.fillStyle = m.ally ? '#7fe0a0' : '#e05050'; c.fillRect(m.x * cell, m.y * cell, cell, cell); } });
+    c.fillStyle = rgb(S.th.accent); c.beginPath(); c.arc(G.p.x * cell + cell / 2, G.p.y * cell + cell / 2, cell, 0, 7); c.fill();
+  }
+  function ovLog() { return '<div class="cr-title">LOG</div><div class="cr-logall">' + S.logLines.slice(-80).map(function (l) { return '<div class="cr-ln ' + esc(String(l.c).replace(/[^a-z:]/g, '').replace(':', ' r-')) + '">' + esc(l.s) + '</div>'; }).join('') + '</div>' + B('close', 'Close', '', 'cr-go'); }
+  function ovMenu() {
+    var G = S.G, h = hero(), html = '<div class="cr-title">PAUSED</div>';
+    html += B('close', '▶ Resume', '', 'cr-go');
+    html += '<div class="cr-row wrap">' + B('m-sheet', '🎒 Hero (C)') + B('m-map', '🗺 Map (M)') + B('m-log', '📜 Log (L)') + B('help', '? Help') + '</div>';
+    if (G && G.mode === 'story') html += B('m-recall', '📜 Read a Recall Scroll (' + (h.cons.recall || 0) + ') — back to town', h.cons.recall ? '' : ' disabled');
+    if (G && G.mode === 'daily') html += B('m-abandon', S.abArm ? 'Really end the challenge?' : '☀ End the daily challenge', '', 'cr-b' + (S.abArm ? ' danger' : ''));
+    html += setRow();
+    html += B('m-title', '⏏ Save & quit to title') + '<p class="cr-note">Your delve is saved — you\'ll resume right here.</p>';
+    return html;
+  }
+  function ovHelp() {
+    return '<div class="cr-title">HOW TO PLAY</div>' +
+      '<p class="cr-p">Descend beneath Lanternfall, floor by floor. Every fifth floor holds a boss; beat it to open a portal home and unlock a waypoint. Monsters move when you move — the game is turn-based, so think.</p>' +
+      '<div class="cr-keys"><span><b>Arrows / WASD / D-pad / swipe</b> move &amp; attack (bump)</span><span><b>Tap a tile</b> travel there · <b>tap a foe</b> target it (tap again to attack)</span><span><b>Enter / E / ✋</b> use: stairs, levers, chests, shrines</span><span><b>Space / ⏳</b> wait a turn — with no foes in sight, rest until healed</span><span><b>1–5</b> abilities · <b>Q</b> potion · <b>B</b> bomb · <b>Tab</b> cycle target</span><span><b>X / 🧭</b> auto-explore · <b>C</b> hero · <b>M</b> map · <b>L</b> log · <b>Esc</b> menu</span></div>' +
+      '<div class="cr-h">Read the danger</div><p class="cr-p">Red tiles are an attack winding up — it lands next turn. Step out! A number on the tiles means more turns of warning. Stunning or freezing a monster interrupts it. Glowing vents burst on a rhythm.</p>' +
+      '<div class="cr-h">Elites</div><p class="cr-p">Ringed monsters are champions with affixes (vampiric, shielded, splitting, hasted…). They hit harder and always drop loot.</p>' +
+      '<div class="cr-h">Puzzles</div><p class="cr-p">Sealed gates open with levers somewhere on the floor, boulders pushed onto plates (a red-knobbed lever resets them), or runes stepped in the order shown on a nearby tablet. Every puzzle is solvable.</p>' +
+      '<div class="cr-h">Death</div><p class="cr-p">You wake in Lanternfall, lighter of purse; unequipped loot found that trip is lost (except on Relaxed). Read a Recall Scroll to bring everything home safely.</p>' +
+      B('close', 'Got it', '', 'cr-go');
+  }
+  function ovPrologue() {
+    var ov = S.ov, lines = D.STORY.prologue;
+    return '<div class="cr-title">' + (ov.i === 0 ? 'LANTERNFALL' : '…') + '</div><p class="cr-quote big">' + esc(lines[ov.i]) + '</p><div class="cr-dots">' + lines.map(function (_, i) { return '<i class="' + (i === ov.i ? 'on' : '') + '"></i>'; }).join('') + '</div>' + B('prolnext', ov.i < lines.length - 1 ? 'Continue ▸' : 'Enter Lanternfall', '', 'cr-go');
+  }
+
+  // ---- end-of-run screens -----------------------------------------------------------------
+  function scrDeath() {
+    var d = S.death || {}, html = '<div class="cr-card"><pre class="cr-art red">  YOU HAVE FALLEN  </pre><p class="cr-quote">Slain by ' + esc(d.killer || 'the Deep') + ' on floor ' + d.depth + '.</p>';
+    html += '<div class="cr-kv col"><span>Kills <b>' + d.kills + '</b></span><span>Gold found <b>' + d.gold + '</b></span><span>Floors <b>' + d.floors + '</b></span></div>';
+    html += '<p class="cr-p">You wake in the Lantern Inn, aching. ' + (d.lost.gold ? 'Your purse is ' + d.lost.gold + ' gold lighter. ' : '') + (d.lost.items.length ? 'Lost in the dark: ' + d.lost.items.map(esc).join(', ') + '.' : 'Your pack made it back with you.') + '</p>';
+    return html + B('totown', 'Return to Lanternfall', '', 'cr-go') + '</div>';
+  }
+  function scrDaily() {
+    var info = E.dailyInfo(today()), R = S.R, dd = R.daily.days[info.date], C_ = D.CLASSES[info.cls], M = D.DAILY_MODS[info.mod], snap = jget(K_RUN + 'daily');
+    var html = '<div class="cr-card"><div class="cr-title">DAILY CHALLENGE</div><p class="cr-quote">' + info.date + ' — the same dungeon for everyone today.</p>';
+    html += '<div class="cr-hchip">' + tok(C_.color, '@', true) + '<div><b>' + C_.name + '</b><span>level 3 · starting kit</span></div></div>';
+    html += '<div class="cr-h">Today\'s twist: ' + esc(M.name) + '</div><p class="cr-p">' + esc(M.desc) + '</p>';
+    html += '<p class="cr-p">Dive as deep as you can. Score = depth, kills, elites, bosses and gold. Death ends the run.</p>';
+    html += '<div class="cr-kv col"><span>Best today <b>' + (dd ? dd.best : '—') + '</b></span><span>Tries <b>' + (dd ? dd.tries : 0) + '</b></span><span>All-time <b>' + (R.daily.best ? R.daily.best.score + ' (' + R.daily.best.date + ')' : '—') + '</b></span></div>';
+    if (snap && snap.daily && snap.daily.date === info.date) html += B('dresume', '▶ Resume today\'s run — floor ' + snap.depth, '', 'cr-go');
+    html += B('dstart', snap && snap.daily && snap.daily.date === info.date ? 'Start over' : '▶ Begin', '', snap && snap.daily && snap.daily.date === info.date ? 'cr-b' : 'cr-go');
+    return html + B('back', '← Back') + '</div>';
+  }
+  function scrDailyOver() {
+    var d = S.dres || {}, html = '<div class="cr-card"><div class="cr-title">CHALLENGE OVER</div><div class="cr-big">' + d.score + '</div><p class="cr-quote">' + esc(d.why) + ' on floor ' + d.depth + '.</p>';
+    if (d.rec && d.rec.allTime) html += '<p class="cr-new">★ New all-time best!</p>'; else if (d.rec && d.rec.best) html += '<p class="cr-new">★ New best today!</p>';
+    html += '<div class="cr-kv col"><span>Kills <b>' + d.kills + '</b></span><span>Elites <b>' + d.elites + '</b></span><span>Bosses <b>' + d.bosses + '</b></span><span>Gold <b>' + d.gold + '</b></span></div>';
+    return html + B('totitle', 'Back to the title', '', 'cr-go') + '</div>';
+  }
+  function scrEnding() {
+    var h = S.hero, html = '<div class="cr-card"><canvas class="cr-scene"></canvas><div class="cr-title">THE SUNSTONE BURNS</div>';
+    D.STORY.ending.forEach(function (l) { html += '<p class="cr-p">' + esc(l) + '</p>'; });
+    html += '<div class="cr-kv col"><span>Level <b>' + h.level + '</b></span><span>Kills <b>' + h.stats.kills + '</b></span><span>Deaths <b>' + h.stats.deaths + '</b></span><span>Lore <b>' + h.lore.length + '/' + D.LORE.length + '</b></span></div>';
+    return html + B('totown', 'Return to Lanternfall', '', 'cr-go') + '<p class="cr-note">From town: keep descending past floor 25 (the Endless Descent), or begin New Game+.</p></div>';
+  }
+
+  // ===========================================================================
+  //  flows: town ⇄ dungeon
+  // ===========================================================================
+  function setMode(dungeon) {
+    S.root.classList.toggle('in-town', !dungeon);
+    if (dungeon) { layout(); }
+    refreshHud();
+  }
+  function goTown(opts) {
+    opts = opts || {};
+    S.G = null; S.tgt = null; S.auto = null; S.stock = null;
+    S.hero = S.R.slots[S.R.active];
+    if (!S.hero) { showScreen('title'); return; }
+    if (S.hero.needsClass) { S.create = { vet: S.hero, cls: null }; showScreen('create'); return; }
+    if (opts.arrive) E.townArrive(S.hero);
+    setMode(false);
+    showScreen('town');
+    markDirty();
+  }
+  function startDelve(depth) {
+    var h = S.hero; if (!h) return;
+    S.snd.ensure();
+    clearRun('story', h.id);
+    S.G = E.startRun(h, depth);
+    enterDungeon();
+    markDirty();
+  }
+  function enterDungeon() {
+    hideScreen(); S.vis = {}; S.snapCam = true; S.tilesDirty = true; S.logEl.innerHTML = ''; S.logLines = []; S.fx = newFx();
+    setMode(true);
+    (S.G.log || []).slice(-3).forEach(function (l) { addLog(l.s, l.c); });
+    S.G.ev = S.G.ev.filter(function (e) { return e.t !== 'log'; });
+    drainEvents(); refreshHud();
+    if (S.G.modal) showModal();
+    try { S.cv.focus({ preventScroll: true }); } catch (e) {}
+    if (S.set.hints && !S.hintShown && S.G.depth === 1 && S.hero && S.hero.stats.runs <= 1) { S.hintShown = true; addLog('Tip: tap a tile to walk there, tap a foe to target it. 🧭 explores for you.', 'info'); }
+  }
+  function resumeRun(h) {
+    var snap = runSnapFor(h); if (!snap) return false;
+    var G = E.loadRun(snap, h); if (!G) { clearRun('story', h.id); return false; }
+    S.G = G; S.hero = h; enterDungeon(); addLog('You pick up where you left off.', 'info');
+    return true;
+  }
+  function finishRun() {
+    var G = S.G, h = G.hero;
+    saveNowRun(false);
+    if (G.mode === 'daily') {
+      var info = G.daily, score = E.dailyScore(G), rec = E.recordDaily(S.R, info, score, G.depth);
+      S.dres = { score: score, rec: rec, depth: G.depth, kills: G.run.kills, elites: G.run.elites, bosses: G.run.bosses, gold: G.run.gold, why: G.over === 'dead' ? 'Slain by ' + (G.killer || 'the Deep') : 'You walked away' };
+      clearRun('daily'); S.G = null; markDirty(); setMode(false); S.snd.play(G.over === 'dead' ? 'death' : 'solve');
+      setTimeout(function () { if (S) showScreen('dailyover'); }, G.over === 'dead' ? 900 : 0);
+      return;
+    }
+    E.syncHero(G);
+    clearRun('story', h.id);
+    if (G.over === 'dead') {
+      var lost = E.applyDeath(G);
+      S.death = { killer: G.killer, depth: G.depth, kills: G.run.kills, gold: G.run.gold, floors: G.run.floors, lost: lost };
+      S.snd.play('death');
+      E.townArrive(h); S.G = null; markDirty();
+      setTimeout(function () { if (S) { setMode(false); showScreen('death'); } }, 1000);
+      return;
+    }
+    // recall / portal: safe return with everything
+    var ended = !!G.ending;
+    S.snd.play('stairs');
+    S.G = null; E.townArrive(h); markDirty();
+    if (ended) { setMode(false); showScreen('ending'); return; }
+    goTown();
+    var got = G.run.items ? G.run.items + ' item' + (G.run.items > 1 ? 's' : '') + ', ' : '';
+    setTimeout(function () { if (S && S.screen === 'town') msg('BACK IN LANTERNFALL', 'You return with ' + got + G.run.gold + ' gold and ' + G.run.kills + ' kills from ' + (G.run.floors + 1) + ' floor' + (G.run.floors ? 's' : '') + '. You are fully restored.'); }, 50);
+  }
+  function saveNowRun(keep) { if (S.runT) { clearTimeout(S.runT); S.runT = 0; } if (keep !== false) saveRunNow(); }
+  function toEnding() { /* the outro dialog closed: the portal still has to be used — just nudge */ addLog('A portal home shimmers in the arena. Use it to return to Lanternfall.', 'good'); }
+
+  // ===========================================================================
+  //  clicks (all buttons delegate here)
+  // ===========================================================================
+  function onClick(e) {
+    var b = e.target.closest ? e.target.closest('[data-act]') : null;
+    if (!b || !S || !S.root.contains(b) || b.disabled) return;
+    S.snd.ensure();
+    var a = b.getAttribute('data-act'), id = b.getAttribute('data-id'), uid = b.getAttribute('data-uid'), ix = b.getAttribute('data-i'), tt = b.getAttribute('data-t');
+    if (a !== 'd' && a !== 'ab' && a !== 'potion') S.snd.play('ui');
+    var h = S.hero, R = S.R, ov = S.ov;
+    if (a !== 'del') S.delArm = null;
+    if (a !== 'drop') S.dropArm = null;
+    if (a !== 'talent') S.talArm = null;
+    if (a !== 'respec') S.respecArm = false;
+    if (a !== 'ngplus') S.ngArm = false;
+    if (a !== 'm-abandon') S.abArm = false;
+    switch (a) {
+      // --- title / roster / create
+      case 'retry': boot(); break;
+      case 'continue':
+        if (!h) break;
+        if (h.needsClass) { S.create = { vet: h, cls: null }; showScreen('create'); break; }
+        if (!resumeRun(h)) goTown();
+        break;
+      case 'heroes': S.G = null; showScreen('roster'); break;
+      case 'new': S.create = { cls: null, name: E.randomName(E.rng(Date.now() & 0xffffff)), diff: 'normal' }; showScreen('create'); break;
+      case 'pick': R.active = id; S.hero = R.slots[id]; markDirty(); showScreen('title'); break;
+      case 'del':
+        if (S.delArm !== id) { S.delArm = id; renderScreen(); break; }
+        S.delArm = null; delete R.slots[id]; R.deleted[id] = Date.now(); R.order = R.order.filter(function (x) { return x !== id; });
+        clearRun('story', id); if (R.active === id) R.active = R.order[0] || null; S.hero = R.slots[R.active] || null; markDirty(); renderScreen(); break;
+      case 'back': showScreen(S.screen === 'create' && S.create && S.create.vet ? 'title' : S.screen === 'daily' ? 'title' : S.screen === 'create' ? 'title' : 'title'); break;
+      case 'cls': S.create.cls = id; renderScreen(); break;
+      case 'diff': S.create.diff = id; renderScreen(); break;
+      case 'rname': S.create.name = E.randomName(E.rng((Date.now() ^ (Math.random() * 1e9)) >>> 0)); S.create.typing = false; renderScreen(); break;
+      case 'tname': S.create.typing = true; renderScreen(); var inp = S.scrEl.querySelector('.cr-in'); if (inp) { inp.focus(); inp.select(); inp.addEventListener('input', function () { S.create.name = inp.value; }); inp.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); S.create.name = E.cleanName(inp.value); S.create.typing = false; renderScreen(); } }); } break;
+      case 'begin':
+        var cr = S.create; if (!cr || !cr.cls) break;
+        if (cr.vet) { E.setClass(cr.vet, cr.cls); S.hero = cr.vet; markDirty(); goTown({ arrive: true }); msg('WELCOME BACK', 'The Deep has changed since your last descent — and so have you. Your old gear has been reforged for a ' + D.CLASSES[cr.cls].name + ' (check your pack), your progress carried over as waypoints. Lanternfall remembers you.'); break; }
+        var nh = E.newHero(cr.cls, E.cleanName(cr.name), cr.diff, E.rng((Date.now() ^ (Math.random() * 1e9)) >>> 0));
+        R.slots[nh.id] = nh; R.order.push(nh.id); R.active = nh.id; S.hero = nh; markDirty();
+        goTown({ arrive: true }); openOvl('prologue', { i: 0 }); break;
+      case 'prolnext': if (ov.i < D.STORY.prologue.length - 1) { ov.i++; renderOvl(); } else closeOvl(); break;
+      case 'set':
+        S.set[id || b.getAttribute('data-k')] = !S.set[id || b.getAttribute('data-k')]; saveSettings();
+        if ((id || b.getAttribute('data-k')) === 'sound') { S.snd.on = S.set.sound; S.snd.ensure(); syncHead(); }
+        if (S.mini) S.mini.hidden = !S.set.mini;
+        if (S.ovlOpen) renderOvl(); else renderScreen(); break;
+      case 'help': openOvl('help'); break;
+      case 'daily': S.G = null; showScreen('daily'); break;
+      case 'dstart': var info = E.dailyInfo(today()), dh = E.dailyHero(info); clearRun('daily'); S.G = E.startRun(dh, 1, { daily: info, seed: info.seed }); S.G.daily = info; enterDungeon(); addLog('Daily twist: ' + D.DAILY_MODS[info.mod].name + ' — ' + D.DAILY_MODS[info.mod].desc, 'warn'); break;
+      case 'dresume': var snap = jget(K_RUN + 'daily'), G2 = snap && E.loadRun(snap, null); if (G2) { S.G = G2; enterDungeon(); } else { clearRun('daily'); renderScreen(); } break;
+      case 'totitle': showScreen('title'); break;
+      case 'totown': goTown(); break;
+      // --- town
+      case 'wp': S.wp = +id; renderScreen(); break;
+      case 'descend': startDelve(S.wp || 1); break;
+      case 'ngplus': if (!S.ngArm) { S.ngArm = true; renderScreen(); break; } S.ngArm = false; E.newGamePlus(h); S.wp = 1; markDirty(); renderScreen(); msg('NEW GAME+', 'The Deep remembers you — and it has been preparing. Every foe is far deadlier now; every treasure far richer. Begin again at floor 1.'); break;
+      case 'place': if (id === 'stash') openOvl('stash', { wide: true }); else openOvl('npc:' + id, { wide: true }); break;
+      case 'sheet': openOvl('sheet', { wide: true, tab: E.talentPoints(hero()) ? 'tal' : 'gear' }); break;
+      case 'close': closeOvl(); break;
+      case 'otab': ov.tab = tt; ov.sel = null; ov.flash = null; renderOvl(); break;
+      case 'tab': ov.tab = tt; renderOvl(); break;
+      case 'story': ov.story = !ov.story; renderOvl(); break;
+      case 'rest': ov.rested = true; S.snd.play('heal'); renderOvl(); break;
+      case 'sq-accept': E.acceptSide(h, id); ov.line = D.SIDEQUESTS[id].text; markDirty(); renderOvl(); break;
+      case 'sq-turn': var got = E.turnInSide(h, id); if (got) { ov.line = D.SIDEQUESTS[id].done; ov.flash = 'Reward: ' + got.join(', '); S.snd.play('solve'); markDirty(); } renderOvl(); refreshHud(); break;
+      case 'isel': ov.sel = ov.sel === uid ? null : uid; renderOvl(); break;
+      case 'up': var ur = E.upgradeItem(h, uid); ov.flash = ur.ok ? ur.it.name + ' is now +' + ur.it.plus + '!' : ur.msg; if (ur.ok) { S.snd.play('solve'); markDirty(); } renderOvl(); break;
+      case 'ref': var rf = E.reforgeItem(h, uid, E.rng((Date.now() ^ (Math.random() * 1e9)) >>> 0)); ov.flash = rf.ok ? 'Reforged into ' + rf.it.name + '.' : rf.msg; if (rf.ok) { S.snd.play('rare'); markDirty(); } renderOvl(); break;
+      case 'salv': var y = E.salvageItem(h, uid); if (y) { ov.flash = 'Salvaged for ' + matTxt(y) + '.'; ov.sel = null; S.snd.play('chest'); markDirty(); } renderOvl(); break;
+      case 'craft': var ci = E.craftItem(h, id, tt, E.rng((Date.now() ^ (Math.random() * 1e9)) >>> 0)); ov.flash = ci ? 'Torvald hands you: ' + ci.name + '.' : 'Not enough materials.'; if (ci) { S.snd.play('rare'); markDirty(); } renderOvl(); break;
+      case 'buy':
+        if (!S.stock) break;
+        var entry = ix.charAt(0) === 'c' ? S.stock.cons[+ix.slice(1)] : S.stock.items[+ix.slice(1)], br = E.buy(h, entry);
+        ov.flash = br.ok ? 'Bought ' + (entry.it ? entry.it.name : D.CONSUMABLES[entry.cons].name) + '.' : br.msg; if (br.ok) { S.snd.play('gold'); ov.sel = null; markDirty(); } renderOvl(); break;
+      case 'sell': var v = E.sellItem(h, uid); if (v) { ov.flash = 'Sold for ' + v + 'g.'; ov.sel = null; S.snd.play('gold'); markDirty(); } renderOvl(); break;
+      case 'sellcommons': var tot = 0; h.bag.slice().forEach(function (it) { if (it.rarity === 'common') tot += E.sellItem(h, it.uid); }); ov.flash = tot ? 'Sold the junk for ' + tot + 'g.' : 'No common items to sell.'; if (tot) { S.snd.play('gold'); markDirty(); } renderOvl(); break;
+      case 'uncurse': if (E.uncurse(h)) { ov.flash = 'The curses lift.'; S.snd.play('holy'); markDirty(); } renderOvl(); break;
+      case 'bless': if (E.buyBlessing(h, id)) { ov.flash = D.BLESSINGS[id].name + ' — it will last your next 3 floors.'; S.snd.play('holy'); markDirty(); } renderOvl(); break;
+      case 'respec': if (!S.respecArm) { S.respecArm = true; renderOvl(); break; } S.respecArm = false; if (E.respec(h)) { ov.flash = 'Your talents are yours to choose again.'; markDirty(); } renderOvl(); break;
+      case 'lore': ov.page = ov.page === +ix ? null : +ix; renderOvl(); break;
+      case 'claim': var rw = E.claimBounty(h, id); if (rw) { ov.flash = 'Claimed ' + rw.gold + 'g and ' + rw.xp + ' XP.'; S.snd.play('gold'); markDirty(); } renderOvl(); break;
+      case 'stash-put': if (E.stashPut(R, h, uid)) { markDirty(); S.snd.play('pick'); } renderOvl(); break;
+      case 'stash-take': if (E.stashTake(R, h, uid)) { markDirty(); S.snd.play('pick'); } renderOvl(); break;
+      // --- hero sheet
+      case 'equip': if (E.equip(hero(), uid)) { ov.sel = null; S.snd.play('pick'); markDirty(); if (S.G) S.G._ps = null; } renderOvl(); refreshHud(); break;
+      case 'unequip': if (E.unequip(hero(), id)) { markDirty(); } else ov.flash = 'Your pack is full.'; renderOvl(); refreshHud(); break;
+      case 'drop': if (S.dropArm !== uid) { S.dropArm = uid; renderOvl(); break; } var hf = E.findItem(hero(), uid); if (hf && hf.where === 'bag') hero().bag.splice(hf.idx, 1); S.dropArm = null; ov.sel = null; markDirty(); renderOvl(); break;
+      case 'talent': if (S.talArm !== id) { S.talArm = id; renderOvl(); break; } S.talArm = null; if (E.chooseTalent(hero(), +ix, id)) { S.snd.play('level'); ov.flash = 'Talent learned.'; if (S.G) S.G._ps = null; markDirty(); } renderOvl(); refreshHud(); break;
+      case 'usecons': closeOvl(); if (id === 'bomb') bombPress(); else doAct({ t: 'cons', id: id }); break;
+      // --- dungeon
+      case 'ab': abilityPress(id); break;
+      case 'potion': usePotion(); break;
+      case 'tgtgo': confirmTarget(); break;
+      case 'tgtx': cancelTarget(); break;
+      case 'pad': padAction(id); break;
+      case 'evc':
+        var res = E.eventChoice(S.G, +ix);
+        if (!res) break;
+        if (res.shop) { closeOvlQuiet(); showModal(); break; }
+        if (!res.ok) { ov.err = res.text; renderOvl(); break; }
+        if (!res.done) { closeOvlQuiet(); afterAct(); break; }
+        ov.result = res; S.tilesDirty = true; drainEvents(); refreshHud(); renderOvl(); markDirty(); break;
+      case 'evdone': closeOvlQuiet(); afterAct(); break;
+      case 'dlgnext': if (ov.i < ov.lines.length - 1) { ov.i++; renderOvl(); } else closeOvl(); break;
+      case 'dbuy':
+        var md = S.G.modal, en = md && md.stock[+ix];
+        if (en) { var bb = E.buy(hero(), en); if (bb.ok && en.cons) en.sold = true; ov.flash = bb.ok ? 'Bought.' : bb.msg; if (bb.ok) { S.snd.play('gold'); markDirty(); } }
+        renderOvl(); refreshHud(); break;
+      case 'm-sheet': S.ov = null; openOvl('sheet', { wide: true }); break;
+      case 'm-map': openOvl('map', { wide: true }); break;
+      case 'm-log': openOvl('log'); break;
+      case 'm-recall': closeOvlQuiet(); doAct({ t: 'cons', id: 'recall' }); break;
+      case 'm-abandon': if (!S.abArm) { S.abArm = true; renderOvl(); break; } S.abArm = false; closeOvlQuiet(); S.G.over = 'quit'; finishRun(); break;
+      case 'm-title': closeOvlQuiet(); saveNowRun(); saveNow(); S.G = null; setMode(false); showScreen('title'); break;
+    }
+  }
+  function closeOvlQuiet() { S.ovlOpen = false; S.ovlEl.hidden = true; S.ovlEl.innerHTML = ''; S.ov = null; }
+  function padAction(id) {
+    if (!S.G) return;
+    if (id === 'use') useKey();
+    else if (id === 'rest') restKey();
+    else if (id === 'explore') { stopAuto(); if (S.tgt) cancelTarget(); startExplore(); }
+    else if (id === 'sheet') openOvl('sheet', { wide: true, tab: E.talentPoints(hero()) ? 'tal' : 'gear' });
+    else if (id === 'map') openOvl('map', { wide: true });
+    else if (id === 'menu') openOvl('menu');
+  }
+
+  // ===========================================================================
+  //  input
+  // ===========================================================================
+  function isTyping(e) {
+    var t = e.target; if (!t || !t.tagName) return false;
+    if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return true;
+    return !!(t.closest && t.closest('.cm-editor'));
+  }
+  var DIR = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1], a: [-1, 0], d: [1, 0], w: [0, -1], s: [0, 1], h: [-1, 0], l: [1, 0], k: [0, -1], j: [0, 1] };
+  function onKey(e) {
+    if (!S || !S.panel.isConnected) return;
+    if (Cade.isMinimized && Cade.isMinimized(S.panel)) return;
+    if (isTyping(e)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    var k = e.key;
+    S.kbd = true; S.snd.ensure();
+    if (S.ovlOpen || S.screen) { navKey(e, S.ovlOpen ? S.ovlEl : S.scrEl); return; }
+    if (!S.G) return;
+    var kl = k.length === 1 ? k.toLowerCase() : k;
+    if (S.tgt) {
+      var dd = DIR[k] || (k.length === 1 && 'wasd'.indexOf(kl) >= 0 ? DIR[kl] : null);
+      if (dd) { e.preventDefault(); moveCursor(dd[0], dd[1]); return; }
+      if (k === 'Enter' || k === ' ' || kl === 'e') { e.preventDefault(); confirmTarget(); return; }
+      if (k === 'Escape') { e.preventDefault(); cancelTarget(); return; }
+      if (k === 'Tab') { e.preventDefault(); cycleTarget(); return; }
+      if (k >= '1' && k <= '5') { e.preventDefault(); var ab0 = E.abilitiesFor(S.G.hero)[+k - 1]; if (ab0) abilityPress(ab0.id); return; }
+      if (kl === 'b' && S.tgt.id === 'bomb') { e.preventDefault(); confirmTarget(); return; }
+      return;
+    }
+    var handled = true;
+    if (S.auto && k !== 'Shift') { stopAuto(); if (k === ' ' || k === 'x') { e.preventDefault(); return; } }
+    var dir = DIR[k] || ('wasd'.indexOf(kl) >= 0 && kl.length === 1 ? DIR[kl] : null);
+    if (dir) move(dir[0], dir[1]);
+    else if (k === 'Enter' || kl === 'e' || kl === 'g') useKey();
+    else if (k === ' ' || k === '.') restKey();
+    else if (k >= '1' && k <= '5') { var ab = E.abilitiesFor(S.G.hero)[+k - 1]; if (ab) abilityPress(ab.id); }
+    else if (kl === 'q') usePotion();
+    else if (kl === 'b') bombPress();
+    else if (kl === 'c' || kl === 'i') padAction('sheet');
+    else if (kl === 'm') padAction('map');
+    else if (kl === 'l') openOvl('log');
+    else if (kl === 'x') padAction('explore');
+    else if (kl === 'r') { if (S.G.hero.cons.tonic) doAct({ t: 'cons', id: 'tonic' }); }
+    else if (k === 'Tab') cycleTarget();
+    else if (k === 'Escape' || kl === 'p') padAction('menu');
+    else if (k === '?') openOvl('help');
+    else handled = false;
+    if (handled) e.preventDefault();
+  }
+  function navKey(e, root) {
+    var k = e.key;
+    if (e.target && e.target.classList && e.target.classList.contains('cr-in')) return;
+    var els = Array.prototype.filter.call(root.querySelectorAll('button:not([disabled])'), function (b) { return b.offsetParent !== null; });
+    if (!els.length) return;
+    var cur = els.indexOf(document.activeElement) >= 0 ? document.activeElement : null;
+    var d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[k];
+    if (d) {
+      e.preventDefault();
+      if (!cur) { focusEl(root.querySelector('.cr-go:not([disabled])') || els[0]); return; }
+      var r0 = cur.getBoundingClientRect(), x0 = r0.left + r0.width / 2, y0 = r0.top + r0.height / 2, best = null, bd = 1e9;
+      els.forEach(function (b) {
+        if (b === cur) return;
+        var r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, vx = x - x0, vy = y - y0;
+        var along = vx * d[0] + vy * d[1]; if (along <= 4) return;
+        var across = Math.abs(vx * d[1]) + Math.abs(vy * d[0]), sc = along + across * 2.2;
+        if (sc < bd) { bd = sc; best = b; }
+      });
+      if (best) focusEl(best);
+      return;
+    }
+    if (k === 'Enter' || k === ' ') {
+      e.preventDefault();
+      var tgt = cur || root.querySelector('.cr-go:not([disabled])') || els[0];
+      if (tgt) tgt.click();
+      return;
+    }
+    if (k === 'Tab') { e.preventDefault(); var i = cur ? els.indexOf(cur) : -1; focusEl(els[(i + (e.shiftKey ? -1 : 1) + els.length) % els.length]); return; }
+    if (k === 'Escape') {
+      e.preventDefault();
+      if (S.ovlOpen) { if (S.ov && (S.ov.k === 'event' && !S.ov.result)) return; if (S.ov && S.ov.k === 'dialog') { root.querySelector('[data-act="dlgnext"]').click(); return; } if (S.ov && S.ov.k === 'prologue') { closeOvl(); return; } if (S.ov && S.ov.k === 'event') { root.querySelector('[data-act="evdone"]').click(); return; } closeOvl(); return; }
+      if (S.screen === 'roster' || S.screen === 'daily' || S.screen === 'create') showScreen('title');
+    }
+  }
+  function focusEl(b) { if (!b) return; try { b.focus({ preventScroll: true }); b.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
+  function screenToTile(cx, cy) {
+    var r = S.cv.getBoundingClientRect(), lx = (cx - r.left) * (S.cw / r.width), ly = (cy - r.top) * (S.chh / r.height);
+    return { x: Math.floor((lx - S.ox) / S.ts), y: Math.floor((ly - S.oy) / S.ts) };
+  }
+  function tapTile(tx, ty) {
+    var G = S.G; if (!G || tx < 0 || ty < 0 || tx >= G.w || ty >= G.h) return;
+    stopAuto();
+    var p = G.p, dx = tx - p.x, dy = ty - p.y, md = Math.abs(dx) + Math.abs(dy);
+    if (!md) { useKey(); return; }
+    var m = E.monAt(G, tx, ty);
+    if (m && !m.ally && E.monVisible(G, m) && !m.disguised) {
+      if (md === 1) { doAct({ t: 'move', dx: dx, dy: dy }); return; }
+      if (G.p.target !== m.id) {
+        G.p.target = m.id;
+        addLog('◎ ' + E.displayName(m) + ' — ' + m.hp + '/' + m.maxHp + ' HP' + (m.elite ? ' · ' + m.elite.map(function (a) { return D.ELITE[a].desc; }).join(', ') : '') + (m.asleep ? ' · asleep' : '') + '. Tap again to close in.', 'info');
+        refreshAbil(); return;
+      }
+      if (!startTravel(tx, ty)) addLog('No clear path.', 'info');
+      return;
+    }
+    if (md === 1) { doAct({ t: 'move', dx: dx, dy: dy }); return; }
+    if (!G.seen[ty * G.w + tx]) { addLog('You don\'t know the way there yet.', 'info'); return; }
+    if (!startTravel(tx, ty)) addLog('No safe path there.', 'info');
+  }
+  function bindCanvas() {
+    var cv = S.cv, st = null;
+    cv.addEventListener('pointerdown', function (e) {
+      if (!S || !S.G) return;
+      e.preventDefault(); S.snd.ensure();
+      try { cv.setPointerCapture(e.pointerId); } catch (er) {}
+      st = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      S.kbd = false;
+    });
+    cv.addEventListener('pointerup', function (e) {
+      if (!S || !st || st.id !== e.pointerId) return;
+      var dx = e.clientX - st.x, dy = e.clientY - st.y; st = null;
+      if (!S.G || S.screen || S.ovlOpen) return;
+      if (Math.abs(dx) > 26 || Math.abs(dy) > 26) {
+        var d = Math.abs(dx) > Math.abs(dy) ? [dx > 0 ? 1 : -1, 0] : [0, dy > 0 ? 1 : -1];
+        move(d[0], d[1]); return;
+      }
+      var t = screenToTile(e.clientX, e.clientY);
+      if (S.tgt) {
+        if (S.tgt.list.some(function (q) { return q.x === t.x && q.y === t.y; })) confirmTarget(t.x, t.y);
+        else { S.tgt.cur = { x: t.x, y: t.y }; addLog('Out of range — tap a highlighted tile.', 'info'); }
+        return;
+      }
+      tapTile(t.x, t.y);
+    });
+    cv.addEventListener('pointercancel', function () { st = null; });
+    cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  }
+  function bindPad() {
+    var dp = S.padEl.querySelector('.cr-dpad');
+    function dirAct(id) {
+      if (!S || !S.G || S.screen || S.ovlOpen) return;
+      if (id === 'w') { restKey(); return; }
+      var d = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] }[id];
+      if (d) move(d[0], d[1]);
+    }
+    function stop() { if (S && S.hold) { clearTimeout(S.hold.t); clearInterval(S.hold.iv); S.hold = null; } }
+    dp.addEventListener('pointerdown', function (e) {
+      var b = e.target.closest('[data-act="d"]'); if (!b) return;
+      e.preventDefault(); S.snd.ensure(); S.kbd = false;
+      try { b.setPointerCapture(e.pointerId); } catch (er) {}
+      stop();
+      var id = b.getAttribute('data-id');
+      Cade.haptic && Cade.haptic(5);
+      dirAct(id);
+      if (id !== 'w') S.hold = { t: setTimeout(function () { if (S && S.hold) S.hold.iv = setInterval(function () { dirAct(id); }, 150); }, 320) };
+    });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (ev) { dp.addEventListener(ev, stop); });
+  }
+  function syncHead() {
+    if (!S) return;
+    var b = S.head.querySelector('[data-h="sound"]');
+    b.innerHTML = S.set.sound ? IC_SND_ON : IC_SND_OFF; b.title = S.set.sound ? 'Sound on' : 'Sound off'; b.classList.toggle('on', S.set.sound);
+  }
+
+  // ===========================================================================
+  //  open / close
+  // ===========================================================================
+  function newFx() { return { parts: [], texts: [], projs: [], rings: [], areas: [], ghosts: [], banner: null, flash: null }; }
+  function teardown() {
+    if (!S) return;
+    try { if (S.G && !S.G.over) saveRunNow(); if (S.R) saveNow(true); } catch (e) {}
+    clearTimeout(S.fbT);
+    detachFb();
+    var s = S; S = null;
+    if (s.raf) cancelAnimationFrame(s.raf);
+    clearTimeout(s.saveT); clearTimeout(s.runT); clearTimeout(s.resizeT);
+    if (s.hold) { clearTimeout(s.hold.t); clearInterval(s.hold.iv); }
+    document.removeEventListener('keydown', s.onKey, true);
+    document.removeEventListener('visibilitychange', s.onVis);
+    window.removeEventListener('resize', s.onResize);
+    window.removeEventListener('orientationchange', s.onResize);
+    if (window.visualViewport) window.visualViewport.removeEventListener('resize', s.onResize);
+    if (s.ro) s.ro.disconnect();
+    if (s.themeObs) s.themeObs.disconnect();
+    s.snd.close();
+    [s.cv, s.layer, s.mini].forEach(function (c) { if (c) { c.width = 0; c.height = 0; } });
+  }
+  function closePanel() {
+    var p = document.getElementById(PANEL_ID);
+    teardown();
+    if (p) p.remove();
+    try { if (!(window.matchMedia && matchMedia('(pointer: coarse)').matches)) Cade.editor.focus(); } catch (e) {}
+  }
+  function boot() {
+    showScreen('loading');
+    loadAll().then(function () {
+      if (!S) return;
+      T = E.T;
+      loadRoster(function (R) {
+        if (!S) return;
+        S.R = R; S.hero = R.slots[R.active] || null;
+        sset(K_ROSTER, JSON.stringify(R));
+        attachFb();
+        showScreen('title');
+      });
+    }).catch(function () { if (S) showScreen('error'); });
+  }
+  function open() {
+    Cade.closeAllMenus();
+    var ex = document.getElementById(PANEL_ID);
+    if (ex) {
+      if (Cade.isMinimized && Cade.isMinimized(ex) && Cade.restorePanel) { Cade.restorePanel(ex); return; }
+      closePanel(); return;
+    }
+    var pad = '<div class="cr-dpad">' +
+      '<button type="button" class="cr-d u" data-act="d" data-id="u" aria-label="Up">▲</button><button type="button" class="cr-d l" data-act="d" data-id="l" aria-label="Left">◀</button>' +
+      '<button type="button" class="cr-d w" data-act="d" data-id="w" aria-label="Wait">⏳</button><button type="button" class="cr-d r" data-act="d" data-id="r" aria-label="Right">▶</button>' +
+      '<button type="button" class="cr-d dn" data-act="d" data-id="d" aria-label="Down">▼</button></div>' +
+      '<div class="cr-acts">' + [['use', '✋', 'Use'], ['explore', '🧭', 'Explore'], ['sheet', '🎒', 'Hero'], ['rest', '💤', 'Rest'], ['map', '🗺', 'Map'], ['menu', '☰', 'Menu']].map(function (a) {
+        return '<button type="button" class="cr-pa' + (a[0] === 'use' ? ' main' : '') + '" data-act="pad" data-id="' + a[0] + '"><span>' + a[1] + '</span><i>' + a[2] + '</i></button>';
+      }).join('') + '</div>';
+    var body = '<div class="cr in-town">' +
+      '<div class="cr-hud"><div class="cr-bars"><div class="cr-bar cr-hpb"><i></i><span></span></div><div class="cr-bar cr-resb"><i></i><span></span></div><div class="cr-xpb"><i></i></div></div>' +
+      '<div class="cr-meta"><b class="cr-where"></b><span class="cr-gold"></span></div></div>' +
+      '<div class="cr-stage"><canvas class="cr-cv" tabindex="0" aria-label="Dungeon"></canvas><canvas class="cr-mini" aria-hidden="true"></canvas><div class="cr-chips"></div>' +
+      '<div class="cr-bossb" hidden><b></b><div><i></i></div></div><div class="cr-log" aria-live="polite"></div><div class="cr-tgtbar" hidden></div></div>' +
+      '<div class="cr-abil"></div><div class="cr-pad">' + pad + '</div>' +
+      '<div class="cr-scr" hidden></div><div class="cr-ovl" hidden></div></div>';
+    var p = Cade.mkPanel(PANEL_ID, '⚔ Dungeon Crawler', body);
+    if (Cade.markGamePanel) Cade.markGamePanel(p);
+    else { try { Cade.editor.contentDOM.blur(); } catch (e) {} }
+    var head = p.querySelector('.cade-panel-head'), hb = document.createElement('div');
+    hb.className = 'cr-hb';
+    hb.innerHTML = '<button type="button" data-h="help" title="How to play" aria-label="How to play">' + IC_HELP + '</button><button type="button" data-h="sound"></button><button type="button" data-h="menu" title="Menu (Esc)" aria-label="Menu">' + IC_MENU + '</button>';
+    if (head) head.insertBefore(hb, p.querySelector('.cade-panel-popbtn') || p.querySelector('.cade-panel-minbtn') || p.querySelector('.cade-panel-x'));
+    var set = loadSettings(), mm = window.matchMedia;
+    S = {
+      panel: p, head: hb, root: p.querySelector('.cr'), hudEl: p.querySelector('.cr-hud'), stage: p.querySelector('.cr-stage'), cv: p.querySelector('.cr-cv'), mini: p.querySelector('.cr-mini'),
+      chipsEl: p.querySelector('.cr-chips'), bossEl: p.querySelector('.cr-bossb'), logEl: p.querySelector('.cr-log'), tgtEl: p.querySelector('.cr-tgtbar'), abilEl: p.querySelector('.cr-abil'), padEl: p.querySelector('.cr-pad'),
+      scrEl: p.querySelector('.cr-scr'), ovlEl: p.querySelector('.cr-ovl'),
+      hpEl: p.querySelector('.cr-hpb'), hpFill: p.querySelector('.cr-hpb i'), hpLbl: p.querySelector('.cr-hpb span'), resFill: p.querySelector('.cr-resb i'), resLbl: p.querySelector('.cr-resb span'), xpFill: p.querySelector('.cr-xpb i'),
+      whereEl: p.querySelector('.cr-where'), goldEl: p.querySelector('.cr-gold'), bossName: p.querySelector('.cr-bossb b'), bossFill: p.querySelector('.cr-bossb i'),
+      set: set, snd: new Snd(set.sound), client: clientId(), coarse: !!(mm && mm('(pointer: coarse)').matches),
+      R: null, hero: null, G: null, screen: null, ov: null, ovlOpen: false, vis: {}, lunge: {}, flash: {}, fx: newFx(), shake: 0, logLines: [], tgt: null, auto: null, kbd: false,
+      ts: 32, cw: 360, chh: 400, dpr: 1, ox: 0, oy: 0, layerKey: '', tilesDirty: true, tilesSig: ''
+    };
+    S.ctx = S.cv.getContext('2d');
+    S.mini.hidden = !set.mini;
+    p._onClose = teardown;
+    readTheme();
+    layout();
+    syncHead();
+    S.onKey = onKey;
+    document.addEventListener('keydown', S.onKey, true);
+    S.onVis = function () { if (!S) return; if (document.hidden) { if (S.G) saveRunNow(); saveNow(true); } else startLoop(); };
+    document.addEventListener('visibilitychange', S.onVis);
+    S.onResize = function () {
+      if (!S) return; clearTimeout(S.resizeT);
+      S.resizeT = setTimeout(function () { if (S && !(Cade.isMinimized && Cade.isMinimized(S.panel))) { layout(); if (S.sceneCv) sizeScene(); if (S.ovlOpen && S.ov && S.ov.k === 'map') drawBigMap(); } }, 120);
+    };
+    window.addEventListener('resize', S.onResize);
+    window.addEventListener('orientationchange', S.onResize);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', S.onResize);
+    try { S.ro = new ResizeObserver(function () { if (S && S.panel === p) requestAnimationFrame(relayoutIfMoved); }); S.ro.observe(S.hudEl); S.ro.observe(S.padEl); S.ro.observe(S.abilEl); } catch (e) {}
+    try { S.themeObs = new MutationObserver(function () { if (S) { readTheme(); if (S.screen) renderScreen(); } }); S.themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] }); } catch (e) {}
+    p.addEventListener('cade-panel-minimize', function () { if (!S || S.panel !== p) return; stopAuto(); if (S.G) saveRunNow(); saveNow(); });
+    p.addEventListener('cade-panel-restore', function () { if (!S || S.panel !== p) return; requestAnimationFrame(function () { if (!S) return; readTheme(); layout(); startLoop(); }); });
+    S.root.addEventListener('click', onClick);
+    hb.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+    hb.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('button') : null; if (!b || !S) return;
+      var hh = b.getAttribute('data-h');
+      if (hh === 'sound') { S.set.sound = !S.set.sound; S.snd.on = S.set.sound; saveSettings(); S.snd.ensure(); S.snd.play('ui'); syncHead(); if (S.screen) renderScreen(); }
+      else if (hh === 'help') openOvl('help');
+      else if (hh === 'menu') { if (S.G && !S.screen) openOvl('menu'); else if (S.R) { if (S.ovlOpen) closeOvl(); showScreen('title'); } }
+    });
+    bindCanvas(); bindPad();
+    startLoop();
+    boot();
+  }
+
+  Cade.registerWidget({
+    name: 'Dungeon Crawler',
+    description: 'Deepdelve — a story roguelite: 6 classes, 5 acts and bosses, loot, puzzles, a daily challenge, synced heroes',
+    icon: '⚔',
+    tags: 'game,roguelike,dungeon,crawler,rpg,adventure,puzzle,action,deepdelve,classes,loot,boss,daily,story,train,fun',
+    open: open
+  });
+})();

@@ -1,16 +1,20 @@
 {
   "schema": 1,
-  "version": "2026.11.25-3",
+  "version": "2026.11.25-4",
   "modules": [
     {
       "id": "crawler",
       "type": "widget",
       "name": "Dungeon Crawler",
-      "description": "Deepdelve — a puzzle-action roguelite with an enduring, synced character",
+      "description": "Deepdelve — a story roguelite: 6 classes, 5 acts and bosses, loot, puzzles, a daily challenge, synced heroes",
       "icon": "⚔",
-      "tags": "game,roguelike,dungeon,crawler,rpg,adventure,puzzle,action,deepdelve,train,fun",
+      "tags": "game,roguelike,dungeon,crawler,rpg,adventure,puzzle,action,deepdelve,classes,loot,boss,daily,story,train,fun",
       "entry": "widgets/crawler/crawler.js",
-      "css": "widgets/crawler/crawler.css"
+      "css": "widgets/crawler/crawler.css",
+      "precache": [
+        "widgets/crawler/crawler-data.js",
+        "widgets/crawler/crawler-engine.js"
+      ]
     },
     {
       "id": "g2048",
