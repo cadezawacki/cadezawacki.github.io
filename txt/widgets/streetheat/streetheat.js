@@ -3036,7 +3036,7 @@
 
   // ---- cards ----
   function chip(attr, val, label, on, extra) { return '<button type="button" class="sh-chip' + (on ? ' on' : '') + '" ' + attr + '="' + val + '"' + (extra || '') + '>' + label + '</button>'; }
-  function autoGas() { var a = S.save.set.autogas; return a == null ? S.coarse : !!a; }
+  function autoGas() { return S.save.set.autogas === true; } // opt-in: never accelerate without input unless asked
   function showCard(kind) {
     S.card = kind;
     if (!kind) { S.ovl.style.display = 'none'; S.ovl.innerHTML = ''; S.stage.classList.remove('dim'); syncHead(); return; }

@@ -1951,7 +1951,7 @@
   function units() { return S.save.set.units; }
   function lapLen(n) { var m = n * SEG * KMH_TOP / 3.6 / V_BASE; return units() === 'mph' ? (m / 1609.34).toFixed(2) + ' mi' : (m / 1000).toFixed(2) + ' km'; }
   function distTxt(m) { return units() === 'mph' ? (m / 1609.34).toFixed(2) + ' mi' : (m / 1000).toFixed(2) + ' km'; }
-  function autoGas() { var a = S.save.set.autogas; return a == null ? S.coarse : !!a; }
+  function autoGas() { return S.save.set.autogas === true; } // opt-in: never accelerate without input unless asked
   function chip(attr, val, label, on, extra) { return '<button type="button" class="pr-chip' + (on ? ' on' : '') + '" ' + attr + '="' + val + '"' + (extra || '') + '>' + label + '</button>'; }
 
   // ---- cards ----

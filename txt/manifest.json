@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.11.26-1",
+  "version": "2026.11.26-3",
   "modules": [
     {
       "id": "crawler",
@@ -4165,6 +4165,20 @@
       "tags": "game,arcade,racing,driving,car,top down,police,chase,drift,career,endless,fun",
       "entry": "widgets/streetheat/streetheat.js",
       "css": "widgets/streetheat/streetheat.css"
+    },
+    {
+      "id": "redline",
+      "type": "widget",
+      "name": "Redline Run",
+      "description": "Third-person 3D street racer — chase cam through an open city, rival races, police heat and a tuner career",
+      "icon": "🏁",
+      "tags": "game,arcade,racing,driving,car,3d,police,chase,career,open world,fun",
+      "entry": "widgets/redline/redline.js",
+      "css": "widgets/redline/redline.css",
+      "precache": [
+        "widgets/redline/vendor/three.module.min.js",
+        "widgets/redline/vendor/LICENSE"
+      ]
     }
   ]
 }
