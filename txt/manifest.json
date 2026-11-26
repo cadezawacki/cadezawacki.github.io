@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.11.26-2",
+  "version": "2026.11.26-3",
   "modules": [
     {
       "id": "crawler",
@@ -4174,7 +4174,11 @@
       "icon": "🏁",
       "tags": "game,arcade,racing,driving,car,3d,police,chase,career,open world,fun",
       "entry": "widgets/redline/redline.js",
-      "css": "widgets/redline/redline.css"
+      "css": "widgets/redline/redline.css",
+      "precache": [
+        "widgets/redline/vendor/three.module.min.js",
+        "widgets/redline/vendor/LICENSE"
+      ]
     }
   ]
 }
