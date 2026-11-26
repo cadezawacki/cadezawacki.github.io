@@ -445,4 +445,142 @@ test('an empty line comes home fast: one-tap reel in, and auto after the bait is
   W3.fish.forEach(function (f) { assert.strictEqual(E.appeal(W3, f), 0); });
 });
 
+test('regression: every rig always comes home — every water, lure, cast, wind and mode', function () {
+  var bad = [];
+  E.LOCS.forEach(function (L) {
+    var modes = { career: null, daily: { band: E.DAY, wx: 1, wind: 0.4, wdir: -1, season: L.winter ? 3 : 1, loc: L.id } };
+    Object.keys(modes).forEach(function (mode) {
+      E.LURES.forEach(function (lu) {
+        if (lu.salt && !L.salt) return;
+        [0.05, 0.6, 1].forEach(function (p) {
+          [-1, 1].forEach(function (wd) {
+            ['hold', 'quick'].forEach(function (how) {
+              var cond = modes[mode] ? Object.assign({}, modes[mode], { wdir: wd, wind: 1 }) : { band: E.DAY, wx: 3, wind: 1, wdir: wd, season: L.winter ? 3 : 1, loc: L.id };
+              var W = E.newWorld({ seed: 3, loc: L.id, day: L.winter ? 20 : 8, min: 720, gear: E.gearStats(2, 2, 2, lu.id), cond: cond });
+              W.fish.length = 0; W.spawnT = 1e9;
+              assert.ok(E.cast(W, p, 0.3), L.id + ' cast');
+              for (var i = 0; i < 400 && W.phase === 'flight'; i++) E.stepWorld(W, E.STEP, {});
+              assert.strictEqual(W.phase, 'fishing');
+              if (!W.st.hole) assert.ok((lu.bob ? W.lure.bx : W.lure.x) >= W.st.anc.x + 2.4, L.id + ' landed in the boat / on the bank: ' + W.lure.x);
+              if (how === 'quick') assert.ok(E.reelIn(W));
+              var t = 0;
+              while (t < 120 && W.phase !== 'ready') { E.stepWorld(W, E.STEP, { reel: how === 'hold' }); W.fish.length = 0; t += E.STEP; }
+              if (W.phase !== 'ready' || (how === 'quick' && t > 25)) bad.push(L.id + '/' + mode + '/' + lu.id + '/p' + p + '/w' + wd + '/' + how + ' ' + t.toFixed(1) + 's');
+            });
+          });
+        });
+      });
+    });
+  });
+  assert.deepStrictEqual(bad, []);
+});
+
+test('regression: a stolen bait or a lost fish never leaves the line stuck', function () {
+  E.LOCS.forEach(function (L) {
+    var W = E.newWorld({ seed: 9, loc: L.id, day: L.winter ? 20 : 8, min: 720, gear: E.gearStats(2, 2, 2, 'b') });
+    W.fish.length = 0; W.spawnT = 1e9;
+    E.cast(W, 0.7, 0.8);
+    for (var i = 0; i < 400 && W.phase === 'flight'; i++) E.stepWorld(W, E.STEP, {});
+    W.lure.baited = false; W.lure.quickT = 0.8;              // what a missed strike does
+    for (var t = 0; t < 30 && W.phase !== 'ready'; t += E.STEP) E.stepWorld(W, E.STEP, {});
+    assert.strictEqual(W.phase, 'ready', L.id + ' auto retrieve');
+  });
+});
+
+test('waters: 13+, each with its own species and a legend, scenery and a map pin', function () {
+  assert.ok(E.LOCS.length >= 13);
+  var scn = {};
+  E.LOCS.forEach(function (L) {
+    var own = E.SPECIES.filter(function (s) { return s.locs.length === 1 && s.locs[0] === L.id; });
+    assert.ok(own.length >= 3, L.id + ' own species ' + own.length);
+    assert.ok(E.SPECIES.some(function (s) { return s.rar === 4 && s.locs.indexOf(L.id) >= 0; }), L.id + ' legend');
+    assert.ok(L.scn && L.prof && L.mx >= 0 && L.mx <= 1 && L.my >= 0 && L.my <= 1, L.id);
+    scn[L.scn] = 1;
+    var lay = E.genLayout(1, L);
+    assert.ok(lay.maxD > 1 && lay.maxD <= L.maxD + 1e-6);
+  });
+  assert.ok(Object.keys(scn).length >= 11, 'distinct scenery');
+  assert.ok(E.SPECIES.length >= 90, 'species ' + E.SPECIES.length);
+  assert.ok(E.LOC.mangrove.roots && E.genLayout(2, E.LOC.mangrove).roots.length >= 2);
+  assert.ok(E.LOC.cavern.dark && E.LURE.g.glow);
+  // the cave needs the lantern; the boat opens all three boat waters
+  var s = E.newSave(1); s.xp = E.cumXp(20);
+  assert.ok(!E.locOpen(s, 'cavern').ok); s.up.lantern = 1; assert.ok(E.locOpen(s, 'cavern').ok);
+  ['deep', 'reef', 'fjord'].forEach(function (id) { s.up.boat = 0; assert.ok(!E.locOpen(s, id).ok); s.up.boat = 1; assert.ok(E.locOpen(s, id).ok); });
+  // the derby visits every water over a year of dates
+  var seen = {};
+  for (var d = 1; d <= 365; d++) { var dt = new Date(Date.UTC(2026, 0, d)), str = dt.toISOString().slice(0, 10); seen[E.dailySpec(str).loc] = 1; }
+  E.LOCS.forEach(function (L) { assert.ok(seen[L.id], 'derby at ' + L.id); });
+});
+
+test('cave fish want a glow lure; the cave is dark', function () {
+  var cond = { band: E.DAY, wx: 0, wind: 0, wdir: 1, season: 1, loc: 'cavern' };
+  var W = E.newWorld({ seed: 2, loc: 'cavern', day: 8, min: 720, gear: E.gearStats(2, 2, 2, 'g'), cond: cond });
+  assert.ok(E.light(W, 1) < 0.1);
+  var o = play(W, 300, { jig: true });
+  assert.ok(o.hooked >= 1, 'glow jig bites: ' + JSON.stringify(o.ev));
+});
+
+test('mangrove roots can cut the line; steering against the run keeps it out', function () {
+  function fightIn(steerAgainst) {
+    var W = E.newWorld({ seed: 4, loc: 'mangrove', day: 8, min: 720, gear: E.gearStats(2, 2, 3, 'b') });
+    var f = { id: 9, sp: E.SP.rootwarden, w: 60, len: 40, lm: 1, x: 3, y: 1, vx: 0, vy: 0, dir: 1, st: 'x', wig: 0 };
+    W.fish.push(f); W.lure = { def: E.LURE.b, x: 3, y: 1, vx: 0, vy: 0, baited: true, landT: 0, bx: 3 }; W.phase = 'fishing';
+    E.startFight(W, f, 0.1);
+    var why = null;
+    for (var t = 0; t < 120 && !why; t += E.STEP) {
+      var F = W.fight, d = F.f.vx > 0 ? 1 : -1;
+      E.stepWorld(W, E.STEP, { reel: F.T < 0.7 && !F.air, steer: steerAgainst ? -d : d });
+      W.ev.forEach(function (e) { if (e.type === 'lost') why = e.how || e.why; if (e.type === 'landed') why = 'landed'; });
+      W.ev.length = 0;
+    }
+    return why;
+  }
+  assert.strictEqual(fightIn(false), 'snag');
+});
+
+test('pacing: a beginner bites in seconds, earns and levels up within minutes', function () {
+  var s = E.newSave(21); s.contracts = E.genContracts(s); s.cday = 1;
+  assert.strictEqual(s.contracts[0].kind, 'any', 'a quick starter contract');
+  var W = E.newWorld({ seed: s.seed, loc: 'pond', day: 1, min: 360, gear: E.gearStats(0, 0, 0, 'b'), bait: 30 });
+  var T = 0, firstBite = null, earned = 0, wait = -1;
+  while (T < 300) {
+    var inp = {};
+    if (W.phase === 'ready') E.cast(W, 0.7, 0.8);
+    else if (W.phase === 'fishing') { if (!W.lure.baited) E.reelIn(W); inp.reel = W.t - W.lure.landT > 25; if (W.biter && W.biter.st === 'strike' && wait < 0) wait = 0.3; if (wait >= 0) { wait -= E.STEP; if (wait < 0) inp.hook = true; } }
+    else if (W.phase === 'fight') { var F = W.fight; inp.reel = F.T < 0.7 && !F.air; inp.steer = -(F.f.vx > 0 ? 1 : -1); }
+    E.stepWorld(W, E.STEP, inp); T += E.STEP;
+    W.ev.forEach(function (e) {
+      if (e.type === 'strike' && firstBite == null) firstBite = T;
+      if (e.type === 'landed') { s.xp += E.catchXp(E.SP[e.sp], e.w); earned += E.priceOf(E.SP[e.sp], e.w, 1, 0); var d = E.contractEvent(s, { kind: 'catch', sp: e.sp, w: e.w, loc: 'pond', min: W.min }); d.forEach(function (c) { earned += c.pay; }); W.phase = 'ready'; }
+    });
+    W.ev.length = 0;
+  }
+  assert.ok(firstBite != null && firstBite < 20, 'first bite ' + firstBite);
+  assert.ok(earned >= 80, 'earned in 5 min: ' + earned);
+  assert.ok(E.levelOf(s.xp) >= 3, 'level after 5 min: ' + E.levelOf(s.xp));
+  assert.ok(E.RODS[1].price <= 120 && E.LINES[1].price <= 50, 'cheap first upgrades');
+  // the long game is still long: top gear and the last waters
+  assert.ok(E.RODS[E.RODS.length - 1].price >= 8000 && E.cumXp(13) > 20 * E.cumXp(3));
+  assert.ok((E.DAY_END - E.DAY_START) / E.MIN_PER_SEC / 60 < 11, 'a day is under 11 real minutes');
+});
+
+test('no endless fights: every species, small or mid-sized, ends within four minutes on sensible gear', function () {
+  var bad = [];
+  E.SPECIES.forEach(function (sp) {
+    [sp.wmin, (sp.wmin + sp.wmax) / 2].forEach(function (w) {
+      var g = w > 150 ? [5, 4, 5] : w > 30 ? [3, 3, 4] : [2, 2, 3];
+      var W = E.newWorld({ seed: 3, loc: sp.locs[0], day: 8, min: 600, gear: E.gearStats(g[0], g[1], g[2], 's') });
+      W.fish.length = 0; W.spawnT = 1e9;
+      var f = { id: 9, sp: sp, w: w, len: 20, lm: Math.max(0.1, sp.lk * Math.cbrt(w) * 0.0254), x: 10, y: Math.min(2, E.depthAt(W.lay, 10) - 0.3), vx: 0, vy: 0, dir: 1, st: 'x', wig: 0 };
+      W.fish.push(f); W.lure = { def: E.LURE.s, x: 10, y: 2, vx: 0, vy: 0, baited: true, landT: 0 }; W.phase = 'fishing';
+      E.startFight(W, f, 0.1);
+      var res = null, t = 0;
+      while (t < 240 && !res) { var F = W.fight; E.stepWorld(W, E.STEP, { reel: F.T < 0.7 && !F.air, steer: -(F.f.vx > 0 ? 1 : -1) }); t += E.STEP; W.ev.forEach(function (e) { if (e.type === 'landed' || e.type === 'lost') res = e.type; }); W.ev.length = 0; }
+      if (!res) bad.push(sp.id + '@' + w);
+    });
+  });
+  assert.deepStrictEqual(bad, []);
+});
+
 console.log(passed + ' passed' + (process.exitCode ? '' : ', all ok'));

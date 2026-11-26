@@ -10,7 +10,7 @@
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
 }
 #redline-panel { touch-action: manipulation; }
-#redline-panel .rl-stage, #redline-panel .rl-gl, #redline-panel .rl-hud, #redline-panel .rl-pad, #redline-panel .rl-pad button { touch-action: none; }
+#redline-panel .rl-stage, #redline-panel .rl-gl, #redline-panel .rl-hud, #redline-panel .rl-pad, #redline-panel .rl-pad button, #redline-panel .rl-stick { touch-action: none; }
 #redline-panel button { touch-action: manipulation; }
 #redline-panel .rl-pad button { touch-action: none; }
 #redline-panel .rl-ovl { touch-action: pan-y; }
@@ -180,6 +180,34 @@
 .rl-pr .nos.on { background: #2f7fc0; border-color: #2f7fc0; }
 .rl-pr .hb.on { background: #8a5cc8; border-color: #8a5cc8; }
 
+/* the thumb stick: a big zone on the left; the ring floats to wherever the thumb lands */
+.rl-stick { display: none; position: relative; flex: 1 1 0; min-width: 120px; height: 84px; border: 1px dashed var(--border); border-radius: 16px; cursor: grab; }
+.rl-sbase {
+  position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; border-radius: 50%; pointer-events: none;
+  border: 2px solid var(--border); background: var(--surface-2); box-shadow: inset 0 0 0 9px var(--surface, transparent); opacity: 0.7;
+  transition: left 150ms ease-out, top 150ms ease-out, opacity 150ms;
+}
+.rl-sbase::before, .rl-sbase::after { content: ''; position: absolute; inset: -2px; border-radius: 50%; border: 3px solid transparent; transition: opacity 80ms; }
+.rl-sbase::before { border-left-color: var(--accent); opacity: var(--kl, 0); }
+.rl-sbase::after { border-right-color: var(--accent); opacity: var(--kr, 0); }
+.rl-sbase em { position: absolute; top: 50%; margin-top: -6px; font-style: normal; font-size: 10px; line-height: 12px; color: var(--text-faint); }
+.rl-sbase em:first-child { left: 4px; }
+.rl-sbase em + em { right: 4px; }
+.rl-stick.sl .rl-sbase em:first-child, .rl-stick.sr .rl-sbase em + em { color: var(--accent); }
+.rl-sknob {
+  position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28), inset 0 -3px 0 rgba(0, 0, 0, 0.16); transition: transform 150ms ease-out;
+}
+.rl-stick.on { cursor: grabbing; }
+.rl-stick.on .rl-sbase { opacity: 1; transition: opacity 80ms; }
+.rl-stick.on .rl-sknob { transition: none; }
+.rl-pad.stick .rl-stick { display: block; }
+.rl-pad.stick .rl-pl button { display: none; }
+.rl-pad.stick .rl-pl { flex: 0 0 37%; }
+.rl-pad.stick .rl-pr { flex: 1 1 0; min-width: 0; }
+.rl-pad.stick .rl-pr button { min-width: 0; padding: 0 2px; }
+.rl-pad.stick .rl-pr button { height: 84px; }
+
 @media (max-width: 560px) {
   #redline-panel { left: 8px !important; right: 8px; max-width: none; top: calc(var(--menubar-h, 36px) + 6px); }
   #redline-panel .cade-panel-body { padding: 8px 8px max(8px, env(safe-area-inset-bottom)); }
@@ -212,6 +240,8 @@
 #redline-panel.rl-side .rl-pad { display: contents; }
 #redline-panel.rl-side .rl-pl { grid-area: pl; flex-direction: row; align-self: stretch; align-items: stretch; }
 #redline-panel.rl-side .rl-pr { grid-area: pr; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr 1.6fr; align-self: stretch; gap: 6px; }
+#redline-panel.rl-side .rl-stick { height: auto; min-width: 0; }
+#redline-panel.rl-side .rl-pad.stick .rl-pr button { height: auto; }
 #redline-panel.rl-side .rl-pl button { width: auto; min-width: 0; flex: 1 1 0; height: auto; }
 #redline-panel.rl-side .rl-pr button { width: 100%; height: auto; min-width: 0; }
 #redline-panel.rl-side .rl-pr .nos { grid-column: 1; grid-row: 1; }

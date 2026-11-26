@@ -328,6 +328,67 @@ test('saves: normalize junk, keep good data', function () {
   assert.deepStrictEqual(rt, s, 'round trip');
 });
 
+test('touch steering: the thumb stick is the default; old "buttons" defaults migrate once', function () {
+  var f = E.newSave();
+  assert.strictEqual(f.set.steer, 'stick');
+  assert.strictEqual(f.set.stickMig, 1);
+  assert.strictEqual(f.set.autogas, null, 'auto gas stays opt-in');
+  // a save from before the stick: 'buttons' was only the default -> stick, flag set
+  var old = E.normSave({ set: { steer: 'buttons', sens: 1.35 } });
+  assert.strictEqual(old.set.steer, 'stick');
+  assert.strictEqual(old.set.stickMig, 1);
+  assert.strictEqual(old.set.sens, 1.35);
+  // other deliberate choices are kept
+  assert.strictEqual(E.normSave({ set: { steer: 'screen' } }).set.steer, 'screen');
+  assert.strictEqual(E.normSave({ set: { steer: 'tilt' } }).set.steer, 'tilt');
+  // after the migration a deliberate 'buttons' sticks (and survives a JSON round trip)
+  var mine = E.normSave(old); mine.set.steer = 'buttons';
+  var back = E.normSave(JSON.parse(JSON.stringify(mine)));
+  assert.strictEqual(back.set.steer, 'buttons');
+  assert.strictEqual(back.set.stickMig, 1);
+  // junk falls back to the stick
+  assert.strictEqual(E.normSave({ set: { steer: 'wheel', stickMig: 1 } }).set.steer, 'stick');
+  assert.strictEqual(E.normSave({ set: { steer: 'stick' } }).set.steer, 'stick');
+  assert.deepStrictEqual(E.STEERS, ['stick', 'buttons', 'screen', 'tilt']);
+});
+
+test('thumb stick response: dead zone, full lock, odd, monotonic, finer near center', function () {
+  assert.strictEqual(E.stickCurve(0), 0);
+  assert.strictEqual(E.stickCurve(0.05), 0);
+  assert.strictEqual(E.stickCurve(-E.STICK_DEAD), 0);
+  assert.strictEqual(E.stickCurve(NaN), 0);
+  assert.strictEqual(E.stickCurve(1), 1);
+  assert.strictEqual(E.stickCurve(-1), -1);
+  assert.strictEqual(E.stickCurve(E.STICK_FULL), 1, 'full lock just inside the rim');
+  assert.strictEqual(E.stickCurve(5), 1);
+  var prev = 0;
+  for (var x = 0; x <= 1.0001; x += 0.02) {
+    var v = E.stickCurve(x);
+    assert(v >= prev - 1e-12, 'monotonic at ' + x);
+    assert(Math.abs(E.stickCurve(-x) + v) < 1e-12, 'odd at ' + x);
+    prev = v;
+  }
+  var mid = E.stickCurve(0.5), lin = (0.5 - E.STICK_DEAD) / (E.STICK_FULL - E.STICK_DEAD);
+  assert(mid > 0.1 && mid < lin, 'softer than linear mid-travel: ' + mid);
+});
+
+test('analog steering is proportional, and the car never moves without gas', function () {
+  function drift(st) {
+    var g = E.newEndless({ seed: 7, diff: 1 }); g.phase = 'race'; g.t = 0;
+    run(g, GAS, 3);
+    var x0 = g.p.x;
+    run(g, { steer: st, gas: 1, brake: 0, nos: 0, sens: 1 }, 0.4);
+    return g.p.x - x0;
+  }
+  var full = drift(1), half = drift(E.stickCurve(0.6)), none = drift(0);
+  assert(full - none > half - none && half - none > 0.02, 'half stick turns less than full: ' + [full, half, none].join(' '));
+  assert(drift(-1) < none, 'left goes left');
+  // stick held hard over with no pedals: the car stays put, through the countdown and after
+  var g = E.newEndless({ seed: 3, diff: 1 });
+  run(g, { steer: 1, gas: 0, brake: 0, nos: 0, sens: 1.35 }, 8);
+  assert.strictEqual(g.p.v, 0, 'no auto-acceleration');
+});
+
 test('endless records', function () {
   var sv = E.newSave(), g = { diff: 1, score: 500, dist: 3000.4, cpIdx: 2 };
   assert(E.endlessRecord(sv, g));

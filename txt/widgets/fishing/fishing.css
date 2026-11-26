@@ -275,3 +275,30 @@
 .fs-meter { margin: 0 auto; font: inherit; font-weight: 700; white-space: pre; }
 @media (prefers-reduced-motion: reduce) { .fs-act.danger, .fs-hook.hot { animation: none; } }
 @media (max-width: 560px) { .fs-tw, .fs-in { flex-basis: 46px; } .fs-act small { font-size: 9px; } }
+
+/* the map, the in-game menu button and the menu card */
+.fs-map { display: block; width: 100%; height: 200px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; touch-action: manipulation; }
+.fs-where { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border: 1px solid var(--accent); border-radius: 6px; }
+.fs-where.locked { border-color: var(--border); opacity: 0.85; }
+.fs-where > div b { color: var(--accent); }
+.fs-where.locked > div b { color: var(--text-muted); }
+.fs-where i { font-style: normal; color: var(--text-faint); font-size: 11px; }
+.fs-locchips .fs-chip.locked { opacity: 0.55; }
+.fs-locchips .fs-chip { min-height: 28px; padding: 2px 8px; }
+.fs-menu {
+  font: inherit; font-weight: 700; font-size: 12px; padding: 3px 10px; min-height: 28px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff; letter-spacing: 0.04em; touch-action: manipulation;
+}
+.fs-menu:hover { filter: brightness(1.08); }
+.fs-menu:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.fs-menucard { max-width: 420px; }
+.fs-mgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.fs-mb {
+  display: flex; flex-direction: column; align-items: center; gap: 1px; font: inherit; padding: 8px 4px; min-height: 48px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text);
+}
+.fs-mb i { font-style: normal; font-size: 10px; color: var(--text-muted); }
+.fs-mb:hover:not(:disabled), .fs-mb:focus-visible { border-color: var(--accent); outline: none; }
+.fs-mb:disabled { opacity: 0.4; cursor: default; }
+@media (max-width: 560px) { .fs-map { height: 180px; } }
+@media (pointer: coarse) { .fs-menu { min-height: 36px; padding: 4px 12px; } .fs-locchips .fs-chip { min-height: 38px; } }
