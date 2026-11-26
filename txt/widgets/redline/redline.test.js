@@ -292,6 +292,53 @@ test('saves: defaults, normalizing, auto gas stays opt-in', function () {
   assert.deepStrictEqual(E.normSave(null), E.newSave());
 });
 
+test('touch steering: the thumb stick is the default; old "buttons" defaults migrate once', function () {
+  var f = E.newSave();
+  assert.strictEqual(f.set.touch, 'stick');
+  assert.strictEqual(f.set.stickMig, 1);
+  var old = E.normSave({ set: { touch: 'buttons', sens: 1.3 } });
+  assert.strictEqual(old.set.touch, 'stick', 'the old default moves to the stick');
+  assert.strictEqual(old.set.stickMig, 1);
+  assert.strictEqual(old.set.sens, 1.3);
+  assert.strictEqual(old.set.autogas, false, 'auto gas stays off');
+  assert.strictEqual(E.normSave({ set: { touch: 'tilt' } }).set.touch, 'tilt');
+  var mine = E.normSave(old); mine.set.touch = 'buttons';
+  var back = E.normSave(JSON.parse(JSON.stringify(mine)));
+  assert.strictEqual(back.set.touch, 'buttons', 'a deliberate choice of buttons sticks');
+  assert.strictEqual(back.set.stickMig, 1);
+  assert.strictEqual(E.normSave({ set: { touch: 'wheel', stickMig: 1 } }).set.touch, 'stick');
+  assert.deepStrictEqual(E.TOUCHES, ['stick', 'buttons', 'tilt']);
+});
+
+test('thumb stick response: dead zone, full lock, odd, monotonic, finer near center', function () {
+  assert.strictEqual(E.stickCurve(0), 0);
+  assert.strictEqual(E.stickCurve(0.05), 0);
+  assert.strictEqual(E.stickCurve(NaN), 0);
+  assert.strictEqual(E.stickCurve(E.STICK_FULL), 1);
+  assert.strictEqual(E.stickCurve(-3), -1);
+  var prev = 0;
+  for (var x = 0; x <= 1.0001; x += 0.02) {
+    var v = E.stickCurve(x);
+    assert(v >= prev - 1e-12 && Math.abs(E.stickCurve(-x) + v) < 1e-12, 'monotonic and odd at ' + x);
+    prev = v;
+  }
+  assert(E.stickCurve(0.5) < (0.5 - E.STICK_DEAD) / (E.STICK_FULL - E.STICK_DEAD), 'softer than linear mid-travel');
+});
+
+test('analog steering turns proportionally (and respects sensitivity)', function () {
+  function yaw(steer, sens) {
+    var g = E.newGame({ world: W1, kind: 'free', diff: 1, car: 'kestrel', seed: 31 });
+    g.agents.length = 0;
+    g.p.vx = Math.sin(g.p.a) * 15; g.p.vz = Math.cos(g.p.a) * 15;
+    var a0 = g.p.a;
+    for (var i = 0; i < 20; i++) { E.step(g, { steer: steer, gas: 0.5, brake: 0, hb: 0, nos: 0, sens: sens || 1 }, E.STEP); g.ev.length = 0; }
+    return Math.abs(g.p.a - a0);
+  }
+  var full = yaw(1), part = yaw(E.stickCurve(0.6)), none = yaw(0);
+  assert(full > part && part > none + 0.005, 'proportional: ' + [full, part, none].join(' '));
+  assert(yaw(E.stickCurve(0.6), 1.3) > part, 'sensitivity scales the stick');
+});
+
 test('daily event is the same all day', function () {
   var a = E.dailyEvent('2026-01-02'), b = E.dailyEvent('2026-01-02'), c = E.dailyEvent('2026-01-03');
   assert.deepStrictEqual(a, b);

@@ -354,4 +354,53 @@ test('saves: sanitized, purchases, busts and impound, career progress', function
   assert.strictEqual(E.fmtTime(83.456), '1:23.46');
 });
 
+test('touch steering: the thumb stick is the default; old "buttons" defaults migrate once', function () {
+  var f = E.newSave();
+  assert.strictEqual(f.set.touch, 'stick');
+  assert.strictEqual(f.set.stickMig, 1);
+  assert.strictEqual(f.set.autogas, null, 'auto gas stays opt-in');
+  var old = E.normSave({ set: { touch: 'buttons', assist: 2 } });
+  assert.strictEqual(old.set.touch, 'stick', 'the old default moves to the stick');
+  assert.strictEqual(old.set.stickMig, 1);
+  assert.strictEqual(old.set.assist, 2);
+  assert.strictEqual(E.normSave({ set: { touch: 'stick' } }).set.touch, 'stick');
+  var mine = E.normSave(old); mine.set.touch = 'buttons';
+  var back = E.normSave(JSON.parse(JSON.stringify(mine)));
+  assert.strictEqual(back.set.touch, 'buttons', 'a deliberate choice of buttons sticks');
+  assert.strictEqual(back.set.stickMig, 1);
+  assert.strictEqual(E.normSave({ set: { touch: 'wheel', stickMig: 1 } }).set.touch, 'stick');
+  assert.strictEqual(E.normSave({ cash: 5 }).set.touch, 'stick');
+  assert.deepStrictEqual(E.TOUCHES, ['stick', 'buttons']);
+});
+
+test('thumb stick response: dead zone, full lock, odd, monotonic, finer near center', function () {
+  assert.strictEqual(E.stickCurve(0), 0);
+  assert.strictEqual(E.stickCurve(0.05), 0);
+  assert.strictEqual(E.stickCurve(NaN), 0);
+  assert.strictEqual(E.stickCurve(E.STICK_FULL), 1);
+  assert.strictEqual(E.stickCurve(-3), -1);
+  var prev = 0;
+  for (var x = 0; x <= 1.0001; x += 0.02) {
+    var v = E.stickCurve(x);
+    assert.ok(v >= prev - 1e-12 && Math.abs(E.stickCurve(-x) + v) < 1e-12, 'monotonic and odd at ' + x);
+    prev = v;
+  }
+  assert.ok(E.stickCurve(0.5) < (0.5 - E.STICK_DEAD) / (E.STICK_FULL - E.STICK_DEAD), 'softer than linear mid-travel');
+});
+
+test('analog steering turns proportionally; no gas, no motion', function () {
+  var g = { rain: false, assist: 1, t: 0, ev: [] }, spec = E.CAR_BY.sparrow, st = E.stats(spec);
+  function turn(steer) {
+    var c = E.newCar(spec, st, 0, 0, 0, 'player'); c.vx = 18; c.ctl.gas = 0.5; c.ctl.steer = steer;
+    for (var i = 0; i < 30; i++) E.carPhys(g, c, E.STEP);
+    return c.a;
+  }
+  var full = turn(1), part = turn(E.stickCurve(0.6)), zero = turn(0);
+  assert.ok(full > part && part > 0.02 && Math.abs(zero) < 1e-6, 'proportional: ' + [full, part, zero].join(' '));
+  assert.ok(turn(-1) < 0);
+  var c = E.newCar(spec, st, 0, 0, 0, 'player'); c.ctl.steer = 1;
+  for (var i = 0; i < 60 * 5; i++) E.carPhys(g, c, E.STEP);
+  assert.ok(Math.hypot(c.vx, c.vy) < 1e-9 && c.x === 0 && c.y === 0, 'stick alone does not move the car');
+});
+
 console.log(passed + ' tests passed' + (process.exitCode ? ' (with failures)' : ''));

@@ -1760,7 +1760,7 @@
       v: 1, cash: 1500, cars: ['sparrow'], car: 'sparrow', upg: {}, paint: {}, career: { beaten: 0, done: {} },
       best: { bounty: 0, heat: 0, chase: 0, drift: 0, cops: 0 }, daily: { d: '', best: null, type: '' }, roam: null, strikes: {}, impound: {},
       stats: { races: 0, wins: 0, busts: 0, escapes: 0, cops: 0 },
-      set: { diff: 1, cam: 'rotate', units: 'kmh', assist: 1, touch: 'buttons', autogas: null, shake: 1, time: 'auto', weather: 'auto' }
+      set: { diff: 1, cam: 'rotate', units: 'kmh', assist: 1, touch: 'stick', stickMig: 1, autogas: null, shake: 1, time: 'auto', weather: 'auto' }
     };
   }
   function normSave(o) {
@@ -1783,7 +1783,10 @@
       if (S.cam === 'rotate' || S.cam === 'north') T.cam = S.cam;
       if (S.units === 'kmh' || S.units === 'mph') T.units = S.units;
       if (S.assist === 0 || S.assist === 1 || S.assist === 2) T.assist = S.assist;
-      if (S.touch === 'buttons' || S.touch === 'stick') T.touch = S.touch;
+      if (TOUCHES.indexOf(S.touch) >= 0) T.touch = S.touch;
+      // the thumb stick became the default: a stored 'buttons' from before was just the old
+      // default, so switch it once; after that (stickMig set) a deliberate 'buttons' sticks
+      if (S.stickMig !== 1 && T.touch === 'buttons') T.touch = 'stick';
       if (S.autogas === true || S.autogas === false) T.autogas = S.autogas;
       if (S.shake === 0 || S.shake === 1) T.shake = S.shake;
       if (['auto', 'day', 'dusk', 'night'].indexOf(S.time) >= 0) T.time = S.time;
@@ -1871,8 +1874,21 @@
     return m + ':' + (s < 10 ? '0' : '') + s.toFixed(2);
   }
 
+  // ---- touch thumb stick: knob offset (-1..1 of the ring radius) -> steering ----
+  // A small dead zone, full lock just inside the rim, and an x*|x|^0.5 curve so
+  // small thumb moves make small corrections near the center.
+  var STICK_DEAD = 0.1, STICK_FULL = 0.9;
+  function stickCurve(n) {
+    n = +n || 0;
+    var a = Math.abs(n);
+    if (!(a > STICK_DEAD)) return 0;
+    a = Math.min(1, (a - STICK_DEAD) / (STICK_FULL - STICK_DEAD));
+    return (n < 0 ? -1 : 1) * a * Math.sqrt(a);
+  }
+  var TOUCHES = ['stick', 'buttons'];
+
   var ENGINE = {
-    STEP: STEP, GAP: GAP, LW: LW, SW: SW, CH: CH, RT: RT, CARS: CARS, CAR_BY: CAR_BY, TRAFFIC: TRAFFIC, COPS: COPS, UPGS: UPGS, PAINTS: PAINTS, DIFFS: DIFFS,
+    STEP: STEP, STICK_DEAD: STICK_DEAD, STICK_FULL: STICK_FULL, TOUCHES: TOUCHES, stickCurve: stickCurve, GAP: GAP, LW: LW, SW: SW, CH: CH, RT: RT, CARS: CARS, CAR_BY: CAR_BY, TRAFFIC: TRAFFIC, COPS: COPS, UPGS: UPGS, PAINTS: PAINTS, DIFFS: DIFFS,
     HEAT_AT: HEAT_AT, RIVALS: RIVALS, EV_NAMES: EV_NAMES, EV_TIPS: EV_TIPS, PSPEC: PSPEC, MK_TYPES: MK_TYPES, RSTEP: RSTEP,
     mulberry32: mulberry32, hash3: hash3, h01: h01, mod: mod, clamp: clamp, lerp: lerp, angDiff: angDiff,
     vline: vline, hline: hline, lineOf: lineOf, Xp: Xp, Yp: Yp, vx: vx, colOf: colOf, rowOf: rowOf, isRiver: isRiver, bridge: bridge, hasV: hasV, district: district,
@@ -3079,7 +3095,7 @@
     } else if (kind === 'help') {
       h += '<div class="sh-card"><div class="sh-title">HOW TO DRIVE</div><div class="sh-keys">' +
         '<div><b>↑ ↓</b> / <b>W S</b> gas · brake / reverse</div><div><b>← →</b> / <b>A D</b> steer</div><div><b>Space</b> handbrake drift · <b>Shift</b> / <b>N</b> nitro</div>' +
-        '<div><b>M</b> map · <b>C</b> camera · <b>R</b> back on the road · <b>P</b> / <b>Esc</b> pause</div><div><b>Touch</b> steer on the left, NOS · DRIFT · BRK · GAS on the right</div></div>' +
+        '<div><b>M</b> map · <b>C</b> camera · <b>R</b> back on the road · <b>P</b> / <b>Esc</b> pause</div><div><b>Touch</b> drag the thumb stick on the left to steer (◀ ▶ buttons in settings) · NOS · DRIFT · BRK · GAS on the right</div></div>' +
         '<p><b>Heat</b> rises when police see you speed, crash into traffic or smash things, and keeps climbing in a chase. Break their line of sight (round corners, under overpasses, through tunnels) to start <b>evading</b>; stay hidden until the meter fills.</p>' +
         '<p>Stopped with a cop on you, the <b>BUSTED</b> meter fills: you lose the bounty and pay a fine. Three strikes and a car is impounded. From heat 3: roadblocks; 4: spike strips; 5: a helicopter.</p>' +
         '<p><b>Drift</b> with the handbrake for points and nitro. Races follow the route on the map; hit every checkpoint.</p>' +
@@ -3186,7 +3202,7 @@
     h += row('Camera <i>C</i>', chip('data-set', 'cam:rotate', 'Turns with the car', set.cam === 'rotate') + chip('data-set', 'cam:north', 'North up', set.cam === 'north'));
     h += row('Units', chip('data-set', 'units:kmh', 'km/h', set.units === 'kmh') + chip('data-set', 'units:mph', 'mph', set.units === 'mph'));
     h += row('Steering assist', chip('data-set', 'assist:0', 'Off', set.assist === 0) + chip('data-set', 'assist:1', 'Low', set.assist === 1) + chip('data-set', 'assist:2', 'High', set.assist === 2));
-    h += row('Touch steering', chip('data-set', 'touch:buttons', '◀ ▶ buttons', set.touch === 'buttons') + chip('data-set', 'touch:stick', 'Joystick', set.touch === 'stick'));
+    h += row('Touch steering', chip('data-set', 'touch:stick', 'Joystick', set.touch === 'stick') + chip('data-set', 'touch:buttons', '◀ ▶ buttons', set.touch === 'buttons'));
     h += row('Auto gas <i>touch</i>', chip('data-set', 'autogas:on', 'On', autoGas()) + chip('data-set', 'autogas:off', 'Off', !autoGas()));
     h += row('Time of day', ['auto', 'day', 'dusk', 'night'].map(function (v) { return chip('data-set', 'time:' + v, v.charAt(0).toUpperCase() + v.slice(1), set.time === v); }).join(''));
     h += row('Weather', ['auto', 'clear', 'rain'].map(function (v) { return chip('data-set', 'weather:' + v, v.charAt(0).toUpperCase() + v.slice(1), set.weather === v); }).join(''));
@@ -3454,12 +3470,54 @@
     }
   }
 
+  // ---- the floating thumb stick (same in Apex Rush, Street Heat and Redline Run) ----
+  // Touch anywhere in the zone: the ring centers under the thumb and the knob follows
+  // it, up to the ring's radius. The knob's sideways offset, shaped by
+  // ENGINE.stickCurve, is analog steering in -1..1. One thumb owns it (by pointerId),
+  // so the pedals keep working under the other; it springs back on release, cancel,
+  // lost capture, blur and when the page hides (clearHeld).
+  function mkStick(zone, onDown) {
+    var base = zone.querySelector('.sh-sbase'), knob = zone.querySelector('.sh-sknob');
+    var k = { id: null, v: 0, ox: 0, oy: 0, R: 38 };
+    function paint(dx, dy) {
+      knob.style.transform = dx || dy ? 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)' : '';
+      base.style.setProperty('--kl', k.v < 0 ? Math.min(1, 0.25 - k.v).toFixed(2) : '0');
+      base.style.setProperty('--kr', k.v > 0 ? Math.min(1, 0.25 + k.v).toFixed(2) : '0');
+      zone.classList.toggle('sl', k.v < 0); zone.classList.toggle('sr', k.v > 0);
+    }
+    function move(e) {
+      var dx = e.clientX - k.ox, dy = e.clientY - k.oy, d = Math.sqrt(dx * dx + dy * dy), m = d > k.R ? k.R / d : 1;
+      k.v = ENGINE.stickCurve(Math.max(-1, Math.min(1, dx / k.R)));
+      paint(dx * m, dy * m);
+    }
+    k.reset = function () {
+      var id = k.id;
+      k.id = null; k.v = 0;
+      if (id !== null) { try { zone.releasePointerCapture(id); } catch (x) {} }
+      zone.classList.remove('on'); base.style.left = ''; base.style.top = ''; paint(0, 0);
+    };
+    zone.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      if (k.id !== null || (onDown && onDown(e) === false)) return;
+      var r = zone.getBoundingClientRect();
+      k.R = Math.max(24, (base.offsetWidth || 76) / 2);
+      k.id = e.pointerId; k.ox = e.clientX; k.oy = e.clientY;
+      try { zone.setPointerCapture(e.pointerId); } catch (x) {}
+      base.style.left = Math.round(e.clientX - r.left) + 'px'; base.style.top = Math.round(e.clientY - r.top) + 'px';
+      zone.classList.add('on'); move(e);
+    });
+    zone.addEventListener('pointermove', function (e) { if (e.pointerId === k.id) { e.preventDefault(); move(e); } });
+    function up(e) { if (e.pointerId === k.id) k.reset(); }
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (t) { zone.addEventListener(t, up); });
+    return k;
+  }
+
   // ---- input ----
   function clearHeld() {
     if (!S) return;
-    S.hold = { l: 0, r: 0, g: 0, b: 0, d: 0, n: 0 }; S.stick = { on: false, x: 0, id: null };
-    if (S.pad) Array.prototype.forEach.call(S.pad.querySelectorAll('.on'), function (b) { b.classList.remove('on'); });
-    if (S.knob) S.knob.style.transform = '';
+    S.hold = { l: 0, r: 0, g: 0, b: 0, d: 0, n: 0 };
+    if (S.pad) Array.prototype.forEach.call(S.pad.querySelectorAll('[data-hold].on'), function (b) { b.classList.remove('on'); });
+    if (S.stk) S.stk.reset();
   }
   function input(dt) {
     var k = S.keys, h = S.hold, gp = S.gpIn || {}, st = 0;
@@ -3468,7 +3526,7 @@
     var rate = st === 0 ? 10 : sgn(st) !== sgn(S.steerV) ? 14 : 6.5;
     S.steerV += clamp(st - S.steerV, -rate * dt, rate * dt);
     var steer = S.steerV;
-    if (S.stick.on) steer = S.stick.x;
+    if (S.stk && S.stk.id !== null && S.save.set.touch === 'stick') steer = S.stk.v;   // analog thumb stick
     if (gp.steer) steer = gp.steer;
     var gas = !!(k.ArrowUp || k.KeyW || h.g || gp.gas), brake = !!(k.ArrowDown || k.KeyS || h.b || gp.brake);
     if (!gas && !brake && autoGas() && S.touchUsed) gas = true;
@@ -3727,7 +3785,8 @@
       return;
     }
     var body = '<div class="sh"><div class="sh-stage"><canvas class="sh-cv"></canvas><div class="sh-ovl" style="display:none"></div></div>' +
-      '<div class="sh-pad"><div class="sh-pl"><button type="button" data-hold="l" aria-label="Steer left">◀</button><button type="button" data-hold="r" aria-label="Steer right">▶</button><div class="sh-stick" aria-label="Steering stick"><i></i></div></div>' +
+      '<div class="sh-pad"><div class="sh-pl"><button type="button" data-hold="l" aria-label="Steer left">◀</button><button type="button" data-hold="r" aria-label="Steer right">▶</button>' +
+      '<div class="sh-stick" aria-label="Steering stick: drag left or right"><span class="sh-sbase"><em>◀</em><em>▶</em><i class="sh-sknob"></i></span></div></div>' +
       '<div class="sh-pr"><button type="button" data-hold="n" class="nos" aria-label="Nitro">NOS</button><button type="button" data-hold="d" class="drf" aria-label="Handbrake drift">DRIFT</button><button type="button" data-hold="b" class="brk" aria-label="Brake">BRK</button><button type="button" data-hold="g" class="gas" aria-label="Gas">GAS</button></div></div></div>';
     var p = Cade.mkPanel(PANEL_ID, '\u{1F693} Street Heat', body);
     if (Cade.markGamePanel) Cade.markGamePanel(p);
@@ -3739,11 +3798,11 @@
     if (head) head.insertBefore(hb, p.querySelector('.cade-panel-minbtn') || p.querySelector('.cade-panel-x'));
     var ld = loadSave(), mm = window.matchMedia, coarse = !!(mm && mm('(pointer: coarse)').matches);
     S = {
-      panel: p, head: hb, stage: p.querySelector('.sh-stage'), cv: p.querySelector('.sh-cv'), ovl: p.querySelector('.sh-ovl'), pad: p.querySelector('.sh-pad'), knob: p.querySelector('.sh-stick i'),
+      panel: p, head: hb, stage: p.querySelector('.sh-stage'), cv: p.querySelector('.sh-cv'), ovl: p.querySelector('.sh-ovl'), pad: p.querySelector('.sh-pad'),
       save: ld.save, firstRun: ld.fresh, snd: new Snd(sget(SOUND_KEY) !== '0'),
       rm: !!(mm && mm('(prefers-reduced-motion: reduce)').matches), coarse: coarse,
       mode: 'menu', card: null, tab: 'play', g: null, demo: false, paused: false, raf: 0, last: 0, animT: 0, acc: 0, fdt: 0, frameN: 0, genLeft: 0,
-      keys: {}, hold: {}, stick: { on: false, x: 0, id: null }, steerV: 0, gp: {}, gpIn: null, touchUsed: false,
+      keys: {}, hold: {}, stk: null, steerV: 0, gp: {}, gpIn: null, touchUsed: false,
       W: 0, H: 0, dk: 1, zBase: 7, sprK: 10, cres: 4, chunks: new Map(), chunkMax: coarse ? 12 : 16, spr: {}, fxMax: coarse ? 170 : 260,
       cam: { x: 0, y: 0, a: 0, z: 7 }, shake: 0, shakeV: { x: 0, y: 0 }, flash: 0, msg: null, toast: null, tags: [], founts: [],
       nightK: 0, dusk: false, clock: 60 + Math.random() * 120, env: null, ectx: null, res: null, bust: null, doneT: 0, wantCard: null, bigR: 600, mapC: { x: 0, y: 0 },
@@ -3759,7 +3818,7 @@
     S.onKey = onKey; S.onKeyUp = onKeyUp;
     document.addEventListener('keydown', S.onKey, true);
     document.addEventListener('keyup', S.onKeyUp, true);
-    S.onVis = function () { if (!S) return; if (document.hidden) { pause(); stopLoop(); S.snd.engineOff(); } else kick(); };
+    S.onVis = function () { if (!S) return; if (document.hidden) { pause(); clearHeld(); stopLoop(); S.snd.engineOff(); } else kick(); };
     document.addEventListener('visibilitychange', S.onVis);
     S.onBlur = function () { if (S) { pause(); clearHeld(); S.keys = {}; } };
     window.addEventListener('blur', S.onBlur);
@@ -3818,34 +3877,23 @@
     [S.cv, S.pad].forEach(function (el) { ['touchstart', 'touchmove', 'touchend'].forEach(function (t) { el.addEventListener(t, noTouch, { passive: false }); }); el.addEventListener('contextmenu', noTouch); });
     ['gesturestart', 'gesturechange', 'dblclick'].forEach(function (t) { p.addEventListener(t, noTouch, { passive: false }); });
     S.cv.addEventListener('pointerdown', function (e) { if (!S) return; e.preventDefault(); S.snd.ensure(); if (e.pointerType === 'touch') S.touchUsed = true; });
-    // the pad: held buttons and the steering stick
+    // the thumb stick (left zone of the pad)
+    S.stk = mkStick(S.pad.querySelector('.sh-stick'), function () {
+      if (!S) return false;
+      S.snd.ensure(); S.touchUsed = true;
+    });
+    // the pad: held buttons
     S.pad.addEventListener('pointerdown', function (e) {
       if (!S) return;
-      var st = e.target.closest ? e.target.closest('.sh-stick') : null;
       e.preventDefault();
-      S.snd.ensure(); S.touchUsed = true;
-      if (st) {
-        try { st.setPointerCapture(e.pointerId); } catch (x) {}
-        S.stick.on = true; S.stick.id = e.pointerId; stickMove(e, st);
-        return;
-      }
       var b = e.target.closest ? e.target.closest('[data-hold]') : null;
       if (!b) return;
+      S.snd.ensure(); S.touchUsed = true;
       try { b.setPointerCapture(e.pointerId); } catch (x) {}
       S.hold[b.getAttribute('data-hold')] = 1; b.classList.add('on');
     });
-    function stickMove(e, st) {
-      var r = st.getBoundingClientRect(), x = clamp((e.clientX - (r.left + r.width / 2)) / (r.width * 0.4), -1, 1);
-      S.stick.x = Math.abs(x) < 0.08 ? 0 : x;
-      if (S.knob) S.knob.style.transform = 'translateX(' + Math.round(x * r.width * 0.36) + 'px)';
-    }
-    S.pad.addEventListener('pointermove', function (e) {
-      if (!S || !S.stick.on || e.pointerId !== S.stick.id) return;
-      stickMove(e, S.pad.querySelector('.sh-stick'));
-    });
     function padUp(e) {
       if (!S) return;
-      if (S.stick.on && e.pointerId === S.stick.id) { S.stick.on = false; S.stick.x = 0; S.stick.id = null; if (S.knob) S.knob.style.transform = ''; return; }
       var b = e.target.closest ? e.target.closest('[data-hold]') : null;
       if (!b) return;
       S.hold[b.getAttribute('data-hold')] = 0; b.classList.remove('on');

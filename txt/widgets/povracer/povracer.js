@@ -704,7 +704,7 @@
   function newSave() {
     return {
       v: 1,
-      set: { diff: 1, units: 'kmh', cam: 'pov', sens: 1, steer: 'buttons', autogas: null, shake: 1 },
+      set: { diff: 1, units: 'kmh', cam: 'pov', sens: 1, steer: 'stick', stickMig: 1, autogas: null, shake: 1 },
       best: { endless: [null, null, null] },
       car: { credits: 0, upg: { eng: 0, grip: 0, nos: 0, brk: 0 }, paint: 0, owned: [0, 1, 2] },
       cups: CUPS.map(function () { return { best: 0, done: 0 }; }),
@@ -720,7 +720,11 @@
       if (s.set.units !== 'mph') s.set.units = 'kmh';
       if (s.set.cam !== 'chase') s.set.cam = 'pov';
       if ([0.7, 1, 1.35].indexOf(+s.set.sens) < 0) s.set.sens = 1;
-      if (['buttons', 'screen', 'tilt'].indexOf(s.set.steer) < 0) s.set.steer = 'buttons';
+      if (STEERS.indexOf(s.set.steer) < 0) s.set.steer = 'stick';
+      // the thumb stick became the default: a stored 'buttons' from before was just the old
+      // default, so switch it once; after that (stickMig set) a deliberate 'buttons' sticks
+      if (o.set && o.set.stickMig !== 1 && s.set.steer === 'buttons') s.set.steer = 'stick';
+      s.set.stickMig = 1;
       if (o.best && Array.isArray(o.best.endless)) for (var d = 0; d < 3; d++) { var b = o.best.endless[d]; s.best.endless[d] = b && isFinite(b.score) ? { score: +b.score, dist: +b.dist || 0, cp: +b.cp || 0 } : null; }
       if (o.car) {
         s.car.credits = Math.max(0, Math.floor(+o.car.credits || 0));
@@ -818,8 +822,21 @@
     return m + ':' + (s < 10 ? '0' : '') + s.toFixed(2);
   }
 
+  // ---- touch thumb stick: knob offset (-1..1 of the ring radius) -> steering ----
+  // A small dead zone, full lock just inside the rim, and an x*|x|^0.5 curve so
+  // small thumb moves make small corrections near the center.
+  var STICK_DEAD = 0.1, STICK_FULL = 0.9;
+  function stickCurve(n) {
+    n = +n || 0;
+    var a = Math.abs(n);
+    if (!(a > STICK_DEAD)) return 0;
+    a = Math.min(1, (a - STICK_DEAD) / (STICK_FULL - STICK_DEAD));
+    return (n < 0 ? -1 : 1) * a * Math.sqrt(a);
+  }
+  var STEERS = ['stick', 'buttons', 'screen', 'tilt'];
+
   var ENGINE = {
-    STEP: STEP, SEG: SEG, RW: RW, LANES: LANES, RUMBLE: RUMBLE, CAM_DEPTH: CAM_DEPTH, CAM_H: CAM_H, CAM_H_POV: CAM_H_POV, TUN_H: TUN_H,
+    STEP: STEP, STICK_DEAD: STICK_DEAD, STICK_FULL: STICK_FULL, STEERS: STEERS, stickCurve: stickCurve, SEG: SEG, RW: RW, LANES: LANES, RUMBLE: RUMBLE, CAM_DEPTH: CAM_DEPTH, CAM_H: CAM_H, CAM_H_POV: CAM_H_POV, TUN_H: TUN_H,
     V_BASE: V_BASE, KMH_TOP: KMH_TOP, CF: CF, CAR_W: CAR_W, CP_LEN: CP_LEN, LANE_X: LANE_X,
     BIOMES: BIOMES, SPR: SPR, CUPS: CUPS, DIFFS: DIFFS, DRIVERS: DRIVERS, POINTS: POINTS, CREDITS: CREDITS, UPGS: UPGS, PAINTS: PAINTS, KINDS: KINDS,
     mulberry32: mulberry32, clamp: clamp, lerp: lerp, palette: palette, newTrack: newTrack, segAt: segAt, trackLen: trackLen, heightAt: heightAt,
@@ -1985,7 +2002,7 @@
     } else if (kind === 'help') {
       h += '<div class="pr-card"><div class="pr-title">HOW TO DRIVE</div>' +
         '<div class="pr-keys"><div><b>← →</b> / <b>A D</b> steer</div><div><b>↑</b> / <b>W</b> gas · <b>↓</b> / <b>S</b> / <b>Shift</b> brake</div>' +
-        '<div><b>Space</b> nitro · <b>C</b> camera · <b>P</b> / <b>Esc</b> pause</div><div><b>Touch</b> ◀ ▶ to steer (or the screen halves / tilt), NOS · BRK · GAS</div></div>' +
+        '<div><b>Space</b> nitro · <b>C</b> camera · <b>P</b> / <b>Esc</b> pause</div><div><b>Touch</b> drag the thumb stick on the left to steer (◀ ▶ buttons, screen halves or tilt in settings) · NOS · BRK · GAS on the right</div></div>' +
         '<p>Curves pull you <b>outward</b>, harder the faster you go — brake before sharp bends (chevrons warn you). Off-road is slow and bumpy; trees, rocks, walls and cars can <b>spin you out</b>.</p>' +
         '<p>Sit right behind a car for a <b>slipstream</b>; <b>drifting</b> through bends refills nitro.</p>' +
         '<p><b>Endless</b>: make each checkpoint before time runs out; near misses build a combo. <b>Career</b>: points and credits → garage upgrades; podium a cup to unlock the next.</p>' +
@@ -2077,7 +2094,7 @@
     h += row('Units', chip('data-set', 'units:kmh', 'km/h', set.units === 'kmh') + chip('data-set', 'units:mph', 'mph', set.units === 'mph'));
     h += row('Camera <i>C</i>', chip('data-set', 'cam:pov', 'Cockpit', set.cam === 'pov') + chip('data-set', 'cam:chase', 'Chase', set.cam === 'chase'));
     h += row('Steering', chip('data-set', 'sens:0.7', 'Gentle', +set.sens === 0.7) + chip('data-set', 'sens:1', 'Normal', +set.sens === 1) + chip('data-set', 'sens:1.35', 'Sharp', +set.sens === 1.35));
-    h += row('Touch steering', chip('data-set', 'steer:buttons', 'Buttons', set.steer === 'buttons') + chip('data-set', 'steer:screen', 'Screen halves', set.steer === 'screen') + chip('data-set', 'steer:tilt', 'Tilt', set.steer === 'tilt'));
+    h += row('Touch steering', chip('data-set', 'steer:stick', 'Joystick', set.steer === 'stick') + chip('data-set', 'steer:buttons', '◀ ▶ buttons', set.steer === 'buttons') + chip('data-set', 'steer:screen', 'Screen halves', set.steer === 'screen') + chip('data-set', 'steer:tilt', 'Tilt', set.steer === 'tilt'));
     if (set.steer === 'tilt') h += '<div class="pr-tilt"><button type="button" class="pr-go alt" data-act="tilt">' + (S.tiltOn ? 'Tilt is on ✓' : 'Enable tilt') + '</button><span>' + (S.tiltMsg || 'Hold the phone up like a wheel.') + '</span></div>';
     h += row('Auto gas <i>touch</i>', chip('data-set', 'autogas:on', 'On', autoGas()) + chip('data-set', 'autogas:off', 'Off', !autoGas()));
     h += row('Screen shake', chip('data-set', 'shake:1', 'On', !!set.shake) + chip('data-set', 'shake:0', 'Low', !set.shake));
@@ -2227,10 +2244,53 @@
     for (var i = 0; i < 10; i++) puff(x, y, (Math.random() - 0.5) * 220, -60 - Math.random() * 120, 0.4, 2 + Math.random() * 2, 'rgba(255,200,80,', 1.5);
   }
 
+  // ---- the floating thumb stick (same in Apex Rush, Street Heat and Redline Run) ----
+  // Touch anywhere in the zone: the ring centers under the thumb and the knob follows
+  // it, up to the ring's radius. The knob's sideways offset, shaped by
+  // ENGINE.stickCurve, is analog steering in -1..1. One thumb owns it (by pointerId),
+  // so the pedals keep working under the other; it springs back on release, cancel,
+  // lost capture, blur and when the page hides (clearHeld).
+  function mkStick(zone, onDown) {
+    var base = zone.querySelector('.pr-sbase'), knob = zone.querySelector('.pr-sknob');
+    var k = { id: null, v: 0, ox: 0, oy: 0, R: 38 };
+    function paint(dx, dy) {
+      knob.style.transform = dx || dy ? 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)' : '';
+      base.style.setProperty('--kl', k.v < 0 ? Math.min(1, 0.25 - k.v).toFixed(2) : '0');
+      base.style.setProperty('--kr', k.v > 0 ? Math.min(1, 0.25 + k.v).toFixed(2) : '0');
+      zone.classList.toggle('sl', k.v < 0); zone.classList.toggle('sr', k.v > 0);
+    }
+    function move(e) {
+      var dx = e.clientX - k.ox, dy = e.clientY - k.oy, d = Math.sqrt(dx * dx + dy * dy), m = d > k.R ? k.R / d : 1;
+      k.v = ENGINE.stickCurve(Math.max(-1, Math.min(1, dx / k.R)));
+      paint(dx * m, dy * m);
+    }
+    k.reset = function () {
+      var id = k.id;
+      k.id = null; k.v = 0;
+      if (id !== null) { try { zone.releasePointerCapture(id); } catch (x) {} }
+      zone.classList.remove('on'); base.style.left = ''; base.style.top = ''; paint(0, 0);
+    };
+    zone.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      if (k.id !== null || (onDown && onDown(e) === false)) return;
+      var r = zone.getBoundingClientRect();
+      k.R = Math.max(24, (base.offsetWidth || 76) / 2);
+      k.id = e.pointerId; k.ox = e.clientX; k.oy = e.clientY;
+      try { zone.setPointerCapture(e.pointerId); } catch (x) {}
+      base.style.left = Math.round(e.clientX - r.left) + 'px'; base.style.top = Math.round(e.clientY - r.top) + 'px';
+      zone.classList.add('on'); move(e);
+    });
+    zone.addEventListener('pointermove', function (e) { if (e.pointerId === k.id) { e.preventDefault(); move(e); } });
+    function up(e) { if (e.pointerId === k.id) k.reset(); }
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (t) { zone.addEventListener(t, up); });
+    return k;
+  }
+
   // ---- input ----
   function clearHeld() {
     if (!S) return;
     S.hold = { l: 0, r: 0, g: 0, b: 0, n: 0 }; S.scr = {};
+    if (S.stk) S.stk.reset();
     if (S.pad) Array.prototype.forEach.call(S.pad.querySelectorAll('.on'), function (b) { b.classList.remove('on'); });
   }
   function input() {
@@ -2240,6 +2300,7 @@
     if (h.l) steer -= 1;
     if (h.r) steer += 1;
     for (var id in S.scr) steer += S.scr[id];
+    if (set.steer === 'stick' && S.stk) steer += S.stk.v;
     if (set.steer === 'tilt' && S.tiltOn) steer += S.tiltV;
     if (gp.steer) steer += gp.steer;
     steer = Math.max(-1, Math.min(1, steer));
@@ -2395,7 +2456,8 @@
     var side = padOn && vh < 520 && vw > vh * 1.25 && vw >= 480;
     S.panel.classList.toggle('pr-side', side);
     S.pad.classList.toggle('on', padOn);
-    S.pad.classList.toggle('nosteer', S.save.set.steer !== 'buttons');
+    S.pad.classList.toggle('nosteer', S.save.set.steer !== 'buttons' && S.save.set.steer !== 'stick');
+    S.pad.classList.toggle('stick', S.save.set.steer === 'stick');
     S.pad.classList.toggle('auto', autoGas());
     var gut = side ? (solo ? 24 : 40) : phone ? (solo ? 20 : 34) : 48, padW = side ? 2 * 128 : 0;
     var W = Math.floor(Math.min(vw - gut - padW, solo ? 1100 : 760)), ch = chromeH(), ah = Math.floor(Math.max(side ? 140 : 180, availH(vw, vh, ch))), H;
@@ -2476,7 +2538,8 @@
       return;
     }
     var body = '<div class="pr"><div class="pr-stage"><canvas class="pr-cv"></canvas><div class="pr-ovl" style="display:none"></div></div>' +
-      '<div class="pr-pad"><div class="pr-pl"><button type="button" data-hold="l" aria-label="Steer left">◀</button><button type="button" data-hold="r" aria-label="Steer right">▶</button></div>' +
+      '<div class="pr-pad"><div class="pr-pl"><button type="button" data-hold="l" aria-label="Steer left">◀</button><button type="button" data-hold="r" aria-label="Steer right">▶</button>' +
+      '<div class="pr-stick" aria-label="Steering stick: drag left or right"><span class="pr-sbase"><em>◀</em><em>▶</em><i class="pr-sknob"></i></span></div></div>' +
       '<div class="pr-pr"><button type="button" data-hold="n" class="nos" aria-label="Nitro">NOS</button><button type="button" data-hold="b" class="brk" aria-label="Brake">BRK</button><button type="button" data-hold="g" class="gas" aria-label="Gas">GAS</button></div></div></div>';
     var p = Cade.mkPanel(PANEL_ID, '\u{1F3CE} Apex Rush', body);
     if (Cade.markGamePanel) Cade.markGamePanel(p);
@@ -2504,7 +2567,7 @@
     S.onKey = onKey; S.onKeyUp = onKeyUp;
     document.addEventListener('keydown', S.onKey, true);
     document.addEventListener('keyup', S.onKeyUp, true);
-    S.onVis = function () { if (!S) return; if (document.hidden) { pause(); stopLoop(); S.snd.engineOff(); } else kick(); };
+    S.onVis = function () { if (!S) return; if (document.hidden) { pause(); clearHeld(); stopLoop(); S.snd.engineOff(); } else kick(); };
     document.addEventListener('visibilitychange', S.onVis);
     S.onBlur = function () { if (S) { pause(); clearHeld(); S.keys = {}; } };
     window.addEventListener('blur', S.onBlur);
@@ -2586,8 +2649,8 @@
       S.snd.ensure();
       if (S.mode !== 'play' || S.paused) return;
       if (e.pointerType === 'touch') S.touchUsed = true;
-      if (S.save.set.steer !== 'screen' && e.pointerType !== 'touch') return;
-      if (S.save.set.steer === 'tilt') return;
+      var sm = S.save.set.steer;
+      if (sm !== 'screen' && (e.pointerType !== 'touch' || sm !== 'buttons')) return;
       var r = S.cv.getBoundingClientRect();
       try { S.cv.setPointerCapture(e.pointerId); } catch (x) {}
       S.scr[e.pointerId] = e.clientX < r.left + r.width / 2 ? -1 : 1;
@@ -2599,6 +2662,11 @@
     });
     function scrUp(e) { if (S) delete S.scr[e.pointerId]; }
     ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (t) { S.cv.addEventListener(t, scrUp); });
+    // the thumb stick (left zone of the pad)
+    S.stk = mkStick(S.pad.querySelector('.pr-stick'), function () {
+      if (!S) return false;
+      S.snd.ensure(); S.touchUsed = true;
+    });
     // the pad: every button is held
     S.pad.addEventListener('pointerdown', function (e) {
       var b = e.target.closest ? e.target.closest('[data-hold]') : null;
