@@ -22,7 +22,7 @@
   // World: x → metres from the angler's stand out over the water, y → metres of
   // depth (0 = the surface, negative = the air above it); seconds; pounds.
   var STEP = 1 / 60;
-  var MIN_PER_SEC = 1;              // in-game minutes per real second at the water
+  var MIN_PER_SEC = 2;              // in-game minutes per real second at the water (a day is ~9 minutes)
   var DAY_START = 300, DAY_END = 1440, SEASON_DAYS = 6, TRAVEL_MIN = 20;
   var SEASONS = ['Spring', 'Summer', 'Fall', 'Winter'];
   var DAWN = 1, DAY = 2, DUSK = 4, NIGHT = 8;
@@ -32,7 +32,7 @@
   var RAR_NAME = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
   var RAR_W = [10, 4.2, 1.25, 0.42, 0];
   var RAR_PRICE = [1, 1.4, 2.2, 3.5, 4];
-  var RAR_XP = [8, 18, 45, 110, 400];
+  var RAR_XP = [15, 30, 70, 160, 500];
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function lerp(a, b, t) { return a + (b - a) * t; }
@@ -82,19 +82,47 @@
 
   // ---- places ----
   // stand: bank | pier | boat | ice. clar: metres of depth for the light to fall to 1/e.
+  // prof: bottom profile; scn: scenery; mx/my: pin on the map; bite: how hungry the water is.
   var LOCS = [
-    { id: 'pond', name: 'Willow Pond', short: 'Pond', lvl: 1, W: 30, maxD: 4.2, stand: 'bank', cur: 0, wave: 0.05, clar: 2.4, salt: false, n: 16,
+    { id: 'pond', name: 'Willow Pond', short: 'Pond', lvl: 1, W: 30, maxD: 4.2, stand: 'bank', cur: 0, wave: 0.05, clar: 2.4, salt: false, n: 18, bite: 1.8,
+      prof: 'bowl', scn: 'pond', mx: 0.24, my: 0.6, np: 26, nr: 4,
       surf: [92, 132, 92], deep: [24, 50, 34], mud: [96, 78, 52], blurb: 'Lily pads, warm shallows, sunfish and old carp.' },
-    { id: 'river', name: 'Cobble Run', short: 'River', lvl: 3, W: 34, maxD: 5.2, stand: 'bank', cur: 0.45, wave: 0.07, clar: 3.2, salt: false, n: 15,
+    { id: 'river', name: 'Cobble Run', short: 'River', lvl: 2, W: 34, maxD: 5.2, stand: 'bank', cur: 0.45, wave: 0.07, clar: 3.2, salt: false, n: 16, bite: 1.5,
+      prof: 'channel', scn: 'river', mx: 0.33, my: 0.42, np: 10, nr: 16,
       surf: [86, 138, 128], deep: [22, 52, 54], mud: [118, 104, 82], blurb: 'Current pushes your lure; trout in the riffles.' },
-    { id: 'lake', name: 'Glass Lake', short: 'Lake', lvl: 5, W: 48, maxD: 15, stand: 'bank', cur: 0, wave: 0.1, clar: 5.5, salt: false, n: 18, vis: 1.15,
+    { id: 'lake', name: 'Glass Lake', short: 'Lake', lvl: 3, W: 48, maxD: 15, stand: 'bank', cur: 0, wave: 0.1, clar: 5.5, salt: false, n: 19, vis: 1.15, bite: 1.3,
+      prof: 'shelf', scn: 'lake', mx: 0.17, my: 0.33, np: 22, nr: 9,
       surf: [70, 128, 150], deep: [10, 34, 58], mud: [92, 86, 70], blurb: 'A weedy shelf, then a cold drop-off.' },
-    { id: 'pier', name: 'Saltwind Pier', short: 'Pier', lvl: 7, W: 46, maxD: 12, stand: 'pier', cur: 0, wave: 0.22, clar: 6.5, salt: true, n: 18, vis: 1.2,
+    { id: 'mangrove', name: 'Mangrove Lagoon', short: 'Lagoon', lvl: 4, W: 32, maxD: 3.6, stand: 'bank', cur: 0.05, wave: 0.06, clar: 5, salt: true, n: 18, bite: 1.35,
+      prof: 'bowl', scn: 'mangrove', mx: 0.6, my: 0.84, np: 8, nr: 5, roots: true,
+      surf: [74, 172, 160], deep: [18, 84, 86], mud: [206, 190, 146], blurb: 'Warm turquoise shallows. Hooked fish dive into the roots.' },
+    { id: 'pier', name: 'Saltwind Pier', short: 'Pier', lvl: 5, W: 46, maxD: 12, stand: 'pier', cur: 0, wave: 0.22, clar: 6.5, salt: true, n: 19, vis: 1.2, bite: 1.2,
+      prof: 'slope', scn: 'sea', mx: 0.63, my: 0.56, np: 12, nr: 8,
       surf: [64, 140, 150], deep: [8, 42, 70], mud: [176, 158, 118], blurb: 'Swells, pilings and fast sea fish.' },
-    { id: 'ice', name: 'Frostbite Hole', short: 'Ice', lvl: 9, W: 26, maxD: 9, stand: 'ice', cur: 0, wave: 0, clar: 7, salt: false, n: 14, winter: true, vis: 2.5,
+    { id: 'bayou', name: 'Bayou Swamp', short: 'Bayou', lvl: 6, W: 30, maxD: 3.8, stand: 'bank', cur: 0.04, wave: 0.03, clar: 1.3, salt: false, n: 18, bite: 1.35,
+      prof: 'bowl', scn: 'bayou', mx: 0.42, my: 0.74, np: 18, nr: 10,
+      surf: [100, 108, 62], deep: [30, 34, 18], mud: [72, 58, 36], blurb: 'Murky, warm and full of whiskers and teeth.' },
+    { id: 'ice', name: 'Frostbite Hole', short: 'Ice', lvl: 6, W: 26, maxD: 9, stand: 'ice', cur: 0, wave: 0, clar: 7, salt: false, n: 15, winter: true, vis: 2.5, bite: 1.2,
+      prof: 'icebowl', scn: 'ice', mx: 0.44, my: 0.1, np: 8, nr: 6,
       surf: [96, 140, 170], deep: [12, 30, 52], mud: [84, 84, 80], blurb: 'Winter only. Jig through the ice.' },
-    { id: 'deep', name: 'Blue Shelf', short: 'Deep sea', lvl: 12, W: 52, maxD: 120, stand: 'boat', cur: 0, wave: 0.32, clar: 26, salt: true, n: 26, boat: true, vis: 4, reelMul: 1.7,
-      surf: [40, 120, 170], deep: [2, 10, 34], mud: [70, 70, 76], blurb: 'Needs a boat. Monsters a hundred metres down.' }
+    { id: 'alpine', name: 'Alpine Falls', short: 'Falls', lvl: 7, W: 26, maxD: 3.2, stand: 'bank', cur: 1.0, wave: 0.1, clar: 6, salt: false, n: 15, bite: 1.2,
+      prof: 'channel', scn: 'alpine', mx: 0.1, my: 0.13, np: 5, nr: 18,
+      surf: [124, 176, 184], deep: [30, 72, 84], mud: [132, 128, 120], blurb: 'Ice-cold pools below a waterfall. A strong current.' },
+    { id: 'harbor', name: 'Night Harbor', short: 'Harbor', lvl: 8, W: 40, maxD: 9, stand: 'pier', cur: 0, wave: 0.12, clar: 4, salt: true, n: 21, lit: true, bite: 1.6,
+      prof: 'slope', scn: 'harbor', mx: 0.645, my: 0.34, np: 6, nr: 10,
+      surf: [60, 100, 112], deep: [10, 30, 44], mud: [96, 90, 80], blurb: 'City lamps on the water. Night biters gather under them.' },
+    { id: 'deep', name: 'Blue Shelf', short: 'Deep sea', lvl: 9, W: 52, maxD: 120, stand: 'boat', cur: 0, wave: 0.32, clar: 26, salt: true, n: 26, boat: true, vis: 4, reelMul: 1.7,
+      prof: 'deep', scn: 'sea', mx: 0.91, my: 0.5, np: 14, nr: 10,
+      surf: [40, 120, 170], deep: [2, 10, 34], mud: [70, 70, 76], blurb: 'Needs a boat. Monsters a hundred metres down.' },
+    { id: 'reef', name: 'Kelp Reef', short: 'Reef', lvl: 10, W: 44, maxD: 24, stand: 'boat', cur: 0, wave: 0.2, clar: 20, salt: true, n: 22, boat: true, vis: 1.8, reelMul: 1.3, bite: 1.5,
+      prof: 'reef', scn: 'reef', mx: 0.83, my: 0.78, np: 20, nr: 12,
+      surf: [58, 172, 196], deep: [8, 72, 112], mud: [214, 200, 164], blurb: 'Gin-clear water, kelp forests and bright reef fish.' },
+    { id: 'fjord', name: 'Glacier Fjord', short: 'Fjord', lvl: 12, W: 48, maxD: 60, stand: 'boat', cur: 0, wave: 0.15, clar: 14, salt: true, n: 22, boat: true, vis: 3, reelMul: 1.6,
+      prof: 'fjord', scn: 'fjord', mx: 0.79, my: 0.12, np: 6, nr: 10,
+      surf: [92, 142, 162], deep: [6, 24, 40], mud: [82, 86, 92], blurb: 'Glacier-cold and sixty metres deep. Needs a boat.' },
+    { id: 'cavern', name: 'Cavern Lake', short: 'Cavern', lvl: 13, W: 26, maxD: 12, stand: 'bank', cur: 0, wave: 0, clar: 9, salt: false, n: 18, dark: true, needs: 'lantern', bite: 1.7,
+      prof: 'shelf', scn: 'cavern', mx: 0.31, my: 0.17, np: 0, nr: 12,
+      surf: [44, 64, 74], deep: [6, 10, 16], mud: [62, 58, 56], blurb: 'An underground lake in total dark. Bring a lantern and glow lures.' }
   ];
   var LOC = {};
   LOCS.forEach(function (l, i) { l.i = i; LOC[l.id] = l; });
@@ -117,27 +145,32 @@
     for (i = 0; i < n; i++) {
       x = i / 2;
       var u = x / W, v;
-      if (L.id === 'pond') v = L.maxD * (0.18 + 0.82 * Math.pow(clamp(x / (W * 0.55), 0, 1), 0.8)) * (0.86 + 0.14 * noise(u)) - 0.15 * Math.sin(x * 0.7 + ph) * u;
-      else if (L.id === 'river') v = L.maxD * (0.12 + 0.88 * Math.pow(Math.sin(Math.PI * clamp(u * 0.92 + 0.04, 0, 1)), 0.6)) * (0.85 + 0.15 * noise(u)) + 0.18 * Math.sin(x * 1.7 + ph);
-      else if (L.id === 'lake') v = x < drop ? 1.2 + 1.8 * (x / drop) + 0.4 * noise(u) : 3 + (L.maxD - 3) * (1 - Math.exp(-(x - drop) / 4.5)) * (0.9 + 0.1 * noise(u));
-      else if (L.id === 'pier') v = 2.2 + (L.maxD - 2.2) * Math.pow(clamp(u * 1.3, 0, 1), 0.7) * (0.9 + 0.1 * noise(u)) + 0.25 * Math.sin(x * 0.9 + ph);
-      else if (L.id === 'ice') v = 2.2 + (L.maxD - 2.2) * clamp(u * 1.6, 0, 1) * (0.85 + 0.15 * noise(u));
+      var pf = L.prof;
+      if (pf === 'bowl') v = L.maxD * (0.18 + 0.82 * Math.pow(clamp(x / (W * 0.55), 0, 1), 0.8)) * (0.86 + 0.14 * noise(u)) - 0.15 * Math.sin(x * 0.7 + ph) * u;
+      else if (pf === 'channel') v = L.maxD * (0.12 + 0.88 * Math.pow(Math.sin(Math.PI * clamp(u * 0.92 + 0.04, 0, 1)), 0.6)) * (0.85 + 0.15 * noise(u)) + 0.18 * Math.sin(x * 1.7 + ph);
+      else if (pf === 'shelf') v = x < drop ? 1.2 + 1.8 * (x / drop) + 0.4 * noise(u) : 3 + (L.maxD - 3) * (1 - Math.exp(-(x - drop) / 4.5)) * (0.9 + 0.1 * noise(u));
+      else if (pf === 'slope') v = 2.2 + (L.maxD - 2.2) * Math.pow(clamp(u * 1.3, 0, 1), 0.7) * (0.9 + 0.1 * noise(u)) + 0.25 * Math.sin(x * 0.9 + ph);
+      else if (pf === 'icebowl') v = 2.2 + (L.maxD - 2.2) * clamp(u * 1.6, 0, 1) * (0.85 + 0.15 * noise(u));
+      else if (pf === 'reef') v = Math.min(L.maxD, 5 + (L.maxD - 5) * Math.pow(clamp(u * 1.3, 0, 1), 0.8) * (0.85 + 0.15 * noise(u))) - 3.5 * Math.pow(Math.max(0, Math.sin(x * 0.55 + ph)), 3);
+      else if (pf === 'fjord') v = 6 + (L.maxD - 6) * (1 - Math.exp(-x / 5)) * (0.88 + 0.12 * noise(u));
       else v = L.maxD * (0.78 + 0.22 * noise(u)) - 24 * Math.exp(-Math.pow((x - W * (0.45 + 0.2 * nz[3])) / 9, 2));
       if (L.stand === 'bank') v *= clamp((x - 0.2) / 3.2, 0.03, 1);
       d[i] = clamp(v, 0.06, L.maxD);
     }
-    var lay = { W: W, d: d, maxD: 0, plants: [], rocks: [], pads: [], posts: [], seed: seed };
+    var lay = { W: W, d: d, maxD: 0, plants: [], rocks: [], pads: [], posts: [], roots: [], coral: [], seed: seed };
     for (i = 0; i < n; i++) lay.maxD = Math.max(lay.maxD, d[i]);
-    var np = { pond: 26, river: 10, lake: 22, pier: 12, ice: 8, deep: 14 }[L.id] || 10;
+    var np = L.np == null ? 10 : L.np;
     for (i = 0; i < np; i++) {
       x = 1.5 + r() * (W - 2);
       var dep = depthAt(lay, x);
-      if (L.id === 'lake' && dep > 7 && r() < 0.7) continue;
-      lay.plants.push({ x: x, h: Math.min(dep * (0.25 + r() * 0.55), L.id === 'deep' ? 9 : 3.2), k: L.salt ? (r() < 0.5 ? 2 : 3) : (r() < 0.6 ? 0 : 1), ph: r() * 6.28, w: 0.6 + r() * 0.8 });
+      if (L.prof === 'shelf' && dep > 7 && r() < 0.7) continue;
+      lay.plants.push({ x: x, h: Math.min(dep * (L.scn === 'reef' ? 0.5 + r() * 0.45 : 0.25 + r() * 0.55), L.maxD > 20 ? 14 : 3.2), k: L.salt ? (r() < 0.5 ? 2 : 3) : (r() < 0.6 ? 0 : 1), ph: r() * 6.28, w: 0.6 + r() * 0.8 });
     }
-    var nr = { pond: 4, river: 16, lake: 9, pier: 8, ice: 6, deep: 10 }[L.id] || 6;
-    for (i = 0; i < nr; i++) { x = 1.2 + r() * (W - 1.5); lay.rocks.push({ x: x, r: (L.id === 'deep' ? 1.2 : 0.25) + r() * (L.id === 'deep' ? 2.5 : 0.55), s: r() }); }
-    if (L.id === 'pond') for (i = 0; i < 9; i++) lay.pads.push({ x: 3 + r() * (W - 5), w: 0.35 + r() * 0.35, f: r() < 0.3 });
+    var nr = L.nr == null ? 6 : L.nr, big = L.maxD > 30;
+    for (i = 0; i < nr; i++) { x = 1.2 + r() * (W - 1.5); lay.rocks.push({ x: x, r: (big ? 1.2 : 0.25) + r() * (big ? 2.5 : 0.55), s: r() }); }
+    if (L.roots) { lay.roots.push({ x0: 0.6, x1: 5.5 }); for (i = 0; i < 2; i++) { x = 9 + r() * (W - 14); lay.roots.push({ x0: x, x1: x + 2.5 + r() * 2.5 }); } }
+    if (L.scn === 'reef') for (i = 0; i < 16; i++) { x = 3 + r() * (W - 4); lay.coral.push({ x: x, r: 0.4 + r() * 1.1, c: Math.floor(r() * 5), s: r() }); }
+    if (L.scn === 'pond' || L.scn === 'bayou') for (i = 0; i < (L.scn === 'bayou' ? 14 : 9); i++) lay.pads.push({ x: 3 + r() * (W - 5), w: 0.35 + r() * 0.35, f: r() < 0.3 });
     if (L.stand === 'pier') for (x = -3; x <= 2.5; x += 2.75) lay.posts.push(x);
     return lay;
   }
@@ -151,10 +184,11 @@
   var LURES = [
     { id: 'b', name: 'Live Bait', note: 'Worm under a float. Set the depth; wait for the bob. Uses bait.', sink: 0.55, ideal: 0, bob: true, price: 0, scent: 1.8 },
     { id: 's', name: 'Spinner', note: 'Flashes on a steady retrieve. Mid-depth chasers love it.', sink: 0.8, rise: 0.35, ideal: 1.0, flash: 1, price: 0 },
-    { id: 'c', name: 'Crankbait', note: 'Floats at rest, dives ~2.5 m when reeled. Predators strike on the move.', sink: -0.18, dive: 2.6, ideal: 1.15, price: 120, lvl: 2 },
-    { id: 'j', name: 'Jig', note: 'Sinks fast. Twitch it off the bottom; nibbling fish often hit a twitch.', sink: 1.7, ideal: 0.3, hop: 1.5, price: 160, lvl: 3 },
-    { id: 'f', name: 'Dry Fly', note: 'Sits on the surface film. Skitter it with taps for trout and sunfish.', sink: 0, surface: true, ideal: 0.3, price: 260, lvl: 4 },
-    { id: 'd', name: 'Deep Rig', note: 'Heavy sinker and a fat bait. Plummets to the bottom. Salt water only.', ideal: 0.15, heavy: true, salt: true, price: 900, lvl: 8, scent: 5, sink: 7 }
+    { id: 'c', name: 'Crankbait', note: 'Floats at rest, dives ~2.5 m when reeled. Predators strike on the move.', sink: -0.18, dive: 2.6, ideal: 1.15, price: 60, lvl: 2 },
+    { id: 'j', name: 'Jig', note: 'Sinks fast. Twitch it off the bottom; nibbling fish often hit a twitch.', sink: 1.7, ideal: 0.3, hop: 1.5, price: 90, lvl: 3 },
+    { id: 'f', name: 'Dry Fly', note: 'Sits on the surface film. Skitter it with taps for trout and sunfish.', sink: 0, surface: true, ideal: 0.3, price: 150, lvl: 4 },
+    { id: 'g', name: 'Glow Jig', note: 'A jig that shines in the dark. Cave fish see nothing else.', sink: 1.4, ideal: 0.3, hop: 1.2, glow: true, price: 300, lvl: 12 },
+    { id: 'd', name: 'Deep Rig', note: 'Heavy sinker and a fat bait. Plummets to the bottom. Salt water only.', ideal: 0.15, heavy: true, salt: true, price: 500, lvl: 5, scent: 5, sink: 7 }
   ];
   var LURE = {};
   LURES.forEach(function (l, i) { l.i = i; LURE[l.id] = l; });
@@ -162,34 +196,35 @@
   // ---- gear ----
   var RODS = [
     { name: 'Willow Switch', price: 0, pow: 0.2, sens: 0.2, cast: 17, lvl: 1 },
-    { name: 'Graphite Spinner', price: 180, pow: 0.36, sens: 0.45, cast: 23, lvl: 2 },
-    { name: 'Composite MH', price: 650, pow: 0.55, sens: 0.55, cast: 27, lvl: 5 },
-    { name: 'Carbon Pro', price: 1900, pow: 0.72, sens: 0.78, cast: 31, lvl: 9 },
-    { name: 'Big Game Stick', price: 4600, pow: 0.95, sens: 0.5, cast: 25, lvl: 13 },
-    { name: 'Heirloom Split-Cane', price: 9500, pow: 0.85, sens: 0.98, cast: 34, lvl: 18 }
+    { name: 'Graphite Spinner', price: 90, pow: 0.36, sens: 0.45, cast: 23, lvl: 2 },
+    { name: 'Composite MH', price: 380, pow: 0.55, sens: 0.55, cast: 27, lvl: 4 },
+    { name: 'Carbon Pro', price: 1400, pow: 0.72, sens: 0.78, cast: 31, lvl: 7 },
+    { name: 'Big Game Stick', price: 3800, pow: 0.95, sens: 0.5, cast: 25, lvl: 10 },
+    { name: 'Heirloom Split-Cane', price: 9000, pow: 0.85, sens: 0.98, cast: 34, lvl: 15 }
   ];
   var REELS = [
     { name: 'Tin Spincast', price: 0, speed: 0.95, drag: 6, smooth: 0.3, spool: 80, lvl: 1 },
-    { name: 'Spinning 2500', price: 220, speed: 1.2, drag: 12, smooth: 0.5, spool: 140, lvl: 2 },
-    { name: 'Low-Pro Baitcaster', price: 750, speed: 1.45, drag: 22, smooth: 0.64, spool: 190, lvl: 5 },
-    { name: 'Saltwater 6000', price: 2300, speed: 1.6, drag: 42, smooth: 0.76, spool: 320, lvl: 9 },
-    { name: 'Lever Drag 30', price: 6200, speed: 1.9, drag: 80, smooth: 0.9, spool: 650, lvl: 13 }
+    { name: 'Spinning 2500', price: 110, speed: 1.2, drag: 12, smooth: 0.5, spool: 140, lvl: 2 },
+    { name: 'Low-Pro Baitcaster', price: 450, speed: 1.45, drag: 22, smooth: 0.64, spool: 190, lvl: 4 },
+    { name: 'Saltwater 6000', price: 1700, speed: 1.6, drag: 42, smooth: 0.76, spool: 320, lvl: 7 },
+    { name: 'Lever Drag 30', price: 5200, speed: 1.9, drag: 80, smooth: 0.9, spool: 650, lvl: 10 }
   ];
   var LINES = [
     { name: '6 lb Mono', price: 0, lb: 6, lvl: 1 },
-    { name: '10 lb Mono', price: 70, lb: 10, lvl: 2 },
-    { name: '15 lb Fluoro', price: 260, lb: 15, lvl: 4 },
-    { name: '30 lb Braid', price: 780, lb: 30, lvl: 7 },
-    { name: '60 lb Braid', price: 2100, lb: 60, lvl: 11 },
-    { name: '100 lb Big-Game', price: 5200, lb: 100, lvl: 14 }
+    { name: '10 lb Mono', price: 35, lb: 10, lvl: 2 },
+    { name: '15 lb Fluoro', price: 150, lb: 15, lvl: 3 },
+    { name: '30 lb Braid', price: 520, lb: 30, lvl: 5 },
+    { name: '60 lb Braid', price: 1600, lb: 60, lvl: 8 },
+    { name: '100 lb Big-Game', price: 4200, lb: 100, lvl: 11 }
   ];
   var UPGRADES = [
-    { id: 'creel', name: 'Bigger Creel', note: '+4 fish you can keep at once', price: [250, 700, 1600], max: 3, lvl: 1 },
-    { id: 'cooler', name: 'Cooler', note: 'Kept fish stay fresh four times longer', price: [420], max: 1, lvl: 3 },
-    { id: 'finder', name: 'Fish Finder', note: 'Sonar blips show fish in dark water', price: [900], max: 1, lvl: 6 },
-    { id: 'boat', name: 'Boat', note: 'Opens the Blue Shelf (deep sea)', price: [3200], max: 1, lvl: 12 }
+    { id: 'creel', name: 'Bigger Creel', note: '+4 fish you can keep at once', price: [120, 400, 1000], max: 3, lvl: 1 },
+    { id: 'cooler', name: 'Cooler', note: 'Kept fish stay fresh four times longer', price: [220], max: 1, lvl: 2 },
+    { id: 'finder', name: 'Fish Finder', note: 'Sonar blips show fish in dark water', price: [550], max: 1, lvl: 4 },
+    { id: 'boat', name: 'Boat', note: 'Opens the Blue Shelf, Kelp Reef and Glacier Fjord', price: [2400], max: 1, lvl: 9 },
+    { id: 'lantern', name: 'Cave Lantern', note: 'Lets you find your way to Cavern Lake', price: [1200], max: 1, lvl: 12 }
   ];
-  var BAIT_PACK = { n: 20, price: 12 };
+  var BAIT_PACK = { n: 25, price: 8 };
   var DIFFS = {
     relax: { id: 'relax', name: 'Relax', pow: 0.65, sta: 0.7, win: 1.6, slack: 5, noSnap: true, jump: 0.4, bite: 1.25 },
     normal: { id: 'normal', name: 'Normal', pow: 1, sta: 1, win: 1, slack: 2.4, noSnap: false, jump: 1, bite: 1 },
@@ -225,11 +260,11 @@
   sp('pumpkinseed', 'Pumpkinseed', 'pond', 0, 0.1, 1, 8.4, 0.1, 0.6, 'ADU', 'so', { b: 1, f: 0.9, j: 0.3 }, 'PSF', 2.5, [0.95, 0.8, 0.8, 0, 1, 2, 0], ['sunfish', '#5f7f4a', '#f0913a', '#3aa6b9', 'dots']);
   sp('shiner', 'Golden Shiner', 'pond', 0, 0.05, 0.6, 11, 0.05, 0.5, 'ADU', 'sof', { f: 1, b: 0.8, s: 0.3 }, 'PSF', 3, [0.6, 0.6, 1.1, 0.1, 1, 1, 0], ['minnow', '#a9a15a', '#f3e6a1', '#c9b04a', 'lat']);
   sp('perch', 'Yellow Perch', 'pond lake ice', 0, 0.2, 2.2, 9.8, 0.3, 0.95, 'AD', 'so', { b: 0.9, j: 0.9, s: 0.7 }, '*', 3, [0.85, 0.8, 0.8, 0, 1, 2, 0], ['perch', '#7f8c3a', '#f4e9b0', '#e8722c', 'bars']);
-  sp('crappie', 'Black Crappie', 'pond lake', 0, 0.3, 3.5, 10, 0.3, 0.8, 'UNA', 'of', { j: 1, b: 0.8, f: 0.3 }, 'PFW', 3, [0.75, 0.8, 0.8, 0, 1, 2, 0], ['crappie', '#55605a', '#d9dccf', '#2e342f', 'speck']);
+  sp('crappie', 'Black Crappie', 'pond lake bayou', 0, 0.3, 3.5, 10, 0.3, 0.8, 'UNA', 'of', { j: 1, b: 0.8, f: 0.3 }, 'PFW', 3, [0.75, 0.8, 0.8, 0, 1, 2, 0], ['crappie', '#55605a', '#d9dccf', '#2e342f', 'speck']);
   sp('lmbass', 'Largemouth Bass', 'pond lake', 1, 0.8, 11, 11.7, 0.1, 0.8, 'AU', 'or', { s: 1, c: 1, j: 0.8, b: 0.5, f: 0.3 }, 'PSF', 4, [0.85, 1.0, 1.0, 0.7, 0, 1, 1], ['bass', '#4f6b34', '#eef0d0', '#2b3a1c', 'lat']);
-  sp('catfish', 'Channel Catfish', 'pond river lake', 1, 1.5, 30, 12.5, 0.6, 1, 'UN', 'roT', { b: 1, j: 0.3, d: 0.4 }, 'PSF', 2.2, [0.75, 1.2, 0.8, 0, 0, 3, 0], ['cat', '#6b7480', '#e8e6df', '#3b4048', 'speck']);
+  sp('catfish', 'Channel Catfish', 'pond river lake bayou', 1, 1.5, 30, 12.5, 0.6, 1, 'UN', 'roT', { b: 1, j: 0.3, d: 0.4 }, 'PSF', 2.2, [0.75, 1.2, 0.8, 0, 0, 3, 0], ['cat', '#6b7480', '#e8e6df', '#3b4048', 'speck']);
   sp('carp', 'Common Carp', 'pond river', 1, 3, 45, 9.2, 0.55, 1, 'ADU', 'so', { b: 1, f: 0.2 }, 'PSF', 1.2, [0.85, 1.3, 0.7, 0.1, 0, 4, 0], ['carp', '#9a7a35', '#efd79a', '#6b4e1d', 'scales']);
-  sp('bowfin', 'Bowfin', 'pond', 1, 2, 20, 11.5, 0.3, 0.9, 'UN', 'ro', { b: 0.9, s: 0.6, c: 0.6 }, 'SF', 2.5, [0.95, 1.2, 0.9, 0.2, 0, 1, 1], ['bowfin', '#5b6340', '#c9c79a', '#2c321e', 'mottled']);
+  sp('bowfin', 'Bowfin', 'pond bayou', 1, 2, 20, 11.5, 0.3, 0.9, 'UN', 'ro', { b: 0.9, s: 0.6, c: 0.6 }, 'SF', 2.5, [0.95, 1.2, 0.9, 0.2, 0, 1, 1], ['bowfin', '#5b6340', '#c9c79a', '#2c321e', 'mottled']);
   sp('gar', 'Longnose Gar', 'pond river', 1, 2, 40, 16, 0.02, 0.35, 'D', 's', { b: 0.6, s: 0.7 }, 'SF', 1.6, [0.75, 1.1, 1.1, 0.6, 0, 1, 1], ['gar', '#7b8358', '#e3e1c4', '#3d3f29', 'spots']);
   sp('bullhead', 'Brown Bullhead', 'pond', 0, 0.3, 3, 9, 0.65, 1, 'UN', 'rof', { b: 1 }, 'PSF', 1.5, [0.7, 0.9, 0.6, 0, 0, 3, 0], ['cat', '#6b5a3a', '#dcd0a4', '#3d3020', 'mottled']);
   // river
@@ -290,6 +325,64 @@
   sp('sailking', 'Abyssal Sailking', 'deep', 4, 1400, 2000, 13.6, 0.03, 0.35, 'D', 's', { c: 1, s: 0.8 }, 'S', 8, [1.2, 2.2, 1.8, 1.6, 0, 0, 1], ['marlin', '#12245a', '#dde6f2', '#8a5ce0', 'bars'],
     { beh: 'sprinter', lore: 'A marlin with a violet sail, said to outrun the boat\'s wake. Bring every metre of line you own.', hint: 'The Blue Shelf on a sunny summer day, trolling fast lures.' });
 
+  // mangrove lagoon
+  sp('bonefish', 'Bonefish', 'mangrove', 1, 1, 14, 13, 0.6, 1, 'AD', 'so', { b: 1, f: 0.8, j: 0.7 }, '*', 5, [1.05, 1.2, 1.6, 0, 1, 2, 0], ['whitefish', '#b8c4c8', '#f2f4f2', '#7d8a90', 'lat']);
+  sp('mangsnapper', 'Mangrove Snapper', 'mangrove', 0, 0.4, 8, 10.5, 0.3, 0.9, 'ADUN', 'so', { b: 1, j: 0.8, s: 0.5 }, '*', 4, [0.9, 0.9, 0.9, 0, 1, 2, 0], ['snapper', '#7a5048', '#e6c4b6', '#3e2a24', 'scales']);
+  sp('permit', 'Permit', 'mangrove', 2, 3, 45, 10.5, 0.3, 0.9, 'AD', 's', { b: 0.8, j: 1, f: 0.6 }, 'SF', 6, [1.05, 1.4, 1.3, 0.2, 0, 2, 0], ['drum', '#8e9aa0', '#f2f2ec', '#2a2e30', 'plain']);
+  sp('barracuda', 'Great Barracuda', 'mangrove pier', 1, 3, 60, 16, 0.05, 0.5, 'AD', 's', { s: 1, c: 1 }, '*', 2.5, [1.0, 1.0, 1.7, 0.6, 0, 0, 1], ['pike', '#5e6e78', '#e8ecee', '#20262a', 'bars']);
+  sp('ladyfish', 'Ladyfish', 'mangrove', 0, 0.3, 4, 13, 0.05, 0.5, 'ADU', 'so', { s: 1, f: 0.8, c: 0.6, b: 0.5 }, 'PSF', 2, [0.8, 0.8, 1.4, 1.2, 1, 1, 1], ['minnow', '#a8b6be', '#f2f4f4', '#c9d2d8', 'plain']);
+  // alpine falls
+  sp('cutthroat', 'Cutthroat Trout', 'alpine', 0, 0.3, 8, 12.3, 0.1, 0.7, 'AD', 'orf', { f: 1, s: 0.8, b: 0.7 }, 'PSF', 5, [0.85, 1.0, 1.1, 0.8, 0, 1, 1], ['trout', '#7a7a4a', '#f0e2c8', '#d84a3a', 'spots']);
+  sp('goldentrout', 'Golden Trout', 'alpine', 2, 0.3, 6, 12, 0.1, 0.6, 'AD', 's', { f: 1, s: 0.7 }, 'S', 12, [0.8, 0.9, 1.1, 0.9, 0, 1, 1], ['trout', '#9a8a3a', '#f4b84a', '#d8503a', 'bars']);
+  sp('grayling', 'Arctic Grayling', 'alpine', 1, 0.3, 5, 12.6, 0.1, 0.5, 'ADU', 'so', { f: 1, s: 0.6, j: 0.4 }, 'PSF', 6, [0.75, 0.9, 1.0, 0.6, 1, 1, 1], ['whitefish', '#6a6e80', '#e8e6ee', '#8a70b8', 'speck']);
+  sp('bulltrout', 'Bull Trout', 'alpine', 1, 1, 25, 12.6, 0.5, 1, 'UN', 'or', { c: 1, j: 0.8, s: 0.6 }, 'PF', 6, [0.95, 1.2, 1.1, 0.4, 0, 1, 1], ['trout', '#5a6050', '#e8e2d0', '#e8a070', 'spots']);
+  sp('sculpin', 'Mottled Sculpin', 'alpine', 0, 0.05, 0.4, 10, 0.8, 1, 'ADUN', 'sorf', { b: 1, j: 0.8 }, '*', 8, [0.6, 0.5, 0.6, 0, 0, 2, 0], ['bowfin', '#6a5e46', '#c8b890', '#3a3020', 'mottled']);
+  // night harbor
+  sp('eel', 'American Eel', 'harbor bayou', 0, 0.3, 7, 18, 0.6, 1, 'N', 'roT', { b: 1, j: 0.5 }, 'PSF', 4, [0.8, 1.0, 0.8, 0, 0, 3, 0], ['eel', '#4a4a2a', '#d8d0a0', '#2a2a18', 'plain']);
+  sp('weakfish', 'Weakfish', 'harbor', 1, 1, 17, 12.5, 0.2, 0.7, 'UN', 'of', { s: 0.9, j: 1, b: 0.8 }, 'PSF', 3.6, [0.8, 0.9, 1.1, 0.3, 1, 1, 1], ['trout', '#6a7888', '#eeeef0', '#b8a040', 'speck']);
+  sp('tautog', 'Tautog', 'harbor', 1, 1, 22, 10, 0.7, 1, 'AD', 'o', { b: 1, j: 0.6 }, 'PF', 4, [1.0, 1.1, 0.7, 0, 0, 3, 0], ['grouper', '#3a3a36', '#8a8a80', '#1a1a18', 'mottled']);
+  sp('scup', 'Scup', 'harbor', 0, 0.3, 4, 9.5, 0.4, 0.9, 'ADUN', 'so', { b: 1, j: 0.8 }, 'PSF', 3, [0.85, 0.8, 0.8, 0, 1, 2, 0], ['sunfish', '#a8a8b0', '#f0f0f2', '#5a8ad0', 'stripes']);
+  sp('cod', 'Atlantic Cod', 'harbor fjord', 0, 1, 60, 11.5, 0.6, 1, 'ADUN', 'orf', { j: 1, b: 0.9, d: 0.9 }, 'FWP', 3.2, [0.85, 1.0, 0.8, 0, 1, 2, 0], ['cat', '#8a8050', '#ece6d0', '#5a5030', 'speck']);
+  // kelp reef
+  sp('calico', 'Calico Bass', 'reef', 0, 0.5, 8, 11, 0.3, 0.9, 'ADU', 'so', { j: 1, c: 0.8, s: 0.7, d: 0.5 }, '*', 4, [0.9, 0.9, 1.0, 0, 1, 1, 1], ['bass', '#6a5a3a', '#e8e0c0', '#2e2a1a', 'dots']);
+  sp('casheephead', 'California Sheephead', 'reef', 1, 1, 30, 10.5, 0.6, 1, 'AD', 'so', { j: 1, d: 0.9, b: 0.8 }, '*', 4.5, [1.0, 1.1, 0.9, 0, 0, 2, 0], ['grouper', '#2a2a2e', '#f2f0ec', '#d83a2e', 'bars']);
+  sp('parrotfish', 'Rainbow Parrotfish', 'reef', 1, 2, 40, 10.5, 0.4, 0.9, 'D', 's', { b: 0.8, j: 0.6 }, 'SF', 4, [0.9, 1.0, 0.9, 0, 1, 2, 0], ['snapper', '#3ac0a8', '#f0a050', '#2a70d0', 'scales']);
+  sp('lingcod', 'Lingcod', 'reef fjord', 1, 3, 60, 12.6, 0.7, 1, 'AD', 'ofr', { j: 1, d: 1, c: 0.6 }, 'FWP', 3.5, [1.0, 1.2, 1.1, 0, 0, 1, 1], ['bass', '#6a7258', '#d8dcc8', '#3a4030', 'mottled']);
+  sp('yellowtail', 'Yellowtail Amberjack', 'reef', 2, 6, 80, 12.5, 0.1, 0.6, 'AU', 'so', { c: 1, s: 0.9, j: 0.6 }, 'SF', 4, [1.1, 1.3, 1.5, 0.1, 1, 0, 1], ['tuna', '#4a6a8a', '#eef0f2', '#f2d21a', 'lat']);
+  sp('opaleye', 'Opaleye', 'reef', 0, 0.3, 6, 10, 0.3, 0.8, 'AD', 'so', { b: 1, j: 0.5 }, '*', 3, [0.85, 0.8, 0.9, 0, 1, 2, 0], ['drum', '#3e5a4a', '#c8d8c8', '#e8f0e0', 'dots']);
+  // glacier fjord
+  sp('pollock', 'Pollock', 'fjord', 0, 1, 35, 12, 0.2, 0.8, 'AD', 'orf', { j: 1, c: 0.8, d: 0.8 }, '*', 2.4, [0.9, 1.0, 1.2, 0, 1, 1, 1], ['whitefish', '#3e5848', '#e8ece6', '#a8b8a0', 'lat']);
+  sp('wolffish', 'Atlantic Wolffish', 'fjord', 1, 2, 40, 12, 0.8, 1, 'AD', 'of', { d: 1, j: 0.8 }, 'FWP', 4, [1.0, 1.2, 0.8, 0, 0, 2, 0], ['bowfin', '#5a6070', '#a8b0b8', '#2a3038', 'bars']);
+  sp('redfish', 'Golden Redfish', 'fjord', 1, 1, 15, 11, 0.6, 1, 'AD', 'of', { d: 1, j: 0.9 }, '*', 5, [0.85, 0.9, 0.8, 0, 1, 2, 0], ['grouper', '#d84a30', '#f6c8a8', '#a8301e', 'plain']);
+  sp('greenshark', 'Greenland Shark', 'fjord', 3, 200, 900, 15, 0.85, 1, 'N', 'of', { d: 1 }, 'FW', 1.6, [1.0, 2.0, 0.6, 0, 0, 3, 0], ['shark', '#4a4e52', '#9aa0a4', '#2a2e30', 'speck']);
+  // cavern lake
+  sp('cavefish', 'Blind Cavefish', 'cavern', 0, 0.05, 0.4, 11, 0.2, 0.9, 'ADUN', 'sorTf', { g: 1, b: 0.8 }, '*', 15, [0.6, 0.6, 0.8, 0, 1, 1, 0], ['minnow', '#e8c8c8', '#f6e8e8', '#f0b0b0', 'plain']);
+  sp('blindcat', 'Ghost Blindcat', 'cavern', 1, 0.3, 6, 11.5, 0.7, 1, 'ADUN', 'sorTf', { g: 1, b: 1 }, '*', 14, [0.8, 1.0, 0.7, 0, 0, 3, 0], ['cat', '#e2d6d0', '#f6f0ec', '#c8a8a0', 'plain']);
+  sp('cavebass', 'Cave Bass', 'cavern', 1, 0.5, 9, 11.7, 0.2, 0.8, 'ADUN', 'sorTf', { g: 1, j: 0.7, s: 0.5 }, '*', 9, [0.9, 1.0, 1.0, 0.2, 0, 1, 1], ['bass', '#8a9098', '#e8eaee', '#5a6068', 'lat']);
+  sp('palesculpin', 'Pallid Sculpin', 'cavern', 0, 0.05, 0.6, 10, 0.8, 1, 'ADUN', 'sorTf', { g: 1, b: 1, j: 0.6 }, '*', 14, [0.6, 0.6, 0.6, 0, 0, 2, 0], ['bowfin', '#d8ccc0', '#f2ece4', '#a89888', 'speck']);
+  sp('glowtetra', 'Glowfin Tetra', 'cavern', 2, 0.05, 0.3, 11, 0.2, 0.7, 'ADUN', 'sorTf', { g: 1 }, '*', 60, [0.5, 0.5, 1.2, 0, 1, 1, 0], ['minnow', '#5a7aa0', '#c8e0f8', '#7ff0d8', 'lat']);
+  // bayou swamp
+  sp('warmouth', 'Warmouth', 'bayou', 0, 0.1, 1.5, 8.8, 0.2, 0.8, 'ADU', 'or', { b: 1, j: 0.7, s: 0.4 }, 'PSF', 3, [1.0, 0.8, 0.8, 0, 0, 2, 1], ['sunfish', '#6a5030', '#d8b880', '#8a2a20', 'mottled']);
+  sp('spottedgar', 'Spotted Gar', 'bayou', 0, 1, 9, 15, 0.02, 0.4, 'D', 'so', { b: 0.7, s: 0.6 }, 'SF', 1.8, [0.7, 0.9, 1.0, 0.5, 0, 1, 1], ['gar', '#7a7a50', '#e0dcc0', '#2e2c1a', 'spots']);
+  sp('bluecat', 'Blue Catfish', 'bayou', 1, 2, 100, 12.5, 0.7, 1, 'UN', 'roT', { b: 1, d: 0.4 }, '*', 1.8, [0.85, 1.4, 0.8, 0, 0, 3, 0], ['cat', '#5a6e88', '#e8eaf0', '#2a3448', 'plain']);
+  sp('flathead', 'Flathead Catfish', 'bayou', 1, 2, 90, 12, 0.7, 1, 'N', 'ro', { b: 1 }, 'SF', 2, [0.9, 1.4, 0.7, 0, 0, 3, 0], ['cat', '#8a7040', '#e8d8a8', '#4a3818', 'mottled']);
+  sp('alligatorgar', 'Alligator Gar', 'bayou', 3, 30, 250, 15.5, 0.05, 0.6, 'DU', 'sT', { b: 1 }, 'SF', 1.5, [1.0, 1.7, 1.0, 0.6, 0, 2, 0], ['gar', '#5a5a3a', '#d0ccb0', '#2a2a18', 'spots']);
+  // legends of the new waters
+  sp('rootwarden', 'Old Rootwarden', 'mangrove', 4, 55, 80, 12.6, 0.3, 0.9, 'N', 'r', { b: 1, c: 0.6 }, 'SF', 30, [1.1, 1.9, 1.3, 0.6, 0, 1, 1], ['walleye', '#6a7058', '#ece6d2', '#141612', 'lat'],
+    { beh: 'snagger', lore: 'A snook as long as a canoe that lives among the mangrove roots. It dives for them the moment it feels the hook — steer it out or lose it.', hint: 'Mangrove Lagoon on a rainy night, live bait by the roots. Summer or fall.' });
+  sp('fallswraith', 'The Falls Wraith', 'alpine', 4, 30, 45, 12.8, 0.3, 0.9, 'A', 'f', { f: 1, s: 0.8 }, 'PF', 35, [1.0, 1.8, 1.4, 1.4, 0, 1, 1], ['trout', '#d0d6da', '#f6f6f2', '#e86a80', 'rainbow'],
+    { beh: 'sprinter', lore: 'A pale trout that rides the white water below the falls. Hooked, it runs with the current and never stops.', hint: 'Alpine Falls on a foggy dawn, a dry fly in the pool. Spring or fall.' });
+  sp('lamplighter', 'The Lamplighter', 'harbor', 4, 60, 110, 18, 0.7, 1, 'N', 'of', { b: 1, j: 0.6 }, 'FW', 30, [1.0, 1.9, 1.0, 0, 0, 2, 0], ['eel', '#20242a', '#5a6068', '#f2d27a', 'speck'],
+    { beh: 'sounder', lore: 'A conger eel as thick as a mooring line that hunts under the harbor lamps. Hooked, it pours itself back into the deep.', hint: 'Night Harbor on a foggy or overcast night, live bait under the lamps. Fall or winter.' });
+  sp('prismwrasse', 'The Prism Wrasse', 'reef', 4, 60, 90, 10.5, 0.4, 0.9, 'D', 's', { j: 1, b: 0.8 }, 'S', 40, [1.05, 1.9, 1.1, 0, 0, 1, 0], ['snapper', '#3ad0c0', '#f2a0e0', '#8a5ce0', 'rainbow'],
+    { beh: 'circler', lore: 'A wrasse the size of a door, every scale a different color. It spins around the coral heads; steer with each turn.', hint: 'Kelp Reef on a bright summer day, a jig over the coral.' });
+  sp('glacierback', 'Glacierback', 'fjord', 4, 500, 700, 10.5, 0.9, 1, 'D', 'f', { d: 1 }, 'W', 12, [1.1, 2.1, 0.8, 0, 0, 3, 0], ['flat', '#c8d8e2', '#f8fbfc', '#6a8a9a', 'mottled'],
+    { beh: 'anchor', lore: 'A halibut pale as an ice floe and wide as a dinghy. It plasters itself to the fjord floor; pull from the side to peel it up.', hint: 'Glacier Fjord on a foggy winter day, a deep rig on the bottom.' });
+  sp('paleoracle', 'The Pale Oracle', 'cavern', 4, 90, 140, 11.5, 0.8, 1, 'N', 'sorTf', { g: 1, b: 0.8 }, 'SF', 30, [1.0, 1.9, 0.8, 0, 0, 4, 0], ['cat', '#f2ece8', '#fbf8f6', '#d8c0b8', 'plain'],
+    { beh: 'phantom', lore: 'A blind white catfish older than the cave. It feels your line before you feel it, and when it runs you lose sight of it.', hint: 'Cavern Lake at night in summer or fall, a glow jig resting on the floor.' });
+  sp('grandpappy', 'Grandpappy Gator', 'bayou', 4, 280, 340, 15.6, 0.05, 0.6, 'U', 'T', { b: 1 }, 'S', 20, [1.05, 2.0, 1.0, 0.8, 0, 2, 0], ['gar', '#3e4a2a', '#c8c4a0', '#1e2414', 'spots'],
+    { beh: 'feint', lore: 'The oldest gar in the bayou, armored like a pirogue. It plays dead alongside the bank, then bolts for the cypress.', hint: 'Bayou Swamp at dusk in a summer storm, bait near the surface.' });
+
   function speciesAt(locId) { return SPECIES.filter(function (s) { return s.locs.indexOf(locId) >= 0; }); }
   function condAt(seed, day, min, locId) {
     var w = weatherAt(seed, day, min);
@@ -331,11 +424,11 @@
     return clamp(1 - hrs * (cooler ? 0.018 : 0.07), 0.35, 1);
   }
   function priceOf(s, w, fresh, rep) {
-    return Math.max(1, Math.round(s.price * w * RAR_PRICE[s.rar] * (fresh == null ? 1 : fresh) * (1 + Math.min(0.25, (rep || 0) / 400))));
+    return Math.max(2, Math.round((s.price * w * 2.2 + 4 + 3 * s.rar) * RAR_PRICE[s.rar] * (fresh == null ? 1 : fresh) * (1 + Math.min(0.25, (rep || 0) / 400))));
   }
   function releaseRep(s, w) { return Math.max(1, Math.round([1, 2, 5, 12, 40][s.rar] + Math.sqrt(w) * 0.6)); }
-  function catchXp(s, w) { return Math.round(RAR_XP[s.rar] + Math.sqrt(Math.max(0, w)) * 4); }
-  function cumXp(l) { return l <= 1 ? 0 : Math.round(60 * Math.pow(l - 1, 2.1)); }
+  function catchXp(s, w) { return Math.round(RAR_XP[s.rar] + Math.sqrt(Math.max(0, w)) * 5); }
+  function cumXp(l) { return l <= 1 ? 0 : Math.round(40 * Math.pow(l - 1, 1.9)); }
   function levelOf(xp) { var l = 1; while (l < 40 && xp >= cumXp(l + 1)) l++; return l; }
   function absMin(day, min) { return day * 1440 + min; }
 
@@ -363,7 +456,7 @@
   function bandY(W, s, x) {
     var b = depthAt(W.lay, x), top = W.st.iceT ? W.st.iceT + 0.15 : (s.d0 < 0.05 ? 0.12 : 0.3);
     var y0 = Math.max(top, s.d0 * b), y1 = Math.max(y0 + 0.1, Math.min(b - 0.18, s.d1 * b));
-    if (W.L.id === 'deep') { y0 = Math.max(top, s.d0 < 0.5 ? s.d0 * 30 : s.d0 * b); y1 = Math.max(y0 + 0.3, s.d1 < 0.6 ? s.d1 * 40 : Math.min(b - 0.3, s.d1 * b)); }
+    if (W.lay.maxD > 30) { y0 = Math.max(top, s.d0 < 0.5 ? s.d0 * 30 : s.d0 * b); y1 = Math.max(y0 + 0.3, s.d1 < 0.6 ? s.d1 * 40 : Math.min(b - 0.3, s.d1 * b)); }
     return [y0, y1];
   }
   function newFish(W, s, x, y) {
@@ -378,10 +471,10 @@
   var HAB_WEED = ' bluegill pumpkinseed shiner crappie lmbass pike muskie perch bowfin thunderjaw frostmaw gar whitebass ';
   var HAB_ROCK = ' smallmouth rockbass seabass sheepshead grouper snapper brown sauger drum burbot reddrum ';
   function habitat(W, s, x) {
-    var lay = W.lay, b = depthAt(lay, x), need = W.L.id === 'deep' ? 2 : Math.max(0.6, Math.min(1.4, s.d1 * lay.maxD * 0.25));
+    var lay = W.lay, b = depthAt(lay, x), need = W.lay.maxD > 30 ? 2 : Math.max(0.6, Math.min(1.4, s.d1 * lay.maxD * 0.25));
     if (b < need) return 0.03;
     var w = 1, f = b / lay.maxD, i;
-    if (W.L.id !== 'deep') {
+    if (W.lay.maxD <= 30) {
       if (s.d0 >= 0.5) w *= 0.25 + 1.5 * f;                 // bottom dwellers: the deeper, the better
       else if (s.d1 <= 0.6) w *= 1.2 - 0.6 * Math.abs(f - 0.4);   // shallow and mid-water fish: the shelf
     }
@@ -452,7 +545,7 @@
     if (perfect) dist *= 1.06;
     var spread = (1 - quality) * (1.2 + 2.2 * power) * (r() * 2 - 1);
     var drift = c.wdir * c.wind * T * (lu.surface ? 2.6 : lu.heavy ? 0.8 : 1.7);
-    var X = clamp(st.castFrom + dist + spread + drift, st.minX + 1, W.lay.W - 0.5);
+    var X = clamp(st.castFrom + dist + spread + drift, Math.max(st.minX + 1, st.anc.x + 2.5), W.lay.W - 0.5);
     W.fl = { t: 0, T: T, x0: st.tip.x, y0: st.tip.y, x1: X, h: 1.2 + power * 3.2, perfect: perfect, drift: drift };
     W.phase = 'flight';
     ev(W, 'cast', { power: power, perfect: perfect });
@@ -492,13 +585,17 @@
     if (d.bob) {
       // a float on top, the bait hanging under it at the set depth
       var want = Math.min(W.floatD, bot);
-      if (reel) { lu.bx += (ax - lu.bx) * 0 + Math.sign(ax - lu.bx) * rs * 0.85 * dt; want *= 0.7; }
+      if (reel) {
+        var gap = ax - lu.bx;
+        lu.bx += Math.sign(gap) * Math.min(Math.abs(gap), rs * 0.85 * dt);
+        want = Math.abs(gap) < 1.3 ? 0 : want * 0.7;         // at the rod tip the rig lifts out of the water
+      }
       else if (!st.hole) lu.bx += (cur + c.wdir * c.wind * 0.05) * dt;
       if (st.hole) lu.bx = st.hole;
       lu.bx = clamp(lu.bx, st.minX, W.lay.W - 0.3);
       var px = lu.x, py = lu.y;
       lu.x += (lu.bx - lu.x) * Math.min(1, dt * 3);
-      lu.y += clamp(want - lu.y, -0.8 * dt, d.sink * dt);
+      lu.y += clamp(want - lu.y, -0.8 * fast * dt, d.sink * dt);
       lu.vx = (lu.x - px) / dt; lu.vy = (lu.y - py) / dt;
     } else {
       if (reel) {
@@ -526,8 +623,12 @@
     lu.moving = reel ? 1 : 0;
     // Reeled all the way in?
     lu.maxY = Math.max(lu.maxY || 0, lu.y);
-    var near = st.hole ? lu.y < 0.45 && (lu.maxY > 0.9 || W.t - lu.landT > 1.5) : (lu.x <= st.minX + 0.15 || (Math.abs(lu.x - st.anc.x) < 1.4 && lu.y < 0.5 && reel));
-    if (near && reel && W.t - lu.landT > 0.6) { W.phase = 'ready'; W.hookBait = !!lu.baited && W.hookBait; W.lure = null; releaseBiter(W, false); ev(W, 'in'); }
+    // Home? Any rig, any water: near the rod and up at the top — or simply wound up to the rod tip for a beat.
+    var hx = d.bob ? lu.bx : lu.x, atRod = Math.abs(hx - st.anc.x) < 1.6;
+    var near = st.hole ? lu.y < 0.45 && (lu.maxY > 0.9 || W.t - lu.landT > 1.5) : (lu.x <= st.minX + 0.15 || (Math.abs(hx - st.anc.x) < 1.4 && lu.y < 0.6));
+    lu.homeT = reel && atRod ? (lu.homeT || 0) + dt : 0;
+    if (lu.quick) lu.quickTime = (lu.quickTime || 0) + dt;
+    if (reel && W.t - lu.landT > 0.6 && (near || lu.homeT > 1.2 || lu.quickTime > 20)) { W.phase = 'ready'; W.hookBait = !!lu.baited && W.hookBait; W.lure = null; releaseBiter(W, false); ev(W, 'in'); }
   }
   // One tap: wind the line straight back in, fast (nothing bites a lure on its way home).
   function reelIn(W) {
@@ -558,7 +659,7 @@
   function appeal(W, f) {
     var lu = W.lure, d = lu.def, s = f.sp;
     if ((!lu.baited && d.bob) || lu.quick) return 0;
-    var a = (s.lures[d.id] || 0.04) * activity(s, W.cond);
+    var a = (s.lures[d.id] || (d.glow && s.lures.j ? s.lures.j * 0.6 : 0.04)) * activity(s, W.cond) * (W.L.bite || 1);
     if (d.ideal > 0) {
       var sp = lu.moving ? lu.spd : 0;
       a *= clamp(1 - Math.abs(sp - d.ideal) / (d.ideal + 0.7), 0.15, 1) * (s.chase || !lu.moving ? 1 : 0.7);
@@ -571,13 +672,15 @@
   }
   function light(W, y) {
     var c = W.cond, l = Math.exp(-Math.max(0, y) / W.L.clar);
-    l *= c.band === NIGHT ? 0.4 : c.band === DAY ? 1 : 0.72;
+    if (W.L.dark) return l * 0.07;                         // underground: only your lantern
+    l *= c.band === NIGHT ? (W.L.lit ? 0.75 : 0.4) : c.band === DAY ? 1 : 0.72;
     l *= [1, 0.85, 0.8, 0.65, 0.75][c.wx];
     return l;
   }
   function vision(W, f) {
     var lu = W.lure, d = lu.def, l = light(W, (f.y + lu.y) / 2), v = 3.6 * (0.3 + 0.7 * l) * (0.8 + 0.2 * f.sp.spd) * (W.L.vis || 1);
     if (d.flash) v *= 1.15 + 0.4 * (1 - l);
+    if (d.glow) v = Math.max(v, 4.2 * (W.L.vis || 1));
     if (d.scent && lu.baited) v = Math.max(v, d.scent * Math.sqrt(W.L.vis || 1));
     return v;
   }
@@ -748,16 +851,22 @@
   }
   function pickMode(W, F) {
     var f = F.f, s = f.sp, r = W.r, beh = s.beh;
-    var w = [1.2 * s.spd, 1.3, 0.9, 0.8, (f.y < 4 || W.L.id !== 'deep') && s.jmp && !W.st.iceT ? s.jmp * 0.7 : 0];   // run dart rest dive jump
+    var w = [1.2 * s.spd, 1.3, 0.9, 0.8, (f.y < 4 || W.lay.maxD <= 30) && s.jmp && !W.st.iceT ? s.jmp * 0.7 : 0];   // run dart rest dive jump
     if (beh === 'leaper') w[4] *= 3;
     if (beh === 'sounder' || beh === 'anchor' || beh === 'phantom') w[3] *= 2.5;
     if (beh === 'sprinter') w[0] *= 2;
     if (beh === 'circler') w[1] *= 3;
     var m = ['run', 'dart', 'rest', 'dive', 'jump'][pickW(r(), w)];
+    var roots = W.lay.roots;
     F.mode = m;
     F.mT = m === 'run' ? (beh === 'sprinter' ? 3 + r() * 3 : 1.2 + r() * 2) : m === 'dart' ? (beh === 'circler' ? 0.5 + r() * 0.6 : 0.9 + r() * 1.3) : m === 'rest' ? 1 + r() * 1.8 : m === 'dive' ? 1.2 + r() * 1.8 : 3;
     if (m === 'dart' || (m === 'run' && r() < 0.5)) F.dir = r() < 0.5 ? -1 : 1;
     if (m === 'run' && r() < 0.6) F.dir = 1;
+    if (m === 'run' && roots.length && (beh === 'snagger' || r() < 0.4)) {   // bolt for the nearest roots
+      var best = null;
+      roots.forEach(function (z) { var cx = (z.x0 + z.x1) / 2; if (!best || Math.abs(cx - f.x) < Math.abs(best - f.x)) best = cx; });
+      F.dir = best > f.x ? 1 : -1;
+    }
     F.dark = beh === 'phantom' && (m === 'run' || m === 'dart') && r() < 0.7;
     if (m === 'jump') ev(W, 'jumpcue');
   }
@@ -843,6 +952,13 @@
       }
     }
     F.load = load;
+    if (W.lay.roots.length && !D.noSnap) {
+      var inR = false;
+      for (var ri = 0; ri < W.lay.roots.length; ri++) if (f.x > W.lay.roots[ri].x0 && f.x < W.lay.roots[ri].x1) inR = true;
+      if (inR && !F.air && F.T > 0.15 && cn < 0.3) F.snag = (F.snag || 0) + dt * (s.beh === 'snagger' ? 0.55 : 0.3);
+      else F.snag = Math.max(0, (F.snag || 0) - dt * 0.45);
+      if (F.snag >= 1) { F.why = 'snag'; endFight(W, 'snap'); return; }
+    }
     var minD = W.st.hole ? 0.4 : Math.abs(anc.y) + 0.3;
     if (F.d < minD) F.d = minD;
     var Tt = eload / lineLb + F.spike;
@@ -855,11 +971,12 @@
     if (F.T < 0.06 && !F.air) F.slackT += dt; else F.slackT = Math.max(0, F.slackT - dt * 2);
     if (F.slackT > D.slack * (F.solid ? 1 : 0.65) * (tired ? 1.6 : 1) * (1 + 1.5 / (1 + Fm))) { F.why = 'slack'; endFight(W, 'throw'); return; }
     // stamina: drained by pressure, more with the rod held against the run
-    if (!slack && F.T > 0.08) F.sta -= dt * (0.3 + 0.95 * eload / Math.max(0.5, Fm)) * (1 + 0.6 * Math.max(0, cn)) * (cn < -0.3 ? 0.65 : 1) * (F.mode === 'run' ? 1.25 : 1) + (F.slip > 0 ? dt * 0.5 : 0);
+    if (!slack && (F.T > 0.08 || reeling)) F.sta -= dt * (0.3 + 0.95 * eload / Math.max(0.5, Fm)) * (1 + 0.6 * Math.max(0, cn)) * (cn < -0.3 ? 0.65 : 1) * (F.mode === 'run' ? 1.25 : 1) + (F.slip > 0 ? dt * 0.5 : 0);
     else if (!tired) F.sta = Math.min(F.sta0, F.sta + dt * F.sta0 * 0.035);
     // landed?
     if (dist <= W.st.landD + 0.2 && F.d <= W.st.landD + 0.4) {
-      if (tired || (D.noSnap && F.sta < F.sta0 * 0.12)) { endFight(W, 'landed'); return; }
+      // small fish can't fight the rod right at your feet
+      if (tired || (D.noSnap && F.sta < F.sta0 * 0.12) || (Fm < 1.2 && F.sta < F.sta0 * 0.5)) { endFight(W, 'landed'); return; }
       if (F.mode !== 'run') { F.mode = 'run'; F.mT = 1.2; F.dir = 1; ev(W, 'bolt'); }
     }
   }
@@ -906,9 +1023,9 @@
   // ---- career ----
   function newSave(seed) {
     return {
-      v: 1, seed: (seed == null ? (Date.now() ^ (Math.random() * 1e9)) : seed) >>> 0, money: 40, xp: 0, rep: 0, day: 1, min: 360, loc: 'pond', atWater: false,
-      rod: 0, reel: 0, line: 0, owned: { rod: [0], reel: [0], line: [0] }, lures: { b: 1, s: 1 }, lure: 'b', bait: 20,
-      up: { creel: 0, cooler: 0, finder: 0, boat: 0 }, creel: [], journal: {}, contracts: [], cday: 0, tday: 0,
+      v: 1, seed: (seed == null ? (Date.now() ^ (Math.random() * 1e9)) : seed) >>> 0, money: 60, xp: 0, rep: 0, day: 1, min: 360, loc: 'pond', atWater: false,
+      rod: 0, reel: 0, line: 0, owned: { rod: [0], reel: [0], line: [0] }, lures: { b: 1, s: 1 }, lure: 'b', bait: 30,
+      up: { creel: 0, cooler: 0, finder: 0, boat: 0, lantern: 0 }, creel: [], journal: {}, contracts: [], cday: 0, tday: 0,
       stats: { caught: 0, released: 0, sold: 0, earned: 0, snaps: 0, lost: 0, tWins: 0, tPlayed: 0, cDone: 0, days: 0, best: null },
       diff: 'normal', amb: 1, floatD: 1.5, drag: 0.65, daily: {}, seen: 0, tut: 0, today: { n: 0, rel: 0, earn: 0 }
     };
@@ -952,6 +1069,7 @@
     var lvl = levelOf(save.xp);
     if (lvl < L.lvl) return { ok: false, why: 'Level ' + L.lvl };
     if (L.boat && !save.up.boat) return { ok: false, why: 'Needs a boat' };
+    if (L.needs && !save.up[L.needs]) return { ok: false, why: 'Needs a lantern' };
     if (L.winter && seasonOf(save.day) !== 3) return { ok: false, why: 'Winter only' };
     return { ok: true };
   }
@@ -1006,6 +1124,7 @@
         var lb = Math.round((6 + lvl * 4) * (0.8 + r() * 0.5) * (LOC[lid].salt ? 3 : 1));
         c = { kind: 'bag', loc: lid, w: lb, by: 1440, text: 'Land ' + lb + ' lb in total at ' + LOC[lid].name, pay: Math.round(lb * 9 + 40), xp: 40 + lb, rep: 3 };
       }
+      if (k === 0 && lvl < 5) c = { kind: 'any', n: 3, by: 1440, text: 'Land any 3 fish', pay: 30 + lvl * 15, xp: 50, rep: 2 };
       c.id = save.day + '-' + k; c.prog = 0; c.done = false;
       out.push(c);
     }
@@ -1019,6 +1138,7 @@
       if (e.kind === 'catch') {
         if (c.kind === 'size' && e.sp === c.sp && e.w >= c.w) c.prog = 1;
         else if (c.kind === 'count' && e.sp === c.sp) c.prog++;
+        else if (c.kind === 'any') c.prog++;
         else if (c.kind === 'bag' && e.loc === c.loc) c.prog = Math.round((c.prog + e.w) * 100) / 100;
       } else if (e.kind === 'release' && c.kind === 'release') c.prog++;
       var goal = c.kind === 'size' ? 1 : c.kind === 'bag' ? c.w : c.n;
@@ -1041,7 +1161,7 @@
       cpus.push({ name: nm, skill: clamp(0.55 + lvl * 0.035 + (r() - 0.5) * 0.5, 0.4, 1.6), bag: [] });
     }
     var fee = 30 + lvl * 15;
-    return { loc: locId, day: day, start: start, dur: 150, end: start + 150, lim: 5, fee: fee, prizes: [fee * 5, Math.round(fee * 2.4), Math.round(fee * 1.2)], cpus: cpus, bag: [], r: mulberry32(hash(seed, 'tsim', day)), acc: 0, done: false, log: [] };
+    return { loc: locId, day: day, start: start, dur: 300, end: start + 300, lim: 5, fee: fee, prizes: [fee * 5, Math.round(fee * 2.4), Math.round(fee * 1.2)], cpus: cpus, bag: [], r: mulberry32(hash(seed, 'tsim', day)), acc: 0, done: false, log: [] };
   }
   // Advance the CPU anglers by game minutes.
   function stepTourney(T, mins, cond) {
@@ -1068,15 +1188,17 @@
 
   // ---- the daily derby: one seeded setup for everyone on a date ----
   function dailySpec(dateStr) {
-    var r = mulberry32(hash('reeldeep-daily', dateStr)), ids = ['pond', 'river', 'lake', 'pier', 'ice', 'deep'];
+    var r = mulberry32(hash('reeldeep-daily', dateStr)), ids = LOCS.map(function (l) { return l.id; });
     var loc = ids[Math.floor(r() * ids.length)], L = LOC[loc];
     var season = L.winter ? 3 : Math.floor(r() * 3), band = [DAWN, DAY, DUSK, NIGHT][Math.floor(r() * 4)];
     var min = { 1: 330, 2: 720, 4: 1100, 8: 1290 }[band];
     var wx = pickW(r(), SEASON_WX[season]);
     var lures = { b: 1, s: 1, c: 1, j: 1, f: 1 };
     if (L.salt) lures.d = 1;
+    if (L.dark) lures.g = 1;
+    var big = L.salt || L.maxD > 20;
     return { date: dateStr, loc: loc, season: season, min: min, cond: { band: band, wx: wx, wind: [0.25, 0.4, 0.55, 0.9, 0.05][wx], wdir: r() < 0.5 ? -1 : 1, season: season, loc: loc },
-      seed: hash('reeldeep-daily-world', dateStr), rod: L.salt ? 4 : 2, reel: L.salt ? 3 : 2, line: L.salt ? 4 : 2, lures: lures, dur: 90, lim: 3 };
+      seed: hash('reeldeep-daily-world', dateStr), rod: big ? 4 : 2, reel: big ? 3 : 2, line: big ? 4 : 2, lures: lures, dur: 240, lim: 3 };
   }
 
   var ENGINE = {
@@ -1256,7 +1378,7 @@
     snapper: { h: 0.4, tail: 'fork', dor: 'spiny' }, flat: { h: 0.44, tail: 'round', dor: 'fringe' },
     tuna: { h: 0.3, tail: 'lunate', dor: 'double', finlets: 1 }, mahi: { h: 0.34, tail: 'fork', dor: 'mahi', blunt: 1 },
     tarpon: { h: 0.28, tail: 'fork', dor: 'single', mouth: 1 }, marlin: { h: 0.21, tail: 'lunate', dor: 'sail', bill: 0.2 },
-    sword: { h: 0.22, tail: 'lunate', dor: 'tall', bill: 0.3 }, angler: { h: 0.62, tail: 'round', dor: 'lantern', mouth: 2, blunt: 1 }
+    sword: { h: 0.22, tail: 'lunate', dor: 'tall', bill: 0.3 }, shark: { h: 0.2, tail: 'shark', dor: 'single', blunt: 1 }, angler: { h: 0.62, tail: 'round', dor: 'lantern', mouth: 2, blunt: 1 }
   };
   var FISH_CACHE = {};
   function fishArt(s) {
@@ -1479,7 +1601,8 @@
     // sky
     var sk = skyAt(W.min), top = weatherMix(sk[0], wx, 0.9), bot = weatherMix(sk[1], wx, 0.9);
     if (S.flash > 0) { top = mix(top, [230, 236, 255], S.flash * 0.7); bot = mix(bot, [230, 236, 255], S.flash * 0.7); }
-    if (V.Ys > 0) {
+    if (V.Ys > 0 && L.dark) drawCaveRoof(c, V, W);
+    else if (V.Ys > 0) {
       var g = c.createLinearGradient(0, 0, 0, V.Ys);
       g.addColorStop(0, css(sc(top))); g.addColorStop(1, css(sc(bot)));
       c.fillStyle = g; c.fillRect(0, 0, SW, V.Ys + 2);
@@ -1487,7 +1610,7 @@
       drawHorizon(c, V, W, dl, winter);
     }
     // water
-    var wtop = Math.max(0, V.Ys), clar = L.clar * 1.3, nl = 0.25 + 0.75 * dl;
+    var wtop = Math.max(0, V.Ys), clar = L.clar * 1.3, nl = L.dark ? 0.45 : L.lit && dl < 0.5 ? 0.45 + 0.55 * dl : 0.25 + 0.75 * dl;
     function wcol(d) { var k = 1 - Math.exp(-Math.max(0, d) / clar); return sc(mul(weatherMix(mix(L.surf, L.deep, k), wx, 0.35), nl * (1 - 0.25 * k))); }
     var d0 = Math.max(0, V.cy - 0.3), d1 = V.cy + (SH - V.Ys) / V.sy;
     var wg = c.createLinearGradient(0, wtop, 0, SH);
@@ -1501,7 +1624,7 @@
     c.lineTo(SW, SH); c.closePath(); c.fill();
     S.wcol = wcol;
     // light shafts on bright days
-    if (dl > 0.6 && (wx === 0 || wx === 1) && V.Ys > -40) {
+    if (dl > 0.6 && (wx === 0 || wx === 1) && V.Ys > -40 && !L.dark) {
       c.save(); c.globalCompositeOperation = 'lighter';
       var ra = (wx === 0 ? 0.07 : 0.035) * (S.th.dark ? 0.6 : 1);
       for (i = 0; i < 5; i++) {
@@ -1524,6 +1647,7 @@
       if (fyp < -Lp || fyp > SH + Lp) continue;
       drawOneFish(c, V, W, fi, fxp, fyp, Lp, false);
     }
+    drawWaterScenery(c, V, W, nl);
     if (W.fight) { var F = W.fight, ff = F.f; drawOneFish(c, V, W, ff, X(V, ff.x), Y(V, ff.y), clamp(ff.lm * V.sx * 2, 12, 210), true); }
     if (S.save.up.finder && S.mode !== 'daily') drawSonar(c, V, W);
     // surface sheen, pads, ice
@@ -1538,9 +1662,11 @@
     drawStand(c, V, W, dl, winter);
     drawLine(c, V, W, dl);
     drawParts(c, V, W);
-    drawWeather(c, V, W, dl, winter);
+    if (L.lit) drawLamps(c, V, W, dl);
+    if (L.dark) drawLantern(c, V, W);
+    else drawWeather(c, V, W, dl, winter);
     // night / fog veils
-    if (wx === 4) {
+    if (wx === 4 && !L.dark) {
       var fg = c.createLinearGradient(0, 0, 0, SH);
       fg.addColorStop(0, css(sc([206, 210, 214]), 0.0)); fg.addColorStop(Math.max(0.05, Math.min(0.95, (V.Ys - 20) / SH)), css(sc([206, 210, 214]), 0.42)); fg.addColorStop(1, css(sc([150, 160, 168]), 0.25));
       c.fillStyle = fg; c.fillRect(0, 0, SW, SH);
@@ -1591,16 +1717,144 @@
     }
   }
   function drawHorizon(c, V, W, dl, winter) {
-    var SW = S.SW, L = W.L, base = V.Ys + 1, k = 0.35 + 0.65 * dl, sea = L.salt;
-    var far = sc(mul(weatherMix(sea ? [70, 100, 120] : winter ? [190, 200, 214] : [70, 100, 78], W.cond.wx, 0.7), k));
-    c.fillStyle = css(far, W.cond.wx === 4 ? 0.35 : 0.85);
-    c.beginPath(); c.moveTo(0, base);
-    var off = V.cx * V.sx * 0.15, r = S.hills;
-    for (var px = 0; px <= SW + 10; px += 10) {
-      var u = (px + off) * 0.01, h = sea ? (Math.max(0, Math.sin(u * 0.7 + r[0]) - 0.6) * 22) : (10 + 9 * Math.sin(u * 0.9 + r[1]) + 6 * Math.sin(u * 2.3 + r[2]) + (L.id === 'pond' || L.id === 'river' ? 5 * Math.abs(Math.sin(u * 7)) : 0));
-      c.lineTo(px, base - h);
+    var SW = S.SW, L = W.L, base = V.Ys + 1, k = 0.35 + 0.65 * dl, scn = L.scn, wxk = W.cond.wx === 4 ? 0.35 : 0.85;
+    var off = V.cx * V.sx * 0.15, r = S.hills, px, u, h, i;
+    function ridge(col, fn, a) {
+      c.fillStyle = css(sc(mul(weatherMix(col, W.cond.wx, 0.7), k)), a == null ? wxk : a);
+      c.beginPath(); c.moveTo(0, base);
+      for (px = 0; px <= SW + 10; px += 6) { u = (px + off) * 0.01; c.lineTo(px, base - fn(u, px)); }
+      c.lineTo(SW, base); c.closePath(); c.fill();
     }
-    c.lineTo(SW, base); c.closePath(); c.fill();
+    if (scn === 'sea' || scn === 'reef') {
+      ridge([70, 100, 120], function (q) { return Math.max(0, Math.sin(q * 0.7 + r[0]) - 0.6) * 22; });
+      if (scn === 'reef') {                                    // a palm island
+        var ix = SW * 0.72 - off * 0.3, iy = base;
+        c.fillStyle = css(sc(mul([214, 196, 150], k)), wxk); c.beginPath(); c.ellipse(ix, iy, 46, 7, 0, Math.PI, 0); c.fill();
+        c.strokeStyle = css(sc(mul([90, 70, 50], k)), wxk); c.lineWidth = 2.5; c.beginPath(); c.moveTo(ix, iy - 4); c.quadraticCurveTo(ix + 4, iy - 22, ix + 10, iy - 36); c.stroke();
+        c.fillStyle = css(sc(mul([60, 120, 60], k)), wxk);
+        for (i = 0; i < 5; i++) { var a2 = -2.6 + i * 0.55; c.beginPath(); c.ellipse(ix + 10 + Math.cos(a2) * 10, iy - 36 + Math.sin(a2) * 5 + 3, 11, 3, a2 + 1.4, 0, 6.283); c.fill(); }
+      }
+    } else if (scn === 'harbor') {
+      var night = dl < 0.6, rr = mulberry32(77);
+      c.fillStyle = css(sc(mul([60, 66, 80], 0.5 + 0.5 * k)), 0.95);
+      var bx = -((off * 0.5) % 40) - 40;
+      while (bx < SW + 40) {
+        var bw = 18 + rr() * 26, bh = 16 + rr() * 52;
+        c.fillStyle = css(sc(mul([60, 66, 80], 0.5 + 0.5 * k)), 0.95); c.fillRect(bx, base - bh, bw, bh);
+        if (night) { c.fillStyle = 'rgba(255,214,120,0.85)'; for (var wy = base - bh + 5; wy < base - 4; wy += 7) for (var wx2 = bx + 3; wx2 < bx + bw - 3; wx2 += 6) if (rr() < 0.45) c.fillRect(wx2, wy, 2.5, 3); }
+        bx += bw + 3 + rr() * 8;
+      }
+      c.strokeStyle = css(sc(mul([180, 90, 50], k))); c.lineWidth = 2;   // a crane
+      var cx0 = SW * 0.6 - off * 0.2; c.beginPath(); c.moveTo(cx0, base); c.lineTo(cx0, base - 70); c.lineTo(cx0 + 60, base - 66); c.moveTo(cx0, base - 70); c.lineTo(cx0 - 18, base - 64); c.stroke();
+    } else if (scn === 'fjord' || scn === 'alpine') {
+      var tall = scn === 'fjord' ? 1.4 : 1;
+      ridge([110, 118, 132], function (q) { var t2 = Math.abs(((q * 1.3 + r[1]) % 2) - 1); return (26 + 30 * (1 - t2) + 8 * Math.sin(q * 5)) * tall; });
+      // snow caps
+      c.fillStyle = css(sc(mul([244, 248, 252], k)), wxk);
+      for (px = 0; px <= SW + 10; px += 6) { u = (px + off) * 0.01; var t3 = Math.abs(((u * 1.3 + r[1]) % 2) - 1); h = (26 + 30 * (1 - t3) + 8 * Math.sin(u * 5)) * tall; if (t3 < 0.3) c.fillRect(px, base - h, 6, Math.max(2, (0.3 - t3) * 40)); }
+      if (scn === 'alpine') {                                  // the falls, on the far side
+        var fx = SW * 0.86 - off * 0.25, fw = 16;
+        c.fillStyle = css(sc(mul([96, 100, 108], k))); c.fillRect(fx - 26, base - 74, 62, 74);
+        c.fillStyle = 'rgba(240,248,255,0.85)'; c.fillRect(fx, base - 74, fw, 74);
+        c.strokeStyle = 'rgba(200,220,235,0.9)'; c.lineWidth = 1;
+        for (i = 0; i < 6; i++) { var yy = base - 74 + ((S.t * 90 + i * 13) % 74); c.beginPath(); c.moveTo(fx + 2 + i * 2.4, yy); c.lineTo(fx + 2 + i * 2.4, yy + 8); c.stroke(); }
+        c.fillStyle = 'rgba(255,255,255,0.35)'; c.beginPath(); c.ellipse(fx + fw / 2, base - 2, 34, 9, 0, 0, 6.283); c.fill();
+      } else {                                                  // icebergs
+        for (i = 0; i < 3; i++) {
+          var ix2 = ((i * 0.37 + 0.15) * (SW + 120) - off * 0.6) % (SW + 120) - 60, iw = 18 + i * 9;
+          c.fillStyle = css(sc(mul([232, 244, 250], k))); c.beginPath(); c.moveTo(ix2 - iw, base); c.lineTo(ix2 - iw * 0.4, base - iw * 0.7); c.lineTo(ix2 + iw * 0.2, base - iw * 0.5); c.lineTo(ix2 + iw, base); c.fill();
+        }
+      }
+    } else if (scn === 'bayou') {
+      ridge([52, 70, 44], function (q) { return 8 + 3 * Math.sin(q * 3 + r[0]); });
+      for (i = 0; i < 7; i++) {                                 // cypress with moss
+        var tx2 = ((i * 0.16 + 0.05) * (SW + 80) - off * 0.5) % (SW + 80) - 40, th = 40 + (i * 17) % 30;
+        c.fillStyle = css(sc(mul([46, 52, 34], k)), 0.95);
+        c.beginPath(); c.moveTo(tx2 - 6, base); c.lineTo(tx2 - 1.5, base - th); c.lineTo(tx2 + 1.5, base - th); c.lineTo(tx2 + 6, base); c.fill();
+        c.beginPath(); c.ellipse(tx2, base - th, 20, 6, 0, 0, 6.283); c.fill();
+        c.strokeStyle = css(sc(mul([120, 126, 96], k)), 0.7); c.lineWidth = 1;
+        for (var m2 = -3; m2 <= 3; m2++) { c.beginPath(); c.moveTo(tx2 + m2 * 5, base - th + 3); c.lineTo(tx2 + m2 * 5 + Math.sin(S.t + m2) * 1.5, base - th + 12 + Math.abs(m2) * 2); c.stroke(); }
+      }
+    } else if (scn === 'mangrove') {
+      ridge([44, 96, 56], function (q) { return 9 + 5 * Math.abs(Math.sin(q * 3.2 + r[2])) + 3 * Math.sin(q * 9); });
+    } else {
+      var far = sc(mul(weatherMix(winter ? [190, 200, 214] : [70, 100, 78], W.cond.wx, 0.7), k));
+      c.fillStyle = css(far, wxk);
+      c.beginPath(); c.moveTo(0, base);
+      for (px = 0; px <= SW + 10; px += 10) {
+        u = (px + off) * 0.01; h = 10 + 9 * Math.sin(u * 0.9 + r[1]) + 6 * Math.sin(u * 2.3 + r[2]) + (scn === 'pond' || scn === 'river' ? 5 * Math.abs(Math.sin(u * 7)) : 0);
+        c.lineTo(px, base - h);
+      }
+      c.lineTo(SW, base); c.closePath(); c.fill();
+    }
+  }
+  // underground: a rock roof with stalactites instead of a sky
+  function drawCaveRoof(c, V, W) {
+    var SW = S.SW, g = c.createLinearGradient(0, 0, 0, V.Ys);
+    g.addColorStop(0, css(sc([18, 16, 18]))); g.addColorStop(1, css(sc([40, 36, 38])));
+    c.fillStyle = g; c.fillRect(0, 0, SW, V.Ys + 2);
+    var off = V.cx * V.sx * 0.5, rr = mulberry32(5);
+    c.fillStyle = css(sc([30, 28, 30]));
+    for (var i = 0; i < 40; i++) {
+      var x = ((rr() * 1400 - off) % 1400 + 1400) % 1400 - 100, w = 6 + rr() * 16, h = 10 + rr() * V.Ys * 0.45;
+      if (x < -20 || x > SW + 20) continue;
+      c.beginPath(); c.moveTo(x - w, 0); c.lineTo(x, h); c.lineTo(x + w, 0); c.fill();
+    }
+    // drips of light: glowworms on the roof
+    c.fillStyle = 'rgba(140,240,220,0.7)';
+    for (i = 0; i < 24; i++) { var gx = ((rr() * 1400 - off * 0.8) % 1400 + 1400) % 1400 - 100, gy = rr() * V.Ys * 0.5; if (Math.sin(S.t * 1.5 + i) > -0.3) c.fillRect(gx, gy, 1.5, 1.5); }
+  }
+  // the lantern's pool of light; everything else stays dark
+  function drawLantern(c, V, W) {
+    var x = clamp(X(V, W.st.home + 0.4), -S.SW * 0.3, S.SW), y = Y(V, -1.6), R = Math.max(S.SW, S.SH) * 0.75;
+    var g = c.createRadialGradient(x, y, 10, x, y, R);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.35, 'rgba(0,0,0,0.15)'); g.addColorStop(1, 'rgba(0,0,0,0.42)');
+    c.fillStyle = g; c.fillRect(0, 0, S.SW, S.SH);
+    c.fillStyle = 'rgba(255,200,110,0.9)'; c.beginPath(); c.arc(x, y, 4, 0, 6.283); c.fill();
+    var lu = W.lure;
+    if (lu && W.phase === 'fishing' && lu.def.glow) {
+      var lx = X(V, lu.x), ly = Y(V, lu.y), gg = c.createRadialGradient(lx, ly, 1, lx, ly, 40);
+      gg.addColorStop(0, 'rgba(130,255,200,0.55)'); gg.addColorStop(1, 'rgba(130,255,200,0)');
+      c.fillStyle = gg; c.beginPath(); c.arc(lx, ly, 40, 0, 6.283); c.fill();
+    }
+  }
+  // harbor lamps on the pier, pooling light on the water after dark
+  function drawLamps(c, V, W, dl) {
+    var on = dl < 0.7;
+    [-7, -2.5, 2].forEach(function (lx) {
+      var x = X(V, lx), y0 = Y(V, -3.75), y1 = Y(V, -6.6);
+      c.strokeStyle = css(sc([50, 50, 56])); c.lineWidth = 2;
+      c.beginPath(); c.moveTo(x, y0); c.lineTo(x, y1); c.lineTo(x + 8, y1); c.stroke();
+      c.fillStyle = on ? 'rgba(255,220,140,1)' : css(sc([200, 200, 190])); c.beginPath(); c.arc(x + 8, y1 + 3, 3, 0, 6.283); c.fill();
+      if (on) {
+        c.save(); c.globalCompositeOperation = 'lighter';
+        var g = c.createLinearGradient(0, y1, 0, Y(V, 3));
+        g.addColorStop(0, 'rgba(255,210,120,0.22)'); g.addColorStop(1, 'rgba(255,210,120,0)');
+        c.fillStyle = g; c.beginPath(); c.moveTo(x + 8, y1 + 3); c.lineTo(x + 8 + 2.2 * V.sx, Y(V, 3)); c.lineTo(x + 8 - 2.2 * V.sx, Y(V, 3)); c.fill();
+        c.restore();
+      }
+    });
+  }
+  // things in the water column: mangrove roots, alpine foam
+  function drawWaterScenery(c, V, W, nl) {
+    var lay = W.lay, t = S.t;
+    if (lay.roots.length) {
+      c.strokeStyle = css(sc(mul([96, 70, 44], 0.5 + 0.5 * nl)), 0.95); c.lineCap = 'round';
+      lay.roots.forEach(function (z) {
+        for (var x = z.x0; x < z.x1; x += 0.85) {
+          var b = depthAt(lay, x), xs = X(V, x), w = (0.35 + (x * 7 % 3) * 0.15) * V.sx;
+          c.lineWidth = Math.max(2, 0.09 * V.sx);
+          c.beginPath(); c.moveTo(xs - w, Y(V, b)); c.quadraticCurveTo(xs - w * 0.6, Y(V, -0.9), xs, Y(V, -1.1)); c.quadraticCurveTo(xs + w * 0.6, Y(V, -0.9), xs + w, Y(V, b)); c.stroke();
+        }
+        var cx = X(V, (z.x0 + z.x1) / 2), cw = (z.x1 - z.x0) * V.sx * 0.65;
+        c.fillStyle = css(sc(mul([46, 104, 56], 0.5 + 0.5 * nl)));
+        c.beginPath(); c.ellipse(cx, Y(V, -1.6), cw, 0.9 * V.sx, 0, 0, 6.283); c.fill();
+      });
+    }
+    if (W.L.cur > 0.6) {                                       // foam streaks racing downstream
+      c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 1.2;
+      for (var i = 0; i < 14; i++) { var fx = ((i * 97 + t * 60 * W.L.cur) % (S.SW + 60)) - 30, fy = V.Ys + 2 + (i % 4) * 2; c.beginPath(); c.moveTo(fx, fy); c.lineTo(fx + 12, fy); c.stroke(); }
+    }
   }
   function drawBottom(c, V, W, wcol, nl, winter) {
     var SW = S.SW, SH = S.SH, lay = W.lay, L = W.L, t = S.t;
@@ -1616,6 +1870,26 @@
     c.beginPath();
     for (x = x0; x <= x1 + step; x += step) { var by0 = Y(V, depthAt(lay, x)); if (x === x0) c.moveTo(X(V, x), by0); else c.lineTo(X(V, x), by0); }
     c.stroke();
+    // coral heads, cypress knees, glowing cave fungi
+    var CORAL = [[240, 120, 110], [250, 190, 90], [180, 120, 220], [110, 200, 190], [240, 150, 190]];
+    lay.coral.forEach(function (cr) {
+      if (cr.x < x0 - 2 || cr.x > x1 + 2) return;
+      var cy = Y(V, depthAt(lay, cr.x)), cx = X(V, cr.x), rw = cr.r * V.sx;
+      c.fillStyle = css(mix(sc(mul(CORAL[cr.c], nl)), wcol(depthAt(lay, cr.x)), 0.25));
+      for (var q = 0; q < 4; q++) { c.beginPath(); c.arc(cx + (q - 1.5) * rw * 0.45, cy - rw * (0.3 + (q % 2) * 0.35), rw * 0.42, 0, 6.283); c.fill(); }
+    });
+    if (W.L.scn === 'bayou') lay.rocks.forEach(function (rk) {
+      if (rk.x < x0 - 2 || rk.x > x1 + 2) return;
+      var ky = Y(V, depthAt(lay, rk.x)), kx = X(V, rk.x), kh = (0.6 + rk.s) * V.sy;
+      c.fillStyle = css(mix(sc(mul([86, 70, 50], nl)), wcol(depthAt(lay, rk.x)), 0.3));
+      c.beginPath(); c.moveTo(kx - 0.25 * V.sx, ky); c.lineTo(kx, ky - kh); c.lineTo(kx + 0.25 * V.sx, ky); c.fill();
+    });
+    if (W.L.dark) lay.rocks.forEach(function (rk, ri) {
+      if (rk.x < x0 - 2 || rk.x > x1 + 2) return;
+      var my = Y(V, depthAt(lay, rk.x)), mx = X(V, rk.x + 0.5), a = 0.5 + 0.4 * Math.sin(S.t * 1.2 + ri);
+      c.fillStyle = 'rgba(120,255,210,' + (0.18 * a).toFixed(3) + ')'; c.beginPath(); c.arc(mx, my - 4, 14, 0, 6.283); c.fill();
+      c.fillStyle = 'rgba(150,255,220,' + (0.8 * a).toFixed(3) + ')'; c.beginPath(); c.arc(mx, my - 4, 2.5, 0, 6.283); c.fill();
+    });
     // rocks
     for (var i = 0; i < lay.rocks.length; i++) {
       var rk = lay.rocks[i];
@@ -1692,14 +1966,14 @@
   function drawStand(c, V, W, dl, winter) {
     var st = W.st, L = W.L, k = 0.3 + 0.7 * dl, t = S.t, feetY, footX = st.home;
     if (L.stand === 'bank') {
-      var grass = winter ? [226, 232, 238] : L.id === 'river' ? [96, 128, 70] : [88, 130, 64];
+      var grass = { cavern: [74, 70, 68], mangrove: [206, 190, 146], bayou: [74, 86, 46], alpine: [116, 126, 96] }[L.scn] || (winter ? [226, 232, 238] : L.id === 'river' ? [96, 128, 70] : [88, 130, 64]);
       var earth = sc(mul([110, 86, 58], k));
       c.fillStyle = css(earth);
       c.beginPath(); c.moveTo(X(V, -12), Y(V, -0.55)); c.lineTo(X(V, -0.4), Y(V, -0.55)); c.quadraticCurveTo(X(V, 0.3), Y(V, -0.45), X(V, 0.9), Y(V, 0.15));
       c.lineTo(X(V, 0.9), Y(V, 0.2)); c.lineTo(X(V, -12), Y(V, 1.5)); c.closePath(); c.fill();
       c.fillStyle = css(sc(mul(grass, k)));
       c.fillRect(X(V, -12), Y(V, -0.62), X(V, -0.35) - X(V, -12), Math.max(3, 0.12 * V.sx));
-      if (!winter) { c.strokeStyle = css(sc(mul(grass, k * 0.85))); c.lineWidth = 1.2; for (var i = 0; i < 9; i++) { var gx = X(V, -6 + i * 0.7); c.beginPath(); c.moveTo(gx, Y(V, -0.6)); c.lineTo(gx + Math.sin(t + i) * 2, Y(V, -0.95 - (i % 3) * 0.12)); c.stroke(); } }
+      if (!winter && L.scn !== 'cavern' && L.scn !== 'mangrove') { c.strokeStyle = css(sc(mul(grass, k * 0.85))); c.lineWidth = 1.2; for (var i = 0; i < 9; i++) { var gx = X(V, -6 + i * 0.7); c.beginPath(); c.moveTo(gx, Y(V, -0.6)); c.lineTo(gx + Math.sin(t + i) * 2, Y(V, -0.95 - (i % 3) * 0.12)); c.stroke(); } }
       feetY = -0.6;
     } else if (L.stand === 'pier') {
       var wood = sc(mul([120, 92, 64], k)), dark = sc(mul([78, 60, 44], k));
@@ -1809,6 +2083,7 @@
     else if (d.id === 'c') { c.fillStyle = '#e09a2e'; c.beginPath(); c.ellipse(x, y, 7, 3.5, 0, 0, 6.283); c.fill(); c.fillStyle = '#2e5a2e'; c.fillRect(x - 6, y - 3, 5, 2); c.strokeStyle = '#ddd'; c.beginPath(); c.moveTo(x - 7, y); c.lineTo(x - 11, y + 2); c.stroke(); }
     else if (d.id === 'j') { c.fillStyle = '#3a3a48'; c.beginPath(); c.arc(x, y, 3.2, 0, 6.283); c.fill(); c.strokeStyle = '#9a6ac8'; c.lineWidth = 1.5; for (var i = -1; i <= 1; i++) { c.beginPath(); c.moveTo(x + 2, y); c.lineTo(x + 9, y + i * 2 + Math.sin(S.t * 8 + i) * 1.5); c.stroke(); } }
     else if (d.id === 'f') { c.fillStyle = '#efe3c0'; c.beginPath(); c.ellipse(x, y - 2, 5, 2, 0.3, 0, 6.283); c.fill(); c.strokeStyle = '#7a5a3a'; c.beginPath(); c.moveTo(x - 3, y); c.lineTo(x + 4, y); c.stroke(); }
+    else if (d.id === 'g') { c.fillStyle = 'rgba(130,255,200,0.35)'; c.beginPath(); c.arc(x, y, 8, 0, 6.283); c.fill(); c.fillStyle = '#8affc8'; c.beginPath(); c.arc(x, y, 3.2, 0, 6.283); c.fill(); }
     else if (d.id === 'd') { c.fillStyle = '#6a6a72'; c.beginPath(); c.arc(x, y - 4, 4, 0, 6.283); c.fill(); if (lu.baited) { c.fillStyle = '#b8c4cc'; c.beginPath(); c.ellipse(x + 3, y + 4, 6, 2.5, 0, 0, 6.283); c.fill(); } }
     else drawBait(c, x, y, lu);
   }
@@ -1865,6 +2140,7 @@
       if (F.air) return { t: 'JUMP!  LET GO of reel', col: th.gold, big: true };
       if (F.T > 0.85) return { t: S.inpReel ? 'LET GO — line about to snap!' : 'Letting it run… wait for green', col: th.red, big: S.inpReel };
       if (F.slackT > 0.5) return { t: 'Slack line!  HOLD to reel', col: th.gold, big: true };
+      if (F.snag > 0.15) return { t: 'In the roots!  Steer ' + (dir > 0 ? '\u25C0' : dir < 0 ? '\u25B6' : '') + ' to pull it out', col: th.red, big: true };
       if (dir && F.mode === 'run' && cn < 0.3) return { t: 'Steer ' + (dir > 0 ? '\u25C0' : '\u25B6') + ' against the run', col: th.acc };
       if (F.sta <= 0) return { t: 'It\'s tired — HOLD to reel it in', col: th.green };
       return { t: S.inpReel ? 'Reeling — keep it out of the red' : 'HOLD to reel · let go in the red' };
@@ -2031,9 +2307,9 @@
     S.W = newWorld({ seed: s.seed, loc: loc, day: s.day, min: s.min, gear: careerGear(), diff: s.diff, layoutSeed: layoutSeed(loc), salt: 'pv' + (S.t | 0) });
     S.W.timeScale = 0; S.W.preview = true; S.cam.ok = false;
   }
-  function toDock(tab) {
+  function toDock(tab, stayAtWater) {
     S.phase = 'dock'; S.paused = false; S.mode = 'career'; S.tour = null; S.daily = null; S.msg = null;
-    S.save.atWater = false;
+    S.save.atWater = !!stayAtWater;                         // "Back to the water" then costs no travel time
     clearHeld(); S.charge = null;
     ensureContracts();
     previewWorld();
@@ -2076,7 +2352,7 @@
     var s = S.save;
     if (curLvl() < 3) return 'Reach level 3 to enter tournaments.';
     if (s.tday === s.day) return 'Today\'s tournament is done. A new one opens tomorrow.';
-    if (s.min + TRAVEL_MIN + 150 > DAY_END) return 'Too late in the day for a tournament.';
+    if (s.min + TRAVEL_MIN + 300 > DAY_END) return 'Too late in the day for a tournament.';
     if (s.money < tourFee()) return 'Entry is ' + money(tourFee()) + '.';
     return '';
   }
@@ -2092,7 +2368,7 @@
     S.mode = 'tour';
     S.tour = newTourney(s.seed, s.day, loc, curLvl(), S.W.min);
     S.tour.last = S.W.min;
-    msg('Tournament!', { sub: '2.5 hours · heaviest 5-fish bag wins', big: true, T: 2.6 });
+    msg('Tournament!', { sub: '5 game hours (~2.5 min) · heaviest 5-fish bag wins', big: true, T: 2.6 });
     persist();
   }
   function endTour() {
@@ -2116,7 +2392,7 @@
     enterWater({ seed: sp.seed, loc: sp.loc, day: sp.season * SEASON_DAYS + 1, min: sp.min, gear: gearStats(sp.rod, sp.reel, sp.line, lure, {}), diff: s.diff, cond: sp.cond, layoutSeed: sp.seed, bait: 99, noLegend: true, floatD: s.floatD, dragSet: s.drag, salt: 'daily' });
     S.mode = 'daily';
     S.daily = { spec: sp, bag: [], end: sp.min + sp.dur, lim: sp.lim, lure: lure };
-    msg('Daily Derby', { sub: LOC[sp.loc].name + ' · 90 minutes · best ' + sp.lim + ' fish', big: true, T: 2.6 });
+    msg('Daily Derby', { sub: LOC[sp.loc].name + ' · 4 game hours (~2 min) · best ' + sp.lim + ' fish', big: true, T: 2.6 });
   }
   function endDaily() {
     var D = S.daily, s = S.save, score = bagW(D.bag), prev = s.daily[D.spec.date] || 0;
@@ -2233,7 +2509,7 @@
   function onLost(e) {
     var s = S.save, W = S.W;
     stopHolds(true);
-    if (e.why === 'snap') { msg('SNAP! The line broke', { big: true, col: S.th.red }); S.snd.tone(1800, 0.06, 'square', 0.05, 300); s.stats.snaps++; haptic(90); S.shake = 0.5; }
+    if (e.why === 'snap') { msg(e.how === 'snag' ? 'Snagged in the roots — line cut' : 'SNAP! The line broke', { big: true, col: S.th.red, sub: e.how === 'snag' ? 'Steer against its run to keep it out of the roots' : '' }); S.snd.tone(1800, 0.06, 'square', 0.05, 300); s.stats.snaps++; haptic(90); S.shake = 0.5; }
     else if (e.why === 'spooled') { msg('Spooled! It took all your line', { big: true, col: S.th.red, sub: 'A bigger reel holds more line' }); s.stats.snaps++; haptic(90); }
     else { msg(e.how === 'jump' ? 'It shook free mid-jump' : 'It threw the hook', { col: S.th.red, sub: e.how === 'jump' ? 'Let off the reel when it leaps' : 'Keep the line tight' }); s.stats.lost++; haptic(40); }
     setPad(W.phase === 'fishing' ? 'fishing' : 'cast');
@@ -2327,7 +2603,7 @@
     return { reel: S.inpReel, steer: S.steer, twitch: 0, hook: false };
   }
 
-  var KEY2CODE = { ' ': 'Space', arrowleft: 'ArrowLeft', arrowright: 'ArrowRight', arrowup: 'ArrowUp', arrowdown: 'ArrowDown', enter: 'Enter', escape: 'Escape', p: 'KeyP', j: 'KeyJ', l: 'KeyL', t: 'KeyT', backspace: 'Backspace', h: 'KeyH', r: 'KeyR', k: 'KeyK', a: 'KeyA', d: 'KeyD', w: 'KeyW', s: 'KeyS' };
+  var KEY2CODE = { ' ': 'Space', arrowleft: 'ArrowLeft', arrowright: 'ArrowRight', arrowup: 'ArrowUp', arrowdown: 'ArrowDown', enter: 'Enter', escape: 'Escape', p: 'KeyP', m: 'KeyM', j: 'KeyJ', l: 'KeyL', t: 'KeyT', backspace: 'Backspace', h: 'KeyH', r: 'KeyR', k: 'KeyK', a: 'KeyA', d: 'KeyD', w: 'KeyW', s: 'KeyS' };
   function keyCode(e) { return e.code || KEY2CODE[(e.key || '').toLowerCase()] || ''; }
   function onKey(e) {
     if (!S || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -2345,6 +2621,12 @@
       else if (S.paused) resume();
       else if (S.phase === 'dock' && S.cardKind === 'help') { S.firstRun = false; showCard('dock'); }
       else if (S.phase === 'dock' && code === 'Escape') closePanel();
+      return;
+    }
+    if (code === 'KeyM' && !e.repeat) {
+      e.preventDefault();
+      if (S.phase === 'water' && !S.paused) pause();
+      else if (S.paused) resume();
       return;
     }
     if (code === 'KeyJ' && !e.repeat) {
@@ -2421,9 +2703,9 @@
   }
   function pause() {
     if (!S || S.phase !== 'water' || S.paused) return;
-    S.paused = true;
+    S.paused = true; S.quitArm = false;
     stopHolds(); clearHeld();
-    showCard('pause'); setPad('resume'); syncHead();
+    showCard('pause'); setPad('resume'); syncHead(); S.hudHtml = ''; syncHud();
     S.snd.hush();
     draw();
   }
@@ -2432,7 +2714,7 @@
     S.paused = false;
     showCard(null);
     setPad(S.W.phase === 'fight' ? 'fight' : S.W.phase === 'fishing' || S.W.phase === 'flight' ? 'fishing' : 'cast');
-    syncHead();
+    syncHead(); S.hudHtml = ''; syncHud();
     kick();
   }
   function showCard(kind) {
@@ -2456,7 +2738,78 @@
     renderThumbs();
   }
   function rerenderCard() { var st = S.ovl.scrollTop; showCard(S.cardKind); S.ovl.scrollTop = st; }
+  // An illustrated map of the waters: land and sea, the river, pins for every water.
+  function renderMap() {
+    var cv = S.ovl.querySelector('canvas[data-map]');
+    if (!cv) return;
+    var w = cv.clientWidth || 320, h = cv.clientHeight || 190, k = Math.min(2, window.devicePixelRatio || 1), c = cv.getContext('2d'), th = S.th, s = S.save;
+    cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+    c.setTransform(k, 0, 0, k, 0, 0);
+    var land = mix(th.bg, [168, 182, 120], th.dark ? 0.32 : 0.45), sea = mix(th.bg, [70, 130, 186], th.dark ? 0.4 : 0.42), ink = th.text;
+    function P(x, y) { return [x * w, y * h]; }
+    function coast(y) { return 0.6 + 0.05 * Math.sin(y * 7) + 0.03 * Math.sin(y * 17); }
+    c.fillStyle = css(sea); c.fillRect(0, 0, w, h);
+    c.fillStyle = css(land); c.beginPath(); c.moveTo(0, 0);
+    for (var y = 0; y <= 1.0001; y += 0.04) c.lineTo(coast(y) * w, y * h);
+    c.lineTo(0, h); c.closePath(); c.fill();
+    // the northern isle with its fjord
+    c.beginPath(); c.moveTo(0.7 * w, 0); c.lineTo(w, 0); c.lineTo(w, 0.2 * h); c.lineTo(0.86 * w, 0.24 * h); c.lineTo(0.8 * w, 0.14 * h); c.lineTo(0.77 * w, 0.2 * h); c.lineTo(0.72 * w, 0.17 * h); c.closePath(); c.fill();
+    // wave marks
+    c.strokeStyle = css(mix(sea, [255, 255, 255], 0.35)); c.lineWidth = 1;
+    for (var i = 0; i < 14; i++) { var wx = (0.66 + (i * 0.137) % 0.32) * w, wy = ((i * 0.29) % 0.95 + 0.04) * h; c.beginPath(); c.moveTo(wx, wy); c.quadraticCurveTo(wx + 4, wy - 3, wx + 8, wy); c.quadraticCurveTo(wx + 12, wy + 3, wx + 16, wy); c.stroke(); }
+    // mountains
+    for (i = 0; i < 6; i++) {
+      var mx = (0.03 + i * 0.075) * w, my = (0.24 - (i % 2) * 0.05) * h, mh = (0.16 + (i % 3) * 0.04) * h;
+      c.fillStyle = css(mix(land, [90, 86, 84], 0.55)); c.beginPath(); c.moveTo(mx - 16, my); c.lineTo(mx, my - mh); c.lineTo(mx + 16, my); c.fill();
+      c.fillStyle = css(mix(th.bg, [255, 255, 255], 0.8)); c.beginPath(); c.moveTo(mx - 5, my - mh + mh * 0.32); c.lineTo(mx, my - mh); c.lineTo(mx + 5, my - mh + mh * 0.32); c.fill();
+    }
+    // water bodies: the river from the falls to the sea, the lake, the pond, the ice, the swamp
+    var water = css(mix(sea, [120, 180, 230], 0.25));
+    c.strokeStyle = water; c.lineWidth = 3; c.lineCap = 'round';
+    c.beginPath(); var rp = [[0.1, 0.13], [0.15, 0.25], [0.17, 0.33], [0.28, 0.4], [0.34, 0.43], [0.42, 0.58], [0.5, 0.64], [coast(0.66), 0.66]];
+    c.moveTo(rp[0][0] * w, rp[0][1] * h); for (i = 1; i < rp.length; i++) c.lineTo(rp[i][0] * w, rp[i][1] * h); c.stroke();
+    c.fillStyle = water;
+    [[0.17, 0.33, 0.07, 0.07], [0.24, 0.6, 0.035, 0.04], [0.44, 0.1, 0.05, 0.05], [0.31, 0.17, 0.025, 0.03]].forEach(function (e, n) { c.fillStyle = n === 2 ? css(mix(th.bg, [230, 240, 250], 0.85)) : n === 3 ? css(mix(land, [30, 30, 34], 0.6)) : water; c.beginPath(); c.ellipse(e[0] * w, e[1] * h, e[2] * w, e[3] * h, 0, 0, 6.283); c.fill(); });
+    c.fillStyle = css(mix(land, [40, 70, 36], 0.5)); [[0.4, 0.72], [0.45, 0.77], [0.38, 0.78]].forEach(function (b) { c.beginPath(); c.arc(b[0] * w, b[1] * h, 9, 0, 6.283); c.fill(); });
+    c.fillStyle = css(mix(land, [30, 110, 60], 0.5)); for (i = 0; i < 6; i++) { c.beginPath(); c.arc((0.56 + i * 0.012) * w, (0.8 + (i % 2) * 0.04) * h, 4, 0, 6.283); c.fill(); }
+    c.fillStyle = css(mix(land, [90, 90, 110], 0.6)); for (i = 0; i < 5; i++) c.fillRect((0.6 + i * 0.012) * w, (0.3 - (i % 3) * 0.02) * h, 4, 8 + (i % 3) * 4);
+    c.fillStyle = css(mix(sea, [240, 150, 120], 0.45)); for (i = 0; i < 7; i++) { c.beginPath(); c.arc((0.8 + (i % 4) * 0.025) * w, (0.74 + Math.floor(i / 4) * 0.05) * h, 2.5, 0, 6.283); c.fill(); }
+    // the trail between open waters, in unlock order
+    var order = LOCS.slice().sort(function (a, b) { return a.lvl - b.lvl; });
+    c.setLineDash([3, 4]); c.strokeStyle = css(ink, 0.35); c.lineWidth = 1.2; c.beginPath();
+    var first = true;
+    order.forEach(function (L) { if (!locOpen(s, L.id).ok && levelOf(s.xp) < L.lvl) return; var q = P(L.mx, L.my); if (first) c.moveTo(q[0], q[1]); else c.lineTo(q[0], q[1]); first = false; });
+    c.stroke(); c.setLineDash([]);
+    // pins
+    S.mapPins = [];
+    c.font = '700 9px ' + th.font; c.textAlign = 'center'; c.textBaseline = 'top';
+    LOCS.forEach(function (L) {
+      var q = P(L.mx, L.my), o = locOpen(s, L.id), on = s.loc === L.id || S.mapPeek === L.id;
+      S.mapPins.push({ id: L.id, x: q[0], y: q[1] });
+      if (on) { c.strokeStyle = css(th.acc); c.lineWidth = 2; c.beginPath(); c.arc(q[0], q[1] - 7, 11, 0, 6.283); c.stroke(); }
+      c.fillStyle = o.ok ? css(th.acc) : css(th.faint);
+      c.beginPath(); c.arc(q[0], q[1] - 7, 6, Math.PI * 0.85, Math.PI * 2.15); c.lineTo(q[0], q[1]); c.closePath(); c.fill();
+      c.fillStyle = css(th.bg); c.beginPath(); c.arc(q[0], q[1] - 7, 2.3, 0, 6.283); c.fill();
+      var lab = L.short + (o.ok ? '' : ' ' + (levelOf(s.xp) < L.lvl ? 'Lv' + L.lvl : '\u2716'));
+      var tw = c.measureText(lab).width + 6;
+      c.fillStyle = css(th.bg, 0.8); c.fillRect(q[0] - tw / 2, q[1] + 2, tw, 11);
+      c.fillStyle = o.ok ? css(ink) : css(th.muted); c.fillText(lab, q[0], q[1] + 3);
+    });
+    c.textAlign = 'right'; c.textBaseline = 'top'; c.fillStyle = css(ink, 0.6); c.fillText('N \u2191', w - 6, 4);
+  }
+  function onMapClick(e) {
+    if (!S || !e.target || !e.target.matches || !e.target.matches('canvas[data-map]') || !S.mapPins) return;
+    var r = e.target.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, best = null, bd = 26;
+    S.mapPins.forEach(function (p) { var d = Math.hypot(p.x - x, p.y - 6 - y); if (d < bd) { bd = d; best = p; } });
+    if (!best) return;
+    var s = S.save;
+    S.snd.ensure(); S.snd.tone(880, 0.04, 'sine', 0.025);
+    if (locOpen(s, best.id).ok) { S.mapPeek = null; if (s.atWater && s.loc !== best.id) s.atWater = false; s.loc = best.id; if (!validLure(s.lure, { L: LOC[best.id] })) s.lure = 'b'; previewWorld(); setPad('dock'); persist(); }
+    else S.mapPeek = best.id;
+    rerenderCard();
+  }
   function renderThumbs() {
+    renderMap();
     var cvs = S.ovl.querySelectorAll('canvas[data-th]');
     for (var i = 0; i < cvs.length; i++) {
       var cv = cvs[i], sp = SP[cv.getAttribute('data-th')], got = cv.hasAttribute('data-got'), big = cv.hasAttribute('data-big');
@@ -2518,7 +2871,8 @@
     var s = S.save, W = S.W, h;
     if ((S.phase === 'water' || S.phase === 'catch') && W) {
       var c = W.cond, wind = c.wind > 0.15 ? ' <i>wind ' + (c.wdir > 0 ? '&rarr;' : '&larr;') + Math.round(c.wind * 20) + '</i>' : '';
-      h = '<span class="fs-clock"><b>' + clockStr(W.min) + '</b> <i>' + BAND_NAME[bandOf(W.min)] + '</i></span><span>' + (c.wx === 2 && c.season === 3 ? 'Snow' : c.wx === 0 && bandOf(W.min) === NIGHT ? 'Clear' : WX_NAME[c.wx]) + wind + '</span>';
+      h = '<button type="button" class="fs-menu" data-h="menu" aria-label="Menu (M)">' + (S.paused ? '&times; Close' : '&#9776; Menu') + '</button>' +
+        '<span class="fs-clock"><b>' + clockStr(W.min) + '</b> <i>' + BAND_NAME[bandOf(W.min)] + '</i></span><span>' + (W.L.dark ? 'Underground' : c.wx === 2 && c.season === 3 ? 'Snow' : c.wx === 0 && bandOf(W.min) === NIGHT ? 'Clear' : WX_NAME[c.wx]) + (W.L.dark ? '' : wind) + '</span>';
       if (S.mode === 'daily') h += '<span class="fs-hloc"><b>' + esc(W.L.name) + '</b></span><span>derby</span>';
       else h += '<span class="fs-hloc"><b>' + esc(W.L.short) + '</b></span><span><b>' + money(s.money) + '</b></span><span>Lv ' + curLvl() + '</span><span>creel ' + s.creel.length + '/' + creelCap(s) + '</span>';
     } else {
@@ -2536,13 +2890,14 @@
       '<div><b>HOOK</b> &nbsp;one tap when <b>BITE!</b> shows (not on a nibble)</div>' +
       '<div><b>REEL</b> &nbsp;<b>hold</b> to reel, <b>let go</b> to let the fish run</div>' +
       '<div><b>&#9664; &#9654;</b> or drag &nbsp;steer the rod against the fish\'s run</div>' +
-      '<div><b>TWITCH</b> &nbsp;hop a lure to tempt fish &nbsp; <b>REEL IN</b> &nbsp;wind an empty line home fast</div>' :
+      '<div><b>TWITCH</b> &nbsp;hop a lure to tempt fish &nbsp; <b>REEL IN</b> &nbsp;wind an empty line home fast</div>' +
+      '<div><b>&#9776; Menu</b> &nbsp;(top left) map, shop, journal, club, settings</div>' :
       '<div><b>Space</b> &nbsp;hold to charge the cast, let go at the top of the meter</div>' +
       '<div><b>Enter / H / Space</b> &nbsp;set the hook — one tap when <b>BITE!</b> shows</div>' +
       '<div><b>Space</b> &nbsp;<b>hold</b> to reel, <b>let go</b> to let the fish run</div>' +
       '<div><b>&larr; &rarr;</b> &nbsp;steer the rod against the run &nbsp; <b>&uarr; &darr;</b> &nbsp;float depth / drag</div>' +
       '<div><b>T</b> &nbsp;twitch the lure &nbsp; <b>R</b> &nbsp;reel an empty line in fast</div>' +
-      '<div><b>L</b> &nbsp;change lure &nbsp; <b>J</b> &nbsp;journal &nbsp; <b>P / Esc</b> &nbsp;pause</div>' +
+      '<div><b>L</b> &nbsp;change lure &nbsp; <b>J</b> &nbsp;journal &nbsp; <b>M / P / Esc</b> &nbsp;menu</div>' +
       '<div><b>K / R</b> &nbsp;keep or release a catch</div>';
     return '<div class="fs-card fs-help">' +
       '<pre class="fs-art" aria-hidden="true">' + esc(ART) + '</pre>' +
@@ -2584,11 +2939,16 @@
   function fishTab() {
     var s = S.save, h = '', lvl = curLvl();
     if (s.atWater) h += '<button type="button" class="fs-resume" data-act="go"><b>Back to the water</b><span>' + esc(LOC[s.loc].name) + ' · ' + clockStr(s.min) + '</span></button>';
-    h += '<div class="fs-sec"><div class="fs-h">Where <i>forecast: ' + forecast() + '</i></div><div class="fs-locs">';
+    var open = LOCS.filter(function (L) { return locOpen(s, L.id).ok; }).length, cur = LOC[S.mapPeek || s.loc], co = locOpen(s, cur.id);
+    h += '<div class="fs-sec"><div class="fs-h">Map <i>' + open + ' of ' + LOCS.length + ' waters open · tap a pin</i></div>' +
+      '<canvas class="fs-map" data-map aria-label="Map of the waters"></canvas>';
+    var known = SPECIES.filter(function (x) { return x.locs.indexOf(cur.id) >= 0; }), got = known.filter(function (x) { return s.journal[x.id]; }).length;
+    h += '<div class="fs-where' + (co.ok ? '' : ' locked') + '"><div><b>' + esc(cur.name) + '</b> <i>' + (co.ok ? 'open' : esc(co.why)) + '</i></div><p>' + esc(cur.blurb) + '</p>' +
+      '<p class="fs-note">' + got + ' of ' + known.length + ' species found here · forecast: ' + forecast() + '</p></div>';
+    h += '<div class="fs-chips fs-locchips">';
     LOCS.forEach(function (L) {
       var o = locOpen(s, L.id), on = s.loc === L.id;
-      h += '<button type="button" class="fs-loc' + (on ? ' on' : '') + (o.ok ? '' : ' locked') + '" data-loc="' + L.id + '" aria-pressed="' + on + '"' + (o.ok ? '' : ' aria-disabled="true"') + '>' +
-        '<b>' + esc(L.name) + '</b><span>' + esc(L.blurb) + '</span>' + (o.ok ? '' : '<i>' + esc(o.why) + '</i>') + '</button>';
+      h += '<button type="button" class="fs-chip' + (on ? ' on' : '') + (o.ok ? '' : ' locked') + '" data-loc="' + L.id + '" aria-pressed="' + on + '">' + esc(L.short) + (o.ok ? '' : '<i>' + esc(o.why.replace('Level ', 'Lv ')) + '</i>') + '</button>';
     });
     h += '</div></div>';
     var lu = LURE[s.lure];
@@ -2626,14 +2986,14 @@
     // tournament
     var why = canTour(), tl = curLvl() >= 3 ? LOC[tourLoc()] : null, fee = tourFee();
     h += '<div class="fs-sec"><div class="fs-h">Tournament <i>vs 5 club anglers</i></div>';
-    if (tl) h += '<p class="fs-note">Today at <b>' + esc(tl.name) + '</b> · 2.5 hours · heaviest <b>5-fish bag</b> wins · entry ' + money(fee) + ' · prizes ' + money(fee * 5) + ' / ' + money(Math.round(fee * 2.4)) + ' / ' + money(Math.round(fee * 1.2)) + '</p>';
+    if (tl) h += '<p class="fs-note">Today at <b>' + esc(tl.name) + '</b> · ~2.5 min · heaviest <b>5-fish bag</b> wins · entry ' + money(fee) + ' · prizes ' + money(fee * 5) + ' / ' + money(Math.round(fee * 2.4)) + ' / ' + money(Math.round(fee * 1.2)) + '</p>';
     if (why) h += '<p class="fs-note k-faint">' + esc(why) + '</p>';
     else h += '<button type="button" class="fs-go" data-act="tour">Enter · ' + money(fee) + '</button>';
     h += '</div>';
     // daily
     var ds = dailySpec(todayStr()), best = s.daily[ds.date];
     h += '<div class="fs-sec"><div class="fs-h">Daily derby <i>' + ds.date + ' · same water for everyone</i></div>' +
-      '<p class="fs-note"><b>' + esc(LOC[ds.loc].name) + '</b> · ' + BAND_NAME[ds.cond.band] + ' · ' + (ds.season === 3 && ds.cond.wx === 2 ? 'Snow' : WX_NAME[ds.cond.wx]) + ' · ' + SEASONS[ds.season] + ' · club gear · 90 min · best ' + ds.lim + ' fish. ' + (best ? 'Your best today: <b>' + best.toFixed(2) + ' lb</b>' : 'Not fished yet today.') + '</p>' +
+      '<p class="fs-note"><b>' + esc(LOC[ds.loc].name) + '</b> · ' + BAND_NAME[ds.cond.band] + ' · ' + (ds.season === 3 && ds.cond.wx === 2 ? 'Snow' : WX_NAME[ds.cond.wx]) + ' · ' + SEASONS[ds.season] + ' · club gear · ~2 min · best ' + ds.lim + ' fish. ' + (best ? 'Your best today: <b>' + best.toFixed(2) + ' lb</b>' : 'Not fished yet today.') + '</p>' +
       '<button type="button" class="fs-go alt" data-act="daily">Fish the derby</button></div>';
     return h;
   }
@@ -2709,14 +3069,19 @@
     return h;
   }
   function pauseHtml() {
-    var h = '<div class="fs-card"><div class="fs-title">PAUSED</div>';
-    if (S.mode === 'tour' && S.tour) h += '<p class="fs-sub">Tournament — ' + clockStr(Math.max(0, S.tour.end - S.W.min)).slice(1) + ' left. The clock stops while paused.</p>';
-    else if (S.mode === 'daily') h += '<p class="fs-sub">Daily derby — the clock stops while paused.</p>';
-    else h += '<p class="fs-sub">' + esc(S.W.L.name) + ' · ' + clockStr(S.W.min) + '</p>';
-    h += '<button type="button" class="fs-go" data-act="resume">Resume</button>' +
-      '<div class="fs-btns"><button type="button" class="fs-go alt" data-act="journal">Journal</button><button type="button" class="fs-go alt" data-act="help">Help</button></div>';
-    if (S.mode === 'career') h += '<button type="button" class="fs-go alt" data-act="leave">Back to the dock</button>';
-    else h += S.quitArm ? '<button type="button" class="fs-go alt danger" data-act="quit">Really quit? (no refund)</button>' : '<button type="button" class="fs-go alt" data-act="quit">Quit the ' + (S.mode === 'tour' ? 'tournament' : 'derby') + '</button>';
+    var career = S.mode === 'career', h = '<div class="fs-card fs-menucard"><div class="fs-title">MENU</div>';
+    if (S.mode === 'tour' && S.tour) h += '<p class="fs-sub">Tournament — ' + clockStr(Math.max(0, S.tour.end - S.W.min)).slice(1) + ' left. The clock stops while the menu is open.</p>';
+    else if (S.mode === 'daily') h += '<p class="fs-sub">Daily derby — the clock stops while the menu is open.</p>';
+    else h += '<p class="fs-sub">' + esc(S.W.L.name) + ' · day ' + S.save.day + ' · ' + clockStr(S.W.min) + ' · ' + money(S.save.money) + '</p>';
+    h += '<button type="button" class="fs-go" data-act="resume">Resume fishing</button><div class="fs-mgrid">';
+    function b(attr, label, sub, off) { return '<button type="button" class="fs-mb"' + (off ? ' disabled' : '') + ' ' + attr + '><b>' + label + '</b><i>' + sub + '</i></button>'; }
+    h += b('data-goto="fish"', 'Map', 'change water', !career) + b('data-goto="shop"', 'Shop', 'gear &amp; bait', !career) +
+      b('data-act="journal"', 'Journal', 'your catches') + b('data-goto="club"', 'Club', 'contracts, events', !career) +
+      b('data-goto="angler"', 'Settings', 'level, difficulty', !career) + b('data-act="help"', 'Help', 'how to play');
+    h += '</div>';
+    if (career) h += S.quitArm ? '<button type="button" class="fs-go alt danger" data-act="endday-menu">End day ' + S.save.day + ' now? (sells your creel)</button>' : '<button type="button" class="fs-go alt" data-act="endday-menu">End the day</button>';
+    else h += S.quitArm ? '<button type="button" class="fs-go alt danger" data-act="quit">Really leave? (no refund)</button>' : '<button type="button" class="fs-go alt" data-act="quit">Leave the ' + (S.mode === 'tour' ? 'tournament' : 'derby') + '</button>';
+    if (!career) h += '<p class="fs-note">Map, shop and club open again after the event.</p>';
     return h + '</div>';
   }
   function catchHtml() {
@@ -2783,8 +3148,9 @@
     if (!b) return;
     S.snd.ensure();
     var s = S.save, a = b.getAttribute('data-act'), d;
+    if ((d = b.getAttribute('data-goto'))) { if (S.mode !== 'career' || !S.W) return; s.min = Math.min(DAY_END - 1, S.W.min); S.quitArm = false; toDock(d, true); return; }
     if ((d = b.getAttribute('data-tab'))) { S.tab = d; S.endArm = false; S.resetArm = false; showCard('dock'); focusSel('[data-tab="' + d + '"]', e); }
-    else if ((d = b.getAttribute('data-loc'))) { if (!locOpen(s, d).ok) { toast(LOC[d].name + ': ' + locOpen(s, d).why); return; } if (s.atWater && s.loc !== d) s.atWater = false; s.loc = d; if (!validLure(s.lure, { L: LOC[d] })) s.lure = 's'; previewWorld(); rerenderCard(); setPad('dock'); persist(); }
+    else if ((d = b.getAttribute('data-loc'))) { if (!locOpen(s, d).ok) { S.mapPeek = d; rerenderCard(); return; } S.mapPeek = null; if (s.atWater && s.loc !== d) s.atWater = false; s.loc = d; if (!validLure(s.lure, { L: LOC[d] })) s.lure = 's'; previewWorld(); rerenderCard(); setPad('dock'); persist(); }
     else if ((d = b.getAttribute('data-lure'))) { s.lure = d; rerenderCard(); persist(); }
     else if ((d = b.getAttribute('data-jloc'))) { S.jLoc = d; rerenderCard(); }
     else if ((d = b.getAttribute('data-sp'))) { S.jSel = S.jSel === d ? null : d; rerenderCard(); var jd = S.ovl.querySelector('.fs-jd'); if (jd) S.ovl.scrollTop = Math.max(0, jd.offsetTop - 40); }
@@ -2812,7 +3178,8 @@
     else if (a === 'resume') resume();
     else if (a === 'journal') showCard('journal');
     else if (a === 'back-pause') showCard('pause');
-    else if (a === 'leave') { s.min = Math.min(DAY_END - 1, S.W.min); toDock('fish'); }
+    else if (a === 'leave') { s.min = Math.min(DAY_END - 1, S.W.min); toDock('fish', true); }
+    else if (a === 'endday-menu') { if (!S.quitArm) { S.quitArm = true; showCard('pause'); return; } S.quitArm = false; S.paused = false; s.min = Math.min(DAY_END - 1, S.W.min); endDay(false); }
     else if (a === 'quit') { if (!S.quitArm) { S.quitArm = true; showCard('pause'); return; } S.quitArm = false; if (S.mode === 'tour') { S.tour.end = S.W.min; S.paused = false; endTour(); } else { S.paused = false; endDaily(); } }
     S.snd.tone(988, 0.035, 'sine', 0.02);
   }
@@ -2875,7 +3242,7 @@
         var rain = W.cond.wx === 3 ? 0.05 : W.cond.wx === 2 && W.cond.season !== 3 ? 0.03 : 0;
         S.snd.ambient(0.022 + waveH(W) * 0.04, rain, dt);
         S.birdT = (S.birdT == null ? 3 : S.birdT) - dt;
-        if (S.birdT <= 0) { S.birdT = 4 + Math.random() * 9; if (dayLight(W.min) > 0.6 && W.cond.wx < 2 && W.L.id !== 'deep') S.snd.chirp(W.L.salt); }
+        if (S.birdT <= 0) { S.birdT = 4 + Math.random() * 9; if (dayLight(W.min) > 0.6 && W.cond.wx < 2 && !W.L.boat && !W.L.dark) S.snd.chirp(W.L.salt); }
         if (W.phase === 'fishing' && S.inpReel) { S.clickT = (S.clickT || 0) - dt; if (S.clickT <= 0) { S.clickT = 0.07; S.snd.tone(2600, 0.012, 'square', 0.006); } }
         if (W.fight && W.fight.slip > 0) { S.zzT = (S.zzT || 0) - dt; if (S.zzT <= 0) { S.zzT = 0.05; S.snd.tone(1100 + Math.random() * 300, 0.04, 'sawtooth', 0.012); } }
         else if (W.fight && S.inpReel) { S.clickT = (S.clickT || 0) - dt; if (S.clickT <= 0) { S.clickT = 0.09; S.snd.tone(1900, 0.012, 'square', 0.007); } }
@@ -3025,6 +3392,13 @@
     } catch (e) {}
 
     // header buttons
+    S.hud.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-h="menu"]') : null;
+      if (!b || !S) return;
+      S.snd.ensure();
+      if (S.phase === 'water' && !S.paused) pause(); else if (S.paused) resume();
+      S.hudHtml = ''; syncHud();
+    });
     hb.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
     hb.addEventListener('click', function (e) {
       var b = e.target.closest ? e.target.closest('button') : null;
@@ -3122,6 +3496,7 @@
       if (b && S) padAction(b.getAttribute('data-act'));
     });
     S.ovl.addEventListener('click', onOvlClick);
+    S.ovl.addEventListener('click', onMapClick);
 
     ensureContracts();
     previewWorld();
