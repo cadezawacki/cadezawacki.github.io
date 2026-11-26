@@ -44,7 +44,7 @@
     snake: 'action', breakout: 'action', tetris: 'action', pong: 'action', flappy: 'action', asteroids: 'action',
     invaders: 'action', learntofly: 'action', uphill: 'action', duskdash: 'action', lander: 'action', roadhopper: 'action',
     mazemuncher: 'action', pinball: 'action', bugswarm: 'action', caveflyer: 'action', stacktower: 'action',
-    slingshot: 'action', crawler: 'action', bubbles: 'action', povracer: 'action', towerdefense: 'action', towerdefense2: 'action',
+    slingshot: 'action', crawler: 'action', bubbles: 'action', povracer: 'action', streetheat: 'action', towerdefense: 'action', towerdefense2: 'action',
     // puzzle
     g2048: 'puzzle', sudoku: 'puzzle', fifteen: 'puzzle', flowlines: 'puzzle', chesspuzzles: 'puzzle',
     bridge: 'puzzle', factory: 'puzzle', inkdrop: 'puzzle',
