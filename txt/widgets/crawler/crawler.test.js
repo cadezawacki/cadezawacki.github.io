@@ -421,6 +421,85 @@ test('travel and explore paths are walkable', function () {
   assert.ok(seen > 300, 'explored a good part of the floor (' + seen + ')');
 });
 
+// ---------------------------------------------------------------- clarity: healing, damage attribution, tutorial
+test('no passive regeneration: waiting with no enemies does not heal; resting heals slowly and says why', function () {
+  var h = hero('warrior', 5), G = arena(h), s = E.stats(h, G);
+  G.p.hp = Math.round(s.maxHp * 0.5); var hp0 = G.p.hp;
+  for (var i = 0; i < 30; i++) E.act(G, { t: 'wait' });
+  assert.strictEqual(G.p.hp, hp0, 'waiting never heals');
+  G.ev = [];
+  E.act(G, { t: 'rest' });
+  var gained = G.p.hp - hp0;
+  assert.ok(gained > 0 && gained <= Math.ceil(s.maxHp * 0.04), 'one rest turn heals a little (' + gained + ')');
+  var he = G.ev.filter(function (e) { return e.t === 'heal'; })[0];
+  assert.ok(he && he.why === 'Rest', 'heal event says why');
+  assert.ok(G.log.some(function (l) { return /Rest/.test(l.s) && l.c === 'heal'; }), 'heal is logged');
+  // resting next to an awake enemy is just waiting
+  var m = E.spawnMon(G, 'skeleton', 14, 10, { aware: true }); m.spd = 0; E.computeFov(G);
+  var hp1 = G.p.hp; E.act(G, { t: 'rest' }); assert.strictEqual(G.p.hp, hp1, 'no resting with foes in sight');
+});
+test('level-ups heal only partly, and visibly', function () {
+  var h = hero('mage', 1), G = arena(h), s = E.stats(h, G);
+  G.p.hp = 1; G.ev = [];
+  E.gainXp(G, h, E.xpForLevel(1));
+  assert.ok(G.p.hp > 1 && G.p.hp < E.stats(h, G).maxHp * 0.5, 'partial heal (' + G.p.hp + ')');
+  assert.ok(G.ev.some(function (e) { return e.t === 'heal' && e.why === 'Level up'; }));
+});
+test('every point of damage to the hero carries a source', function () {
+  D.CLASS_ORDER.forEach(function (cls, ci) {
+    var h = hero(cls, 9);
+    for (var d = 1; d <= 12; d += 1) {
+      var G = E.startRun(h, d, { seed: 50 + d * 13 + ci });
+      for (var t = 0; t < 250 && !G.over; t++) {
+        if (G.modal) { if (G.modal.k === 'event') E.eventChoice(G, 0); G.modal = null; continue; }
+        var p = E.explorePath(G), hv = E.hostilesVisible(G);
+        if (hv.length && Math.abs(hv[0].x - G.p.x) + Math.abs(hv[0].y - G.p.y) === 1) E.act(G, { t: 'move', dx: hv[0].x - G.p.x, dy: hv[0].y - G.p.y });
+        else if (p) E.act(G, { t: 'move', dx: p[0][0] - G.p.x, dy: p[0][1] - G.p.y });
+        else E.act(G, { t: 'wait' });
+        G.ev.forEach(function (e) { if (e.t === 'dmg' && e.p) assert.ok(e.src && e.src !== 'Unknown', 'unattributed damage: ' + JSON.stringify(e)); });
+        G.ev = [];
+        if (G.p.hp < 30) G.p.hp = 999;
+      }
+    }
+  });
+});
+test('DoTs name what applied them', function () {
+  var h = hero('warrior', 5), G = arena(h), m = E.spawnMon(G, 'ghoul', 11, 10, { aware: true });
+  E.addStatus(G, G.p, 'poison', 3, 4, 'Ghoul'); G.ev = [];
+  m.spd = 0; E.act(G, { t: 'move', dx: -1, dy: 0 });
+  var e = G.ev.filter(function (x) { return x.t === 'dmg' && x.p; })[0];
+  assert.ok(e && /Poison \(Ghoul\)/.test(e.src), e && e.src);
+  assert.ok(G.p.hits.length && /Poison/.test(G.p.hits[G.p.hits.length - 1].src));
+});
+test('floors 1–2 are a gentle tutorial', function () {
+  for (var seed = 1; seed <= 25; seed++) {
+    var h = hero('warrior', 1);
+    var G1 = E.startRun(h, 1, { seed: seed });
+    var foes1 = G1.mons.filter(function (m) { return !m.ally; });
+    assert.ok(foes1.length >= 2 && foes1.length <= 4, 'floor 1 foes ' + foes1.length);
+    assert.ok(foes1.every(function (m) { return !m.elite && (m.k === 'rat' || m.k === 'skeleton'); }), 'only rats and skeletons, no elites');
+    assert.ok(!G1.objs.some(function (o) { return o.k === 'trap' || o.k === 'event' || o.k === 'vent'; }), 'no traps, events or vents on floor 1');
+    assert.ok(G1.objs.some(function (o) { return o.k === 'cons' && o.id === 'potion'; }), 'a potion to find');
+    assert.strictEqual(Object.keys(G1.pz).length, 0, 'no puzzle on floor 1');
+    var G2 = E.startRun(h, 2, { seed: seed });
+    var foes2 = G2.mons.filter(function (m) { return !m.ally; });
+    assert.ok(foes2.length <= 6 && foes2.every(function (m) { return !m.elite && ['rat', 'skeleton', 'skarcher'].indexOf(m.k) >= 0; }));
+    assert.ok(G2.objs.filter(function (o) { return o.k === 'trap'; }).every(function (o) { return !o.hidden && o.id === 'spike'; }), 'floor 2 traps are visible spikes');
+    assert.ok(!G2.objs.some(function (o) { return o.k === 'event'; }));
+    assert.ok(Object.keys(G2.pz).every(function (k) { return G2.pz[k].kind === 'vault'; }), 'floor 2: a lever vault, stairs never sealed');
+    // hidden traps only from floor 6
+    var G5 = E.startRun(hero('warrior', 6), 5 + (seed % 3 === 0 ? 0 : -1), { seed: seed });
+    assert.ok(!G5.objs.some(function (o) { return o.k === 'trap' && o.hidden; }), 'no hidden traps before floor 6');
+  }
+});
+test('early floors cap how many foes press the attack', function () {
+  var h = hero('warrior', 3), G = arena(h, { depth: 1, ml: 1 }); G.mode = 'story';
+  for (var i = 0; i < 6; i++) { var m = E.spawnMon(G, 'skeleton', 15 + i, 10, { aware: true }); m.energy = 0; }
+  E.act(G, { t: 'wait' });
+  var moved = G.mons.filter(function (m) { return !m.holding; }).length;
+  assert.ok(moved <= 2, 'only two advance (' + moved + ')');
+});
+
 // ---------------------------------------------------------------- the widget file itself
 test('crawler.js registers exactly what the manifest says', function () {
   var widget = null, css = [];
