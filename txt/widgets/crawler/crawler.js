@@ -70,7 +70,7 @@
   }
 
   // ---- settings -----------------------------------------------------------------
-  function loadSettings() { var s = jget(K_SET) || {}; return { sound: s.sound !== false, quick: s.quick !== false, mini: s.mini !== false, hints: s.hints !== false }; }
+  function loadSettings() { var s = jget(K_SET) || {}; return { sound: s.sound !== false, quick: s.quick !== false, mini: s.mini !== false, hints: s.hints !== false, verbose: !!s.verbose }; }
   function saveSettings() { if (S) sset(K_SET, JSON.stringify(S.set)); }
 
   // ===========================================================================
@@ -314,7 +314,7 @@
     var mx = getComputedStyle(S.panel).maxHeight, mh = /px$/.test(mx) ? parseFloat(mx) : 0;
     var room = vh - top - 8; if (mh > 0) room = Math.min(room, mh);
     var head = S.panel.querySelector('.cade-panel-head'), hh = head ? head.getBoundingClientRect().height || 36 : 36;
-    var chrome = hh + (S.hudEl.offsetHeight || 40) + (S.abilEl.offsetHeight || 54) + (S.padEl.offsetHeight || 140) + 30;
+    var chrome = hh + (S.hudEl.offsetHeight || 40) + (S.abilEl.offsetHeight || 54) + (S.padEl.offsetHeight || 140) + (S.objEl ? S.objEl.offsetHeight + 6 : 0) + 34;
     var H = Math.floor(Math.max(200, Math.min(room - chrome, W * 1.35)));
     if (!phone) H = Math.max(260, Math.min(H, 560));
     var dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
@@ -329,7 +329,7 @@
   function relayoutIfMoved() {
     if (!S || !S.lay || (Cade.isMinimized && Cade.isMinimized(S.panel))) return;
     var head = S.panel.querySelector('.cade-panel-head'), hh = head ? head.getBoundingClientRect().height || 36 : 36;
-    var chrome = hh + (S.hudEl.offsetHeight || 40) + (S.abilEl.offsetHeight || 54) + (S.padEl.offsetHeight || 140) + 30;
+    var chrome = hh + (S.hudEl.offsetHeight || 40) + (S.abilEl.offsetHeight || 54) + (S.padEl.offsetHeight || 140) + (S.objEl ? S.objEl.offsetHeight + 6 : 0) + 34;
     if (Math.abs(chrome - S.lay.chrome) > 2) layout();
   }
 
@@ -430,7 +430,8 @@
       if (Math.abs(v.x - x) < 0.01) v.x = x; if (Math.abs(v.y - y) < 0.01) v.y = y;
     }
     upd(0, G.p.x, G.p.y);
-    G.mons.forEach(function (m) { upd(m.id, m.x, m.y); });
+    var monsWait = S.time - (S.actT || 0) < 80;   // the hero moves first, then the world answers
+    G.mons.forEach(function (m) { if (monsWait && S.vis[m.id]) { seen[m.id] = 1; return; } upd(m.id, m.x, m.y); });
     for (var id in S.vis) if (!seen[id]) delete S.vis[id];
   }
   function frame(t) {
@@ -532,11 +533,18 @@
     drawTelegraphs(c, G, ox, oy, ts, t);
     // targeting
     if (S.tgt) drawTargeting(c, G, ox, oy, ts, t);
+    if (S.preview) {
+      c.fillStyle = rgb(S.th.accent, 0.85);
+      S.preview.forEach(function (q, i) { var r = i === S.preview.length - 1 ? ts * 0.16 : ts * 0.08; c.beginPath(); c.arc(ox + (q[0] + 0.5) * ts, oy + (q[1] + 0.5) * ts, r, 0, 7); c.fill(); });
+    }
+    var cur = S.look || S.pending;
+    if (cur) { var pad = 2 + Math.sin(t / 150) * 2; c.strokeStyle = rgb(S.th.accent); c.lineWidth = 2.5; c.strokeRect(ox + cur.x * ts - pad, oy + cur.y * ts - pad, ts + pad * 2, ts + pad * 2); }
     // actors
     var list = G.mons.filter(function (m) { return E.monVisible(G, m) || m.ally && vis[m.y * w + m.x]; });
     list.sort(function (a, b) { return a.y - b.y; });
     list.forEach(function (m) { drawActor(c, G, m, ox, oy, ts, t); });
     drawPlayer(c, G, ox, oy, ts, t);
+    list.forEach(function (m) { var pp = actorPos(m.id, m.x, m.y); drawIntentIcon(c, G, m, ox + pp.x * ts, oy + pp.y * ts, ts, t); });
     // fog + torchlight
     var L = E.lightRadius(G), vp = S.vis[0] || G.p, fogA = S.th.dark ? 0.62 : 0.55;
     for (y = y0; y <= y1; y++) for (x = x0; x <= x1; x++) {
@@ -551,18 +559,37 @@
     if (S.set.mini) drawMini();
   }
   // visible enemies outside the view get a pointer at the stage edge
+  function edgePoint(x, y, mg) {
+    var W = S.cw, H = S.chh, cx = W / 2, cy = H / 2, dx = x - cx, dy = y - cy, k = Math.min((W / 2 - mg) / Math.abs(dx || 1e-6), (H / 2 - mg) / Math.abs(dy || 1e-6));
+    return { x: cx + dx * k, y: cy + dy * k, a: Math.atan2(dy, dx) };
+  }
+  function arrow(c, x, y, a, col, label, big) {
+    c.save(); c.translate(x, y); c.rotate(a);
+    c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 1.5;
+    var L = big ? 13 : 10;
+    c.beginPath(); c.moveTo(L, 0); c.lineTo(-L * 0.6, -L * 0.7); c.lineTo(-L * 0.6, L * 0.7); c.closePath(); c.fill(); c.stroke();
+    c.restore();
+    if (label) { c.font = glyphFont(10, true); c.textAlign = 'center'; c.textBaseline = 'middle'; var lx = x - Math.cos(a) * 20, ly = y - Math.sin(a) * 16; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.7)'; c.strokeText(label, lx, ly); c.fillStyle = col; c.fillText(label, lx, ly); }
+  }
+  // things outside the view: visible enemies (red), the stairs and the current objective (gold)
   function drawEdgeArrows(c, G, ox, oy, s, t) {
-    var W = S.cw, H = S.chh, m = 12;
+    var W = S.cw, H = S.chh, on = function (x, y) { return x >= 0 && x <= W && y >= 0 && y <= H; };
     G.mons.forEach(function (mo) {
       if (mo.ally || !E.monVisible(G, mo)) return;
-      var x = ox + (mo.x + 0.5) * s, y = oy + (mo.y + 0.5) * s;
-      if (x >= 0 && x <= W && y >= 0 && y <= H) return;
-      var cx = W / 2, cy = H / 2, dx = x - cx, dy = y - cy, k = Math.min((W / 2 - m) / Math.abs(dx || 1e-6), (H / 2 - m) / Math.abs(dy || 1e-6));
-      var ax = cx + dx * k, ay = cy + dy * k, a = Math.atan2(dy, dx);
-      c.save(); c.translate(ax, ay); c.rotate(a);
-      c.fillStyle = mo.boss ? '#ffd86a' : mo.intent ? '#ff4040' : '#e86050'; c.globalAlpha = 0.75 + 0.25 * Math.sin(t / 200);
-      c.beginPath(); c.moveTo(9, 0); c.lineTo(-5, -6); c.lineTo(-5, 6); c.closePath(); c.fill();
-      c.restore(); c.globalAlpha = 1;
+      var x = ox + (mo.x + 0.5) * s, y = oy + (mo.y + 0.5) * s; if (on(x, y)) return;
+      var e = edgePoint(x, y, 12); c.globalAlpha = 0.8 + 0.2 * Math.sin(t / 200); arrow(c, e.x, e.y, e.a, mo.boss ? '#ffd86a' : '#ff4a3a', null); c.globalAlpha = 1;
+    });
+    var goal = S.goal;
+    if (goal) { var gx = ox + (goal.x + 0.5) * s, gy = oy + (goal.y + 0.5) * s; if (!on(gx, gy)) { var e2 = edgePoint(gx, gy, 16); arrow(c, e2.x, e2.y, e2.a, '#ffd040', goal.label, true); } }
+    // where the last hits came from
+    S.fx.hitDirs = S.fx.hitDirs.filter(function (h) {
+      var k = (t - h.t0) / 700; if (k >= 1) return false;
+      var px = ox + (G.p.x + 0.5) * s, py = oy + (G.p.y + 0.5) * s, hx = ox + (h.fx + 0.5) * s, hy = oy + (h.fy + 0.5) * s, a = Math.atan2(hy - py, hx - px);
+      if (h.fx === G.p.x && h.fy === G.p.y) return true;
+      c.globalAlpha = 1 - k; c.strokeStyle = '#ff3b30'; c.lineWidth = 4;
+      c.beginPath(); c.arc(px, py, s * 0.62, a - 0.5, a + 0.5); c.stroke();
+      if (!on(hx, hy)) { var e3 = edgePoint(hx, hy, 12); arrow(c, e3.x, e3.y, e3.a, '#ff3b30', null, true); }
+      c.globalAlpha = 1; return true;
     });
   }
   function glyphFont(px, bold) { return (bold ? '700 ' : '') + Math.round(px) + 'px ' + S.th.font; }
@@ -692,8 +719,26 @@
     if (m.hp < m.maxHp || m.elite || m.boss) hpBar(c, X, Y, s, m.hp / m.maxHp, m.ally ? '#7fe0a0' : m.elite ? '#ffb040' : '#e04a4a');
     statusDots(c, m, X, Y, s, t);
     if (m.asleep) { c.fillStyle = S.th.dark ? '#c0c8ff' : '#5060a0'; c.font = glyphFont(s * 0.3, true); c.textAlign = 'center'; c.fillText('z', X + s * 0.85, Y + s * 0.1 - ((t / 40) % 10) * 0.6); }
-    if (m.intent) { c.fillStyle = '#ff4040'; c.font = glyphFont(s * 0.45, true); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('!', X + s * 0.85, Y + s * 0.05 + Math.sin(t / 90) * 2); }
     if (S.G.p.target === m.id && !m.ally) { c.strokeStyle = rgb(S.th.accent); c.lineWidth = 2; var q = s * 0.08, e = s * 0.25; [[X + q, Y + q, 1, 1], [X + s - q, Y + q, -1, 1], [X + q, Y + s - q, 1, -1], [X + s - q, Y + s - q, -1, -1]].forEach(function (b) { c.beginPath(); c.moveTo(b[0], b[1] + e * b[3]); c.lineTo(b[0], b[1]); c.lineTo(b[0] + e * b[2], b[1]); c.stroke(); }); }
+  }
+  // what this monster is about to do, in one glyph above its head
+  function intentOf(G, m) {
+    if (m.ally) return null;
+    if (m.asleep) return ['z', '#8fa0ff', 'asleep'];
+    if (m.disguised) return null;
+    if (m.intent) { var k = m.intent.k; return [k === 'shot' || k === 'bolt' ? '➶' : k === 'charge' ? '»' : '✸', '#ff3b30', k === 'shot' || k === 'bolt' ? 'aiming — leave the red line' : k === 'charge' ? 'about to charge along the red line' : 'winding up — leave the red tiles']; }
+    if (!m.aware) return ['?', '#c0c0c0', 'hasn\'t noticed you'];
+    if (m.holding) return ['…', '#c0c0c0', 'waiting its turn'];
+    var d = Math.abs(m.x - G.p.x) + Math.abs(m.y - G.p.y);
+    if (d === 1 && !m.st.stun && !m.st.frozen) return ['⚔', '#ff6a3a', 'will attack you next turn'];
+    if (m.st.stun || m.st.frozen) return ['✶', '#ffe06a', 'stunned'];
+    return null;
+  }
+  function drawIntentIcon(c, G, m, X, Y, s, t) {
+    var it = intentOf(G, m); if (!it) return;
+    var bx = X + s * 0.78, by = Y + s * 0.02 + (it[0] === 'z' ? -((t / 60) % 6) * 0.5 : 0), r = Math.max(8, s * 0.24);
+    c.fillStyle = 'rgba(0,0,0,0.65)'; c.beginPath(); c.arc(bx, by, r, 0, 7); c.fill();
+    c.strokeStyle = it[1]; c.lineWidth = 1.5; c.stroke(); c.fillStyle = it[1]; c.font = glyphFont(Math.max(11, s * 0.34), true); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(it[0], bx, by + 1);
   }
   function drawPlayer(c, G, ox, oy, s, t) {
     var p = actorPos(0, G.p.x, G.p.y), X = ox + p.x * s, Y = oy + p.y * s, cls = D.CLASSES[G.hero.cls];
@@ -751,13 +796,14 @@
 
   // ---- effects ---------------------------------------------------------------------
   function burst(x, y, col, n, spd, life, size, grav) {
-    for (var i = 0; i < (n || 8); i++) {
+    n = Math.max(1, Math.round((n || 8) * 0.5));
+    for (var i = 0; i < n; i++) {
       var a = Math.random() * Math.PI * 2, v = (spd || 2.5) * (0.4 + Math.random() * 0.8);
       S.fx.parts.push({ x: x + 0.5, y: y + 0.5, vx: Math.cos(a) * v, vy: Math.sin(a) * v - (grav ? 1.5 : 0), life: 0, max: (life || 0.5) * (0.7 + Math.random() * 0.6), col: col, size: size || 0.08, g: grav || 0 });
     }
     if (S.fx.parts.length > 400) S.fx.parts.splice(0, S.fx.parts.length - 400);
   }
-  function floatText(x, y, s, col, big) { S.fx.texts.push({ x: x + 0.5 + (Math.random() - 0.5) * 0.3, y: y + 0.2, s: s, col: col, life: 0, max: big ? 1.4 : 0.9, big: !!big }); if (S.fx.texts.length > 40) S.fx.texts.shift(); }
+  function floatText(x, y, s, col, big, tag) { S.fx.texts.push({ x: x + 0.5 + (tag ? 0 : (Math.random() - 0.5) * 0.3), y: y + 0.2, s: s, col: col, life: 0, max: tag ? 1.8 : big ? 1.4 : 0.9, big: !!big, tag: tag || null }); if (S.fx.texts.length > 30) S.fx.texts.shift(); }
   function ring(x, y, r, col, dur) { S.fx.rings.push({ x: x + 0.5, y: y + 0.5, r: r || 1, col: col, t0: S.time, dur: dur || 380 }); }
   function areaFlash(tiles, col, dur) { S.fx.areas.push({ tiles: tiles, col: col, t0: S.time, dur: dur || 320 }); }
   function banner(title, sub, dur) { S.fx.banner = { title: title, sub: sub || '', t0: S.time, dur: dur || 2600 }; }
@@ -774,20 +820,20 @@
       case 'log': addLog(e.s, e.c); break;
       case 'dmg':
         if (!vis(e.x, e.y) && !e.p) break;
-        var col = e.p ? '#ff6a5a' : e.crit ? '#ffe06a' : (ELEM_COL[e.elem] || (S.th.dark ? '#ffffff' : '#ffffff'));
-        floatText(e.x, e.y, (e.crit ? e.n + '!' : String(e.n)), col, e.crit);
+        var col = e.p ? '#ff5a4a' : e.crit ? '#ffe06a' : (ELEM_COL[e.elem] || '#ffffff');
+        if (e.p) { floatText(e.x, e.y, '−' + e.n, col, true, e.src); S.turnHits.push({ n: e.n, src: e.src || '?' }); if (e.from) S.fx.hitDirs.push({ fx: e.from[0], fy: e.from[1], t0: S.time }); interrupt(); }
+        else floatText(e.x, e.y, (e.crit ? e.n + '!' : String(e.n)), col, e.crit);
         if (e.ab) floatText(e.x, e.y - 0.3, '(' + e.ab + ')', '#9fd8ff');
         var a = G.p.x === e.x && G.p.y === e.y ? 0 : null; G.mons.forEach(function (m) { if (m.x === e.x && m.y === e.y) a = m.id; });
         if (a != null) S.flash[a] = S.time;
-        burst(e.x, e.y, ELEM_COL[e.elem] || (e.p ? '#e04a4a' : '#e8d0b0'), e.crit ? 12 : 5, e.crit ? 3.5 : 2.2, 0.4, 0.07);
-        if (e.p) { snd.play('hurt'); S.shake = Math.max(S.shake, e.crit ? 7 : 4); Cade.haptic && Cade.haptic(15); S.hurtT = S.time; }
+        burst(e.x, e.y, ELEM_COL[e.elem] || (e.p ? '#e04a4a' : '#e8d0b0'), e.crit ? 6 : 3, e.crit ? 3 : 2, 0.35, 0.07);
+        if (e.p) { snd.play('hurt'); S.shake = Math.max(S.shake, e.crit ? 4 : 2.5); Cade.haptic && Cade.haptic(15); S.hurtT = S.time; }
         else snd.play(e.crit ? 'crit' : 'hit');
-        if (e.crit && !e.p) S.shake = Math.max(S.shake, 3);
         break;
       case 'miss': if (vis(e.x, e.y)) { floatText(e.x, e.y, 'miss', '#b0b0b0'); snd.play('miss'); } break;
       case 'block': floatText(e.x, e.y, 'block', '#9fd8ff'); snd.play('miss'); break;
       case 'immune': floatText(e.x, e.y, 'immune', '#9fdcff'); break;
-      case 'heal': if (!e.quiet || e.n >= 3) floatText(e.x, e.y, '+' + e.n, '#7fe0a0'); if (!e.quiet) { burst(e.x, e.y, '#7fe0a0', 8, 1.5, 0.6, 0.07, -0.5); snd.play('heal'); } break;
+      case 'heal': if (e.p || vis(e.x, e.y)) floatText(e.x, e.y, '+' + e.n, '#5fd07a', !!e.p && !e.quiet, e.p ? e.why : null); if (!e.quiet) { burst(e.x, e.y, '#7fe0a0', 5, 1.5, 0.6, 0.07, -0.5); snd.play('heal'); } break;
       case 'atk': S.lunge[e.id] = { dx: Math.sign(e.tx - e.x), dy: Math.sign(e.ty - e.y), t0: S.time }; if (e.id === 0) snd.play('swing'); break;
       case 'proj':
         S.fx.projs.push({ x0: e.x0 + 0.5, y0: e.y0 + 0.5, x1: e.x1 + 0.5, y1: e.y1 + 0.5, t0: S.time + (e.delay || 0), dur: Math.max(90, Math.hypot(e.x1 - e.x0, e.y1 - e.y0) * 28), k: e.k, col: PROJ_COL[e.k] || '#ffffff' });
@@ -804,14 +850,14 @@
         e.tiles.forEach(function (q, ix) { if (ix % 2 === 0 && vis(q[0], q[1])) burst(q[0], q[1], ac + '1)', 4, 2.4, 0.4, 0.08); });
         if (!e.small) snd.play(e.k === 'boom' ? 'boom' : e.k === 'wave' ? 'frost' : e.k === 'void' ? 'dark' : 'hit');
         break;
-      case 'shake': S.shake = Math.max(S.shake, e.n); break;
+      case 'shake': S.shake = Math.max(S.shake, Math.min(5, e.n * 0.5)); break;
       case 'level': ring(G.p.x, G.p.y, 2, '#ffe08a', 700); burst(G.p.x, G.p.y, '#ffe08a', 30, 3, 1.1, 0.08, -0.5); banner('LEVEL ' + e.lvl, 'You grow stronger.', 1800); snd.play('level'); refreshBars(); break;
       case 'floor': S.vis = {}; S.snapCam = true; S.tilesDirty = true; S.fx.parts = []; S.fx.projs = []; S.fx.areas = []; snd.play('stairs'); S.auto = null; break;
       case 'act':
-        var A = D.STORY.acts[e.act - 1]; if (A) banner(A.name.toUpperCase(), D.BIOMES[e.biome].name, 3600); break;
-      case 'intent': var m = mon(e.id); if (m && vis(m.x, m.y)) snd.play('warn'); stopAuto(); break;
+        var A = D.STORY.acts[e.act - 1]; if (A) banner(A.name.toUpperCase(), D.BIOMES[e.biome].name, 2200); break;
+      case 'intent': var m = mon(e.id); if (m && vis(m.x, m.y)) { snd.play('warn'); interrupt(); } break;
       case 'alert': if (vis(e.x, e.y)) floatText(e.x, e.y - 0.2, '!', '#ffd040', true); break;
-      case 'spot': stopAuto('spot'); break;
+      case 'spot': if (S.auto) addLog('Something comes into view — you stop.', 'warn'); interrupt(); break;
       case 'status': if (vis(e.x, e.y) && (e.k === 'stun' || e.k === 'frozen' || e.k === 'root' || e.k === 'mark')) floatText(e.x, e.y - 0.3, e.k === 'frozen' ? 'frozen' : e.k === 'mark' ? 'marked' : e.k + 'ed', '#d0d0ff'); break;
       case 'pick':
         if (e.k === 'gold') { floatText(e.x, e.y, '+' + e.n + 'g', '#f0c840'); snd.play('gold'); }
@@ -891,6 +937,7 @@
       var k = x.life / x.max, yy = oy + (x.y - k * 0.9) * s, sz = s * (x.big ? 0.52 : 0.38) * (k < 0.15 ? 0.7 + k * 2 : 1);
       c.font = glyphFont(sz, true); c.globalAlpha = 1 - Math.max(0, k - 0.6) / 0.4;
       c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.7)'; c.strokeText(x.s, ox + x.x * s, yy); c.fillStyle = x.col; c.fillText(x.s, ox + x.x * s, yy);
+      if (x.tag) { c.font = glyphFont(Math.max(10, s * 0.3), true); c.strokeText(x.tag, ox + x.x * s, yy + s * 0.42); c.fillStyle = '#fff'; c.fillText(x.tag, ox + x.x * s, yy + s * 0.42); }
       c.globalAlpha = 1; return true;
     });
     // hurt vignette
@@ -979,6 +1026,9 @@
     if (boss) { S.bossEl.hidden = false; S.bossName.textContent = boss.name + (boss.phase ? ' — phase ' + (boss.phase + 1) : ''); S.bossFill.style.width = clamp(boss.hp / boss.maxHp * 100, 0, 100) + '%'; }
     else S.bossEl.hidden = true;
     S.stage.classList.toggle('boss', !S.bossEl.hidden);
+    var hs = G && G.p.hits ? G.p.hits.filter(function (x) { return G.turn - x.t <= 4; }).slice(-3) : [];
+    var ht = hs.length ? 'hit by: ' + hs.map(function (x) { return x.src + ' −' + x.n; }).join(' · ') : '';
+    if (S.hitsEl.textContent !== ht) S.hitsEl.textContent = ht;
   }
   function refreshChips() {
     if (!S || !S.G) { if (S) S.chipsEl.innerHTML = ''; return; }
@@ -1012,13 +1062,42 @@
   }
   function addLog(s, c) {
     if (!S) return;
-    S.logLines.push({ s: s, c: c || '' }); if (S.logLines.length > 150) S.logLines.shift();
-    var el = document.createElement('div');
+    c = c || '';
+    S.logLines.push({ s: s, c: c }); if (S.logLines.length > 150) S.logLines.shift();
+    if (!S.set.verbose) {
+      if (c === 'info') { toast(s); return; }
+      if (c === 'kill' && /crumbles/.test(s)) return;
+    }
+    var last = S.logEl.lastChild;
+    if (last && last.__s === s && !last.classList.contains('old')) { last.__n = (last.__n || 1) + 1; last.textContent = s + ' ×' + last.__n; return; }
+    var el = document.createElement('div'); el.__s = s;
     el.className = 'cr-ln ' + String(c || '').replace(/[^a-z:]/g, '').replace(':', ' r-');
     el.textContent = s;
     S.logEl.appendChild(el);
-    while (S.logEl.children.length > 4) S.logEl.removeChild(S.logEl.firstChild);
-    setTimeout(function () { el.classList.add('old'); }, 5000);
+    while (S.logEl.children.length > (S.set.verbose ? 5 : 3)) S.logEl.removeChild(S.logEl.firstChild);
+    setTimeout(function () { el.classList.add('old'); }, 4500);
+  }
+
+  function toast(text, kind, ms) {
+    if (!S || !S.toastEl) return;
+    S.toastEl.className = 'cr-toast' + (kind ? ' ' + kind : '');
+    S.toastEl.innerHTML = text; S.toastEl.hidden = false;
+    clearTimeout(S.toastT); S.toastT = setTimeout(function () { if (S) S.toastEl.hidden = true; }, ms || 1800);
+  }
+  function tip(key, text) {
+    var h = hero(); if (!h || !S.G || S.G.mode !== 'story' || !S.set.hints) return false;
+    var seen = h.story.seen = h.story.seen || {};
+    if (seen['tip:' + key]) return false;
+    seen['tip:' + key] = 1; markDirty();
+    S.tipEl.innerHTML = '<span>💡 ' + text + '</span><button type="button" data-act="tipx" aria-label="Dismiss">✕</button>'; S.tipEl.hidden = false;
+    clearTimeout(S.tipT); S.tipT = setTimeout(function () { if (S) S.tipEl.hidden = true; }, 9000);
+    return true;
+  }
+  // something happened that should stop held keys, travel and rest
+  function interrupt() {
+    if (!S) return;
+    S.auto = null; S.blockRepeat = true;
+    if (S.hold) { clearTimeout(S.hold.t); clearInterval(S.hold.iv); S.hold = null; }
   }
 
   // ===========================================================================
@@ -1028,7 +1107,10 @@
     if (!S || !S.G || S.G.over || S.G.modal) return false;
     S.snd.ensure();
     var hpBefore = S.G.p.hp;
+    S.turnHits = [];
+    hideInfo();
     var ok = E.act(S.G, a);
+    if (ok) S.actT = now();
     afterAct();
     if (S && S.auto && S.G && S.G.p.hp < hpBefore) stopAuto();
     return ok;
@@ -1038,13 +1120,22 @@
     S.tilesDirty = true;
     drainEvents();
     if (!S.G) return;
+    if (S.turnHits.length) {
+      var tot = 0, parts = {}; S.turnHits.forEach(function (h) { tot += h.n; parts[h.src] = (parts[h.src] || 0) + h.n; });
+      addLog('−' + tot + ' HP: ' + Object.keys(parts).map(function (k) { return k + ' ' + parts[k]; }).join(', '), 'hurt');
+      S.turnHits = [];
+    }
     refreshHud();
     if (S.G.over) { finishRun(); return; }
     if (S.G.modal) { stopAuto(); showModal(); }
+    else { introduce(); teach(); }
+    updateObjective();
     saveRunSoon();
   }
-  function move(dx, dy) {
+  function move(dx, dy, rep) {
+    if (S.look) { lookMove(dx, dy); return; }
     if (S.tgt) { moveCursor(dx, dy); return; }
+    if (rep && now() - (S.actT || 0) < 110) return;
     stopAuto();
     doAct({ t: 'move', dx: dx, dy: dy });
   }
@@ -1053,12 +1144,12 @@
     if (S.tgt) { confirmTarget(); return; }
     if (S.auto) { stopAuto(); return; }
     var G = S.G; if (!G) return;
-    if (E.hostilesVisible(G).length) { doAct({ t: 'wait' }); return; }
+    if (E.hostilesVisible(G).some(function (m) { return !m.asleep; })) { doAct({ t: 'wait' }); addLog('You wait a turn.', 'info'); return; }
     var s = E.stats(G.hero, G), cr = D.CLASSES[G.hero.cls].res;
     var resFull = cr.decay ? true : G.p.res >= s.maxRes;
-    if (G.p.hp >= s.maxHp && resFull) { doAct({ t: 'wait' }); return; }
+    if (G.p.hp >= s.maxHp && resFull) { doAct({ t: 'wait' }); addLog('You wait a turn (already rested).', 'info'); return; }
     S.auto = { k: 'rest', n: 0, next: 0 };
-    addLog('You rest… (any key to stop)', 'info');
+    toast('Resting… each turn heals a little. Any key stops.');
   }
   function usePotion() { stopAuto(); if (S.G) doAct({ t: 'cons', id: 'potion' }); }
 
@@ -1081,12 +1172,12 @@
     if (!A || !G) return;
     if (G.over || G.modal || S.ovlOpen || S.screen) { S.auto = null; return; }
     if (t < A.next) return;
-    A.next = t + (A.k === 'rest' ? 28 : 72);
+    A.next = t + (A.k === 'rest' ? 90 : 130);
     if (A.k === 'rest') {
       var s = E.stats(G.hero, G), cr = D.CLASSES[G.hero.cls].res;
-      if (E.hostilesVisible(G).length || A.n++ > 150) { S.auto = null; return; }
+      if (E.hostilesVisible(G).some(function (m) { return !m.asleep; }) || A.n++ > 150) { S.auto = null; addLog('Rest interrupted!', 'warn'); return; }
       if (G.p.hp >= s.maxHp && (cr.decay || G.p.res >= s.maxRes)) { S.auto = null; addLog('You feel rested.', 'good'); return; }
-      doAct({ t: 'wait' }); return;
+      doAct({ t: 'rest' }); return;
     }
     if (A.k === 'explore') {
       var path = E.explorePath(G);
@@ -1109,6 +1200,146 @@
       if (!ok || last) S.auto = null;
     }
   }
+
+  // ---- what things are -----------------------------------------------------------------
+  var AI_DESC = {
+    melee: 'Walks up and hits you when next to you.', swarm: 'Fast and weak — comes in packs.',
+    brute: 'Winds up a slam on all 8 tiles around it (red tiles), then hits hard. Step 2 tiles away.',
+    archer: 'Aims at you (red line) and fires next turn. Step out of the line, or close in.',
+    turret: 'Never moves; aims a shot (red line), fires next turn.',
+    caster: 'Marks an area in red; it explodes 1–2 turns later. Walk out of it.',
+    charger: 'Lines up with you, then charges along the red line. Sidestep!',
+    bomber: 'Runs at you and blows itself up (red 3×3) a turn later. Back off.',
+    summoner: 'Keeps its distance and calls in helpers. Kill it first.',
+    healer: 'Heals or shields its friends, and can raise the dead. Kill it first.',
+    thief: 'Steals gold, then flees. Kill it to get the gold back.',
+    ambush: 'Hides until you are close.', ghost: 'Drifts straight through walls.', boss: 'A boss: several attacks and phases. Watch the red tiles.'
+  };
+  var ON_HIT = { poison: 'poisons', burn: 'sets you on fire', bleed: 'makes you bleed', root: 'can pin you in place', weaken: 'weakens you' };
+  var OBJ_DESC = {
+    chest: ['Chest', 'Walk into it to open it. Usually holds gear and gold.'], boulder: ['Boulder', 'Walk into it to push it. Push it onto a pressure plate.'],
+    plate: ['Pressure plate', 'Needs a boulder on it to open a gate.'], lever: ['Lever', 'Walk into it to pull it. Levers open sealed gates.'],
+    rune: ['Rune', 'Step on the runes in the order shown on the rune tablet.'], tablet: ['Rune tablet', 'Walk into it to read the rune order.'],
+    lore: ['Lore page', 'Walk over it to read a piece of the story.'], quest: ['Quest item', 'Walk over it to pick it up.'],
+    trap: ['Trap', 'Hurts when stepped on. Go around, or stand next to it and press ✋ Use to disarm.'], vent: ['Vent', 'Bursts every 4 turns — it glows the turn before. Don\'t stand on it.'],
+    snare: ['Your snare', 'Roots the first enemy that steps in.'], corpse: ['Corpse', 'Just a body (necromancers can use it).'],
+    gold: ['Gold', 'Walk over it to pick it up.'], cons: ['Consumable', 'Walk over it to pick it up.'], item: ['Gear', 'Walk over it to pick it up, then equip it in 🎒 Hero.'],
+    event: ['Shrine / stranger', 'Walk into it — you\'ll get a choice.']
+  };
+  var TILE_DESC = {};
+  function tileDesc(t) {
+    if (!T) return null;
+    var m = {}; m[T.STAIRS] = ['Stairs down', 'Step on them and press ✋ Use to go to the next floor.']; m[T.DOOR] = ['Door', 'Opens when you walk into it.'];
+    m[T.WATER] = ['Shallow water', 'Safe to walk. Puts out burning.']; m[T.DEEP] = ['Deep water', 'Too deep to cross.']; m[T.LAVA] = ['Lava', 'Burns badly every turn you stand in it.'];
+    m[T.CHASM] = ['Chasm', 'Jumping in drops you to the next floor — and hurts.']; m[T.GATE] = ['Sealed gate', 'Opened by levers, a boulder puzzle or runes somewhere on this floor.'];
+    m[T.OGATE] = ['Open gate', 'The way is clear.']; m[T.FUNGUS] = ['Tall fungus', 'Walkable, but you can\'t see through it.']; m[T.PORTAL] = ['Portal home', 'Step on it and press ✋ Use to return to Lanternfall.'];
+    m[T.CRACK] = ['Cracked wall', 'A bomb can blow it open.'];
+    return m[t] || null;
+  }
+  function monInfo(G, m) {
+    var M = E.monDef(m) || {}, lines = [], it = intentOf(G, m);
+    if (m.ally) lines.push('Your ally. It fights for you.');
+    else lines.push(m.boss ? AI_DESC.boss : AI_DESC[m.ai] || '');
+    if (M.onHit) lines.push('Its hits ' + Object.keys(M.onHit).map(function (k) { return ON_HIT[k] || k; }).join(' and ') + '.');
+    if (M.deathGas) lines.push('Bursts into poison gas when it dies — don\'t stand next to it.');
+    if (M.splits) lines.push('Splits in two when killed.');
+    if (m.elite) lines.push('Elite: ' + m.elite.map(function (a) { return D.ELITE[a].name + ' (' + D.ELITE[a].desc + ')'; }).join('; ') + '.');
+    if (it) lines.push('Right now: ' + it[2] + '.');
+    return { title: E.displayName(m), sub: 'HP ' + m.hp + '/' + m.maxHp + (m.boss ? ' · boss' : m.elite ? ' · elite' : ''), lines: lines, col: m.col };
+  }
+  function infoAt(G, x, y) {
+    if (x === G.p.x && y === G.p.y) return { title: 'You', sub: 'HP ' + G.p.hp, lines: ['That\'s you, the @.'] };
+    var m = E.monAt(G, x, y);
+    if (m && (E.monVisible(G, m)) && !m.disguised) return monInfo(G, m);
+    if (!G.seen[y * G.w + x]) return { title: 'Unexplored', sub: '', lines: ['You haven\'t seen this spot yet.'] };
+    var objs = G.objs.filter(function (o) { return o.x === x && o.y === y && !(o.k === 'trap' && o.hidden); });
+    for (var i = 0; i < objs.length; i++) {
+      var o = objs[i], d = OBJ_DESC[o.k]; if (!d) continue;
+      var title = d[0], lines = [d[1]];
+      if (o.k === 'trap') { title = D.TRAPS[o.id].name; }
+      if (o.k === 'event') { title = D.EVENTS[o.id].name; if (o.used) lines = ['Already used.']; }
+      if (o.k === 'cons') { title = D.CONSUMABLES[o.id].name; lines = [D.CONSUMABLES[o.id].desc, 'Walk over it to pick it up.']; }
+      if (o.k === 'item') { title = o.it.name; lines = [D.RARITIES[o.it.rarity].name + ' ' + D.SLOT_NAMES[o.it.slot].toLowerCase() + '. Walk over it to pick it up.']; }
+      if (o.k === 'gold') title = o.n + ' gold';
+      if (o.k === 'lever') lines.push(o.reset ? 'This one RESETS the boulders.' : o.on ? 'Already pulled.' : 'Not pulled yet.');
+      if (o.k === 'chest' && o.vault) lines.push('A vault chest — better loot.');
+      return { title: title, sub: '', lines: lines };
+    }
+    var td = tileDesc(G.t[y * G.w + x]);
+    if (G.gas[y * G.w + x]) return { title: 'Poison gas', sub: '', lines: ['Poisons anyone standing in it. It thins out after a few turns.'] };
+    if (G.fire[y * G.w + x]) return { title: 'Fire', sub: '', lines: ['Burning ground. Sets you on fire.'] };
+    if (td) return { title: td[0], sub: '', lines: [td[1]] };
+    return null;
+  }
+  function showInfo(info, x, y, buttons) {
+    if (!info) { hideInfo(); return; }
+    S.infoEl.innerHTML = '<div><b>' + esc(info.title) + '</b>' + (info.sub ? ' <i>' + esc(info.sub) + '</i>' : '') + '</div>' + info.lines.filter(Boolean).map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') +
+      '<div class="cr-row">' + (buttons || '') + '<button type="button" data-act="infox">Close</button></div>';
+    S.infoEl.hidden = false; S.logEl.hidden = true;
+  }
+  function hideInfo() { if (!S || !S.infoEl) return; S.infoEl.hidden = true; S.logEl.hidden = false; S.preview = null; S.pending = null; }
+  // first sighting of a new kind of thing: one line that says what it is
+  function introduce() {
+    var G = S.G, h = G.hero; if (G.mode !== 'story') return;
+    var seen = h.story.seen = h.story.seen || {}, shown = false;
+    function intro(key, title, text) { if (shown || seen[key]) return; seen[key] = 1; shown = true; markDirty(); toast('<b>New:</b> ' + esc(title) + ' — ' + esc(text), 'intro', 5200); }
+    E.hostilesVisible(G).forEach(function (m) { if (!m.disguised) intro('m:' + (m.boss || m.k), m.boss ? m.name : D.MONSTERS[m.k].name, m.boss ? AI_DESC.boss : AI_DESC[m.ai] || ''); });
+    if (E.hostilesVisible(G).some(function (m) { return m.elite; })) intro('elite', 'Elite monster', 'colored ring = elite. Tougher, special powers, always drops loot.');
+    G.objs.forEach(function (o) {
+      if (!G.vis[o.y * G.w + o.x] || (o.k === 'trap' && o.hidden)) return;
+      var d = OBJ_DESC[o.k]; if (d && o.k !== 'corpse' && o.k !== 'gold' && o.k !== 'snare') intro('o:' + o.k, o.k === 'trap' ? D.TRAPS[o.id].name : d[0], d[1]);
+    });
+    for (var y = G.p.y - 6; y <= G.p.y + 6 && !shown; y++) for (var x = G.p.x - 6; x <= G.p.x + 6 && !shown; x++) {
+      if (!E.visible(G, x, y)) continue; var t = E.tile(G, x, y), td = tileDesc(t);
+      if (td && t !== T.DOOR && t !== T.OGATE) intro('t:' + t, td[0], td[1]);
+      if (G.gas[y * G.w + x]) intro('gas', 'Poison gas', 'poisons you while you stand in it.');
+    }
+  }
+  // the guided first floors: one prompt at a time, each shown once per hero
+  function teach() {
+    var G = S.G, h = G.hero, p = G.p; if (G.mode !== 'story') return;
+    var hv = E.hostilesVisible(G), s = E.stats(h, G), first = E.abilitiesFor(h)[0], A = D.ABILITIES[first.id];
+    if (tip('move', 'Move with the D-pad or arrow keys. One press = one step, then the monsters take their turn.')) return;
+    if (hv.length && tip('enemy', 'Enemy! Walk into it to attack. The icon over its head shows its next move (⚔ = it will hit you).')) return;
+    if (G.mons.some(function (m) { return m.intent && !m.ally; }) && tip('red', 'RED tiles = an attack landing next turn. Step off them!')) return;
+    if (hv.length && p.res >= E.abilityCost(G, first.id) && tip('ability', 'Ability ready: tap ' + A.icon + ' (or press 1) for ' + A.name + '. It costs ' + D.CLASSES[h.cls].res.name + '.')) return;
+    if (p.hp < s.maxHp * 0.5 && h.cons.potion && tip('potion', 'You\'re hurt. 🧪 (Q) drinks a potion. With no enemies around, 💤 Rest heals slowly.')) return;
+    if (G.stairs && G.vis[G.stairs[1] * G.w + G.stairs[0]] && tip('stairs', 'Stairs! Step onto them and press ✋ Use to go down.')) return;
+    if (h.bag.some(function (it) { return it.fresh; }) && tip('loot', 'You found gear. Open 🎒 Hero to compare and equip it (▲ = better).')) return;
+    if (G.objs.some(function (o) { return o.k === 'lever' && G.vis[o.y * G.w + o.x]; }) && tip('lever', 'A lever: walk into it to pull it. Levers open sealed gates.')) return;
+  }
+  // the one-line goal at the top, and where the gold arrow points
+  function updateObjective() {
+    var G = S.G; if (!G) { S.objEl.textContent = ''; S.goal = null; return; }
+    var txt = '', goal = null, seenAt = function (x, y) { return G.seen[y * G.w + x]; };
+    var boss = G.mons.filter(function (m) { return m.boss; })[0];
+    var stairsKnown = G.stairs && seenAt(G.stairs[0], G.stairs[1]);
+    var vault = null; for (var k in G.pz) if (G.pz[k].kind === 'stairvault' && !G.pz[k].solved) vault = +k;
+    if (boss) { txt = '⚔ Defeat ' + boss.name; if (seenAt(boss.x, boss.y)) goal = { x: boss.x, y: boss.y, label: 'boss' }; }
+    else if (G.boss) { txt = '✔ Victory! ▼ Stairs lead deeper · ◎ the portal goes home'; if (G.stairs) goal = { x: G.stairs[0], y: G.stairs[1], label: '▼' }; }
+    else if (vault != null && (stairsKnown || G.pz[vault].gates.some(function (g) { return seenAt(g[0], g[1]); }))) {
+      var lv = G.objs.filter(function (o) { return o.k === 'lever' && o.pz === vault; }), on = lv.filter(function (o) { return o.on; }).length;
+      txt = '🔒 The stairs are sealed — pull ' + lv.length + ' lever' + (lv.length > 1 ? 's' : '') + ' to open the gate (' + on + '/' + lv.length + ')';
+      var nl = lv.filter(function (o) { return !o.on && seenAt(o.x, o.y); })[0];
+      if (nl) goal = { x: nl.x, y: nl.y, label: 'lever' }; else if (G.stairs) goal = { x: G.stairs[0], y: G.stairs[1], label: '▼' };
+    }
+    else if (stairsKnown) { txt = '▼ Stairs found — step on them, press ✋ Use'; goal = { x: G.stairs[0], y: G.stairs[1], label: '▼' }; }
+    else txt = '🧭 Explore to find the stairs down';
+    var opt = null; for (var k2 in G.pz) { var P = G.pz[k2]; if (P.kind !== 'stairvault' && !P.solved && P.gates.some(function (g) { return seenAt(g[0], g[1]); })) opt = P; }
+    if (opt) txt += ' · optional: ' + (opt.kind === 'vault' ? 'a lever opens the vault' : opt.kind === 'rune' ? 'rune puzzle' : 'boulder puzzle');
+    S.objEl.textContent = txt; S.goal = goal;
+  }
+  // ---- look mode: arrows move a cursor, the card says what's there -----------------------
+  function lookStart() {
+    var G = S.G; if (!G) return;
+    if (S.tgt) cancelTarget();
+    S.look = { x: G.p.x, y: G.p.y };
+    var hv = E.hostilesVisible(G); if (hv.length) { S.look.x = hv[0].x; S.look.y = hv[0].y; }
+    lookShow();
+  }
+  function lookMove(dx, dy) { S.look.x = clamp(S.look.x + dx, 0, S.G.w - 1); S.look.y = clamp(S.look.y + dy, 0, S.G.h - 1); lookShow(); }
+  function lookShow() { var i = infoAt(S.G, S.look.x, S.look.y) || { title: 'Floor', sub: '', lines: ['Nothing special.'] }; i.lines = i.lines.concat(['(Look mode: arrows move · Esc/Enter closes)']); showInfo(i); }
+  function lookEnd() { S.look = null; hideInfo(); }
 
   // ---- abilities & targeting ---------------------------------------------------------
   function abilityPress(id) {
@@ -1252,7 +1483,7 @@
   function setRow() {
     var st = S.set;
     return '<div class="cr-sets">' + B('set', (st.sound ? '🔊' : '🔇') + ' Sound', dat('k', 'sound'), 'cr-chipb' + (st.sound ? ' on' : '')) +
-      B('set', '⚡ Quick-cast', dat('k', 'quick'), 'cr-chipb' + (st.quick ? ' on' : '')) + B('set', '▦ Minimap', dat('k', 'mini'), 'cr-chipb' + (st.mini ? ' on' : '')) + '</div>';
+      B('set', '⚡ Quick-cast', dat('k', 'quick'), 'cr-chipb' + (st.quick ? ' on' : '')) + B('set', '▦ Minimap', dat('k', 'mini'), 'cr-chipb' + (st.mini ? ' on' : '')) + B('set', '💡 Tips', dat('k', 'hints'), 'cr-chipb' + (st.hints ? ' on' : '')) + B('set', '📜 Full log', dat('k', 'verbose'), 'cr-chipb' + (st.verbose ? ' on' : '')) + '</div>';
   }
   function scrTitle() {
     var R = S.R, h = R.slots[R.active], html = '<div class="cr-card cr-titlec"><canvas class="cr-scene"></canvas><pre class="cr-art">' + esc(ART) + '</pre><div class="cr-sub">— the descent beneath Lanternfall —</div>';
@@ -1635,12 +1866,21 @@
   }
   function ovHelp() {
     return '<div class="cr-title">HOW TO PLAY</div>' +
-      '<p class="cr-p">Descend beneath Lanternfall, floor by floor. Every fifth floor holds a boss; beat it to open a portal home and unlock a waypoint. Monsters move when you move — the game is turn-based, so think.</p>' +
-      '<div class="cr-keys"><span><b>Arrows / WASD / D-pad / swipe</b> move &amp; attack (bump)</span><span><b>Tap a tile</b> travel there · <b>tap a foe</b> target it (tap again to attack)</span><span><b>Enter / E / ✋</b> use: stairs, levers, chests, shrines</span><span><b>Space / ⏳</b> wait a turn — with no foes in sight, rest until healed</span><span><b>1–5</b> abilities · <b>Q</b> potion · <b>B</b> bomb · <b>Tab</b> cycle target</span><span><b>X / 🧭</b> auto-explore · <b>C</b> hero · <b>M</b> map · <b>L</b> log · <b>Esc</b> menu</span></div>' +
-      '<div class="cr-h">Read the danger</div><p class="cr-p">Red tiles are an attack winding up — it lands next turn. Step out! A number on the tiles means more turns of warning. Stunning or freezing a monster interrupts it. Glowing vents burst on a rhythm.</p>' +
-      '<div class="cr-h">Elites</div><p class="cr-p">Ringed monsters are champions with affixes (vampiric, shielded, splitting, hasted…). They hit harder and always drop loot.</p>' +
-      '<div class="cr-h">Puzzles</div><p class="cr-p">Sealed gates open with levers somewhere on the floor, boulders pushed onto plates (a red-knobbed lever resets them), or runes stepped in the order shown on a nearby tablet. Every puzzle is solvable.</p>' +
-      '<div class="cr-h">Death</div><p class="cr-p">You wake in Lanternfall, lighter of purse; unequipped loot found that trip is lost (except on Relaxed). Read a Recall Scroll to bring everything home safely.</p>' +
+      '<p class="cr-p">The game is <b>turn-based</b>: every step or action you take is one turn, then each monster takes its turn. Nothing moves while you think.</p>' +
+      '<div class="cr-keys"><span><b>D-pad / arrows / WASD</b> one step. Walking into a monster attacks it; into a chest, lever or shrine uses it.</span>' +
+      '<span><b>Tap a nearby tile</b> = one step. <b>Tap a far tile</b> shows what it is and the route — tap again to walk there (you stop if anything appears or hurts you).</span>' +
+      '<span><b>Long-press</b> anything, or <b>🔍 Look</b> (L), to see what it is.</span>' +
+      '<span><b>✋ Use</b> (Enter): stairs, portal, disarm a trap next to you.</span><span><b>💤 Rest</b> (Space): with no enemies awake nearby, rest turn by turn to heal a little. Otherwise you just wait a turn.</span>' +
+      '<span><b>1–5</b> abilities (cost shown under each) · <b>🧪 Q</b> potion · <b>B</b> bomb · <b>Tab</b> next target · <b>J</b> log · <b>Esc</b> menu</span></div>' +
+      '<div class="cr-h">Reading the screen</div><div class="cr-legend">' +
+      '<span><i style="background:#ff3b30"></i>Red tiles: an attack lands there next turn (a number = more turns). Step off!</span>' +
+      '<span><b>⚔</b> over a monster: it will hit you next turn · <b>➶</b> aiming · <b>»</b> about to charge · <b>✸</b> winding up · <b>z</b> asleep · <b>?</b> hasn\'t seen you</span>' +
+      '<span><b>−6 Skeleton</b> red numbers on you say how much and from what. Green <b>+N</b> says why you healed.</span>' +
+      '<span>Ringed monsters are <b>elites</b>. Gold arrows at the edge point to your goal; red ones to enemies off screen.</span>' +
+      '<span><b>^</b> red spikes = trap · grate = vent (glows before it bursts) · gold square = stairs · bars = sealed gate.</span></div>' +
+      '<div class="cr-h">Healing</div><p class="cr-p">You do <b>not</b> heal on your own. Potions, resting (slow, and only with no enemies about), some abilities and gear heal you. Back in town you are fully restored.</p>' +
+      '<div class="cr-h">Goal</div><p class="cr-p">The line above the map always says what to do next — usually: find the stairs ▼. Every 5th floor holds a boss. Floors 1–2 are a gentle start.</p>' +
+      '<div class="cr-h">Death</div><p class="cr-p">You wake in Lanternfall, lighter of purse; unequipped loot found that trip is lost (except on Relaxed). A Recall Scroll brings everything home safely.</p>' +
       B('close', 'Got it', '', 'cr-go');
   }
   function ovPrologue() {
@@ -1651,6 +1891,7 @@
   // ---- end-of-run screens -----------------------------------------------------------------
   function scrDeath() {
     var d = S.death || {}, html = '<div class="cr-card"><pre class="cr-art red">  YOU HAVE FALLEN  </pre><p class="cr-quote">Slain by ' + esc(d.killer || 'the Deep') + ' on floor ' + d.depth + '.</p>';
+    if (d.hits && d.hits.length) html += '<div class="cr-h">Last hits</div><div class="cr-hitlist">' + d.hits.slice(-4).reverse().map(function (x) { return '<span>−' + x.n + ' <b>' + esc(x.src) + '</b></span>'; }).join('') + '</div>';
     html += '<div class="cr-kv col"><span>Kills <b>' + d.kills + '</b></span><span>Gold found <b>' + d.gold + '</b></span><span>Floors <b>' + d.floors + '</b></span></div>';
     html += '<p class="cr-p">You wake in the Lantern Inn, aching. ' + (d.lost.gold ? 'Your purse is ' + d.lost.gold + ' gold lighter. ' : '') + (d.lost.items.length ? 'Lost in the dark: ' + d.lost.items.map(esc).join(', ') + '.' : 'Your pack made it back with you.') + '</p>';
     return html + B('totown', 'Return to Lanternfall', '', 'cr-go') + '</div>';
@@ -1711,7 +1952,7 @@
     setMode(true);
     (S.G.log || []).slice(-3).forEach(function (l) { addLog(l.s, l.c); });
     S.G.ev = S.G.ev.filter(function (e) { return e.t !== 'log'; });
-    drainEvents(); refreshHud();
+    drainEvents(); refreshHud(); updateObjective(); layout();
     if (S.G.modal) showModal();
     try { S.cv.focus({ preventScroll: true }); } catch (e) {}
     if (S.set.hints && !S.hintShown && S.G.depth === 1 && S.hero && S.hero.stats.runs <= 1) { S.hintShown = true; addLog('Tip: tap a tile to walk there, tap a foe to target it. 🧭 explores for you.', 'info'); }
@@ -1736,7 +1977,7 @@
     clearRun('story', h.id);
     if (G.over === 'dead') {
       var lost = E.applyDeath(G);
-      S.death = { killer: G.killer, depth: G.depth, kills: G.run.kills, gold: G.run.gold, floors: G.run.floors, lost: lost };
+      S.death = { hits: (G.p.hits || []).slice(), killer: G.killer, depth: G.depth, kills: G.run.kills, gold: G.run.gold, floors: G.run.floors, lost: lost };
       S.snd.play('death');
       E.townArrive(h); S.G = null; markDirty();
       setTimeout(function () { if (S) { setMode(false); showScreen('death'); } }, 1000);
@@ -1850,6 +2091,9 @@
       case 'potion': usePotion(); break;
       case 'tgtgo': confirmTarget(); break;
       case 'tgtx': cancelTarget(); break;
+      case 'infox': if (S.look) lookEnd(); else hideInfo(); break;
+      case 'infogo': goPending(); break;
+      case 'tipx': S.tipEl.hidden = true; break;
       case 'pad': padAction(id); break;
       case 'evc':
         var res = E.eventChoice(S.G, +ix);
@@ -1880,6 +2124,7 @@
     else if (id === 'explore') { stopAuto(); if (S.tgt) cancelTarget(); startExplore(); }
     else if (id === 'sheet') openOvl('sheet', { wide: true, tab: E.talentPoints(hero()) ? 'tal' : 'gear' });
     else if (id === 'map') openOvl('map', { wide: true });
+    else if (id === 'look') { if (S.look) lookEnd(); else lookStart(); }
     else if (id === 'menu') openOvl('menu');
   }
 
@@ -1902,6 +2147,15 @@
     if (S.ovlOpen || S.screen) { navKey(e, S.ovlOpen ? S.ovlEl : S.scrEl); return; }
     if (!S.G) return;
     var kl = k.length === 1 ? k.toLowerCase() : k;
+    if (e.repeat && S.blockRepeat) { e.preventDefault(); return; }   // something happened: let go and press again
+    if (S.look) {
+      var ld = DIR[k] || (k.length === 1 && 'wasd'.indexOf(kl) >= 0 ? DIR[kl] : null);
+      if (ld) { e.preventDefault(); lookMove(ld[0], ld[1]); return; }
+      if (k === 'Escape' || k === 'Enter' || k === ' ' || kl === 'v' || kl === 'l') { e.preventDefault(); lookEnd(); return; }
+      return;
+    }
+    if (S.pending && (k === 'Enter')) { e.preventDefault(); goPending(); return; }
+    if (S.pending && k === 'Escape') { e.preventDefault(); hideInfo(); return; }
     if (S.tgt) {
       var dd = DIR[k] || (k.length === 1 && 'wasd'.indexOf(kl) >= 0 ? DIR[kl] : null);
       if (dd) { e.preventDefault(); moveCursor(dd[0], dd[1]); return; }
@@ -1915,7 +2169,7 @@
     var handled = true;
     if (S.auto && k !== 'Shift') { stopAuto(); if (k === ' ' || k === 'x') { e.preventDefault(); return; } }
     var dir = DIR[k] || ('wasd'.indexOf(kl) >= 0 && kl.length === 1 ? DIR[kl] : null);
-    if (dir) move(dir[0], dir[1]);
+    if (dir) move(dir[0], dir[1], e.repeat);
     else if (k === 'Enter' || kl === 'e' || kl === 'g') useKey();
     else if (k === ' ' || k === '.') restKey();
     else if (k >= '1' && k <= '5') { var ab = E.abilitiesFor(S.G.hero)[+k - 1]; if (ab) abilityPress(ab.id); }
@@ -1923,7 +2177,8 @@
     else if (kl === 'b') bombPress();
     else if (kl === 'c' || kl === 'i') padAction('sheet');
     else if (kl === 'm') padAction('map');
-    else if (kl === 'l') openOvl('log');
+    else if (kl === 'l' || kl === 'v') lookStart();
+    else if (kl === 'j') openOvl('log');
     else if (kl === 'x') padAction('explore');
     else if (kl === 'r') { if (S.G.hero.cons.tonic) doAct({ t: 'cons', id: 'tonic' }); }
     else if (k === 'Tab') cycleTarget();
@@ -1932,6 +2187,7 @@
     else handled = false;
     if (handled) e.preventDefault();
   }
+  function onKeyUp() { if (S) S.blockRepeat = false; }
   function navKey(e, root) {
     var k = e.key;
     if (e.target && e.target.classList && e.target.classList.contains('cr-in')) return;
@@ -1971,25 +2227,32 @@
     var r = S.cv.getBoundingClientRect(), lx = (cx - r.left) * (S.cw / r.width), ly = (cy - r.top) * (S.chh / r.height);
     return { x: Math.floor((lx - S.ox) / S.ts), y: Math.floor((ly - S.oy) / S.ts) };
   }
-  function tapTile(tx, ty) {
+  // Tapping: an adjacent tile = one step (or bump-attack); anything farther first
+  // shows what's there and the route; tap it again (or ‘Go’) to walk there.
+  function tapTile(tx, ty, longPress) {
     var G = S.G; if (!G || tx < 0 || ty < 0 || tx >= G.w || ty >= G.h) return;
     stopAuto();
     var p = G.p, dx = tx - p.x, dy = ty - p.y, md = Math.abs(dx) + Math.abs(dy);
+    if (longPress) { showInfo(infoAt(G, tx, ty)); return; }
     if (!md) { useKey(); return; }
-    var m = E.monAt(G, tx, ty);
-    if (m && !m.ally && E.monVisible(G, m) && !m.disguised) {
-      if (md === 1) { doAct({ t: 'move', dx: dx, dy: dy }); return; }
-      if (G.p.target !== m.id) {
-        G.p.target = m.id;
-        addLog('◎ ' + E.displayName(m) + ' — ' + m.hp + '/' + m.maxHp + ' HP' + (m.elite ? ' · ' + m.elite.map(function (a) { return D.ELITE[a].desc; }).join(', ') : '') + (m.asleep ? ' · asleep' : '') + '. Tap again to close in.', 'info');
-        refreshAbil(); return;
-      }
-      if (!startTravel(tx, ty)) addLog('No clear path.', 'info');
-      return;
-    }
     if (md === 1) { doAct({ t: 'move', dx: dx, dy: dy }); return; }
-    if (!G.seen[ty * G.w + tx]) { addLog('You don\'t know the way there yet.', 'info'); return; }
-    if (!startTravel(tx, ty)) addLog('No safe path there.', 'info');
+    if (S.pending && S.pending.x === tx && S.pending.y === ty) { goPending(); return; }
+    var m = E.monAt(G, tx, ty), hostileHere = m && !m.ally && E.monVisible(G, m) && !m.disguised;
+    if (hostileHere) G.p.target = m.id;
+    var info = infoAt(G, tx, ty) || { title: G.seen[ty * G.w + tx] ? 'Floor' : 'Unexplored', sub: '', lines: [] };
+    var path = G.seen[ty * G.w + tx] ? E.travelPath(G, tx, ty) : null;
+    S.pending = { x: tx, y: ty }; S.preview = path;
+    var go = path ? '<button type="button" class="pri" data-act="infogo">' + (hostileHere ? 'Approach (' + path.length + ' steps)' : 'Walk here (' + path.length + ' steps)') + '</button>' : '';
+    if (!path && G.seen[ty * G.w + tx]) info.lines = info.lines.concat(['No safe known path there.']);
+    if (path) info.lines = info.lines.concat(['Tap again to walk there. You stop if an enemy appears or you get hurt.']);
+    showInfo(info, tx, ty, go);
+    var keep = S.pending, keepPath = path; S.infoEl.hidden = false; S.pending = keep; S.preview = keepPath;
+    refreshAbil();
+  }
+  function goPending() {
+    var pd = S.pending; if (!pd) return;
+    hideInfo();
+    if (!startTravel(pd.x, pd.y)) addLog('No clear path.', 'info');
   }
   function bindCanvas() {
     var cv = S.cv, st = null;
@@ -1997,18 +2260,18 @@
       if (!S || !S.G) return;
       e.preventDefault(); S.snd.ensure();
       try { cv.setPointerCapture(e.pointerId); } catch (er) {}
-      st = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      st = { x: e.clientX, y: e.clientY, id: e.pointerId, t: now(), lp: false };
+      st.lpT = setTimeout(function () { if (st && !st.moved && S && S.G && !S.tgt) { st.lp = true; var tt = screenToTile(st.x, st.y); tapTile(tt.x, tt.y, true); Cade.haptic && Cade.haptic(10); } }, 450);
       S.kbd = false;
     });
+    cv.addEventListener('pointermove', function (e) { if (st && st.id === e.pointerId && (Math.abs(e.clientX - st.x) > 14 || Math.abs(e.clientY - st.y) > 14)) st.moved = true; });
     cv.addEventListener('pointerup', function (e) {
       if (!S || !st || st.id !== e.pointerId) return;
-      var dx = e.clientX - st.x, dy = e.clientY - st.y; st = null;
+      var s0 = st; st = null; clearTimeout(s0.lpT);
+      if (s0.lp || s0.moved) return;           // long-press already showed info; drags do nothing (no swipe-moves)
       if (!S.G || S.screen || S.ovlOpen) return;
-      if (Math.abs(dx) > 26 || Math.abs(dy) > 26) {
-        var d = Math.abs(dx) > Math.abs(dy) ? [dx > 0 ? 1 : -1, 0] : [0, dy > 0 ? 1 : -1];
-        move(d[0], d[1]); return;
-      }
       var t = screenToTile(e.clientX, e.clientY);
+      if (S.look) { S.look.x = t.x; S.look.y = t.y; lookShow(); return; }
       if (S.tgt) {
         if (S.tgt.list.some(function (q) { return q.x === t.x && q.y === t.y; })) confirmTarget(t.x, t.y);
         else { S.tgt.cur = { x: t.x, y: t.y }; addLog('Out of range — tap a highlighted tile.', 'info'); }
@@ -2016,7 +2279,7 @@
       }
       tapTile(t.x, t.y);
     });
-    cv.addEventListener('pointercancel', function () { st = null; });
+    cv.addEventListener('pointercancel', function () { if (st) clearTimeout(st.lpT); st = null; });
     cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   }
   function bindPad() {
@@ -2025,14 +2288,14 @@
       if (!S || !S.G || S.screen || S.ovlOpen) return;
       if (id === 'w') { restKey(); return; }
       var d = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] }[id];
-      if (d) move(d[0], d[1]);
+      if (d) move(d[0], d[1], !!(S.hold && S.hold.iv));
     }
-    function stop() { if (S && S.hold) { clearTimeout(S.hold.t); clearInterval(S.hold.iv); S.hold = null; } }
+    function stop() { if (S) S.blockRepeat = false; if (S && S.hold) { clearTimeout(S.hold.t); clearInterval(S.hold.iv); S.hold = null; } }
     dp.addEventListener('pointerdown', function (e) {
       var b = e.target.closest('[data-act="d"]'); if (!b) return;
       e.preventDefault(); S.snd.ensure(); S.kbd = false;
       try { b.setPointerCapture(e.pointerId); } catch (er) {}
-      stop();
+      stop(); hideInfo(); if (S.look) lookEnd();
       var id = b.getAttribute('data-id');
       Cade.haptic && Cade.haptic(5);
       dirAct(id);
@@ -2049,7 +2312,7 @@
   // ===========================================================================
   //  open / close
   // ===========================================================================
-  function newFx() { return { parts: [], texts: [], projs: [], rings: [], areas: [], ghosts: [], banner: null, flash: null }; }
+  function newFx() { return { parts: [], texts: [], projs: [], rings: [], areas: [], ghosts: [], hitDirs: [], banner: null, flash: null }; }
   function teardown() {
     if (!S) return;
     try { if (S.G && !S.G.over) saveRunNow(); if (S.R) saveNow(true); } catch (e) {}
@@ -2060,6 +2323,8 @@
     clearTimeout(s.saveT); clearTimeout(s.runT); clearTimeout(s.resizeT);
     if (s.hold) { clearTimeout(s.hold.t); clearInterval(s.hold.iv); }
     document.removeEventListener('keydown', s.onKey, true);
+    document.removeEventListener('keyup', s.onKeyUp, true);
+    clearTimeout(s.toastT); clearTimeout(s.tipT);
     document.removeEventListener('visibilitychange', s.onVis);
     window.removeEventListener('resize', s.onResize);
     window.removeEventListener('orientationchange', s.onResize);
@@ -2100,14 +2365,14 @@
       '<button type="button" class="cr-d u" data-act="d" data-id="u" aria-label="Up">▲</button><button type="button" class="cr-d l" data-act="d" data-id="l" aria-label="Left">◀</button>' +
       '<button type="button" class="cr-d w" data-act="d" data-id="w" aria-label="Wait">⏳</button><button type="button" class="cr-d r" data-act="d" data-id="r" aria-label="Right">▶</button>' +
       '<button type="button" class="cr-d dn" data-act="d" data-id="d" aria-label="Down">▼</button></div>' +
-      '<div class="cr-acts">' + [['use', '✋', 'Use'], ['explore', '🧭', 'Explore'], ['sheet', '🎒', 'Hero'], ['rest', '💤', 'Rest'], ['map', '🗺', 'Map'], ['menu', '☰', 'Menu']].map(function (a) {
+      '<div class="cr-acts">' + [['use', '✋', 'Use'], ['rest', '💤', 'Rest'], ['sheet', '🎒', 'Hero'], ['look', '🔍', 'Look'], ['explore', '🧭', 'Auto-explore'], ['menu', '☰', 'Menu']].map(function (a) {
         return '<button type="button" class="cr-pa' + (a[0] === 'use' ? ' main' : '') + '" data-act="pad" data-id="' + a[0] + '"><span>' + a[1] + '</span><i>' + a[2] + '</i></button>';
       }).join('') + '</div>';
     var body = '<div class="cr in-town">' +
       '<div class="cr-hud"><div class="cr-bars"><div class="cr-bar cr-hpb"><i></i><span></span></div><div class="cr-bar cr-resb"><i></i><span></span></div><div class="cr-xpb"><i></i></div></div>' +
       '<div class="cr-meta"><b class="cr-where"></b><span class="cr-gold"></span></div></div>' +
-      '<div class="cr-stage"><canvas class="cr-cv" tabindex="0" aria-label="Dungeon"></canvas><canvas class="cr-mini" aria-hidden="true"></canvas><div class="cr-chips"></div>' +
-      '<div class="cr-bossb" hidden><b></b><div><i></i></div></div><div class="cr-log" aria-live="polite"></div><div class="cr-tgtbar" hidden></div></div>' +
+      '<div class="cr-obj"></div><div class="cr-stage"><canvas class="cr-cv" tabindex="0" aria-label="Dungeon"></canvas><canvas class="cr-mini" aria-hidden="true"></canvas><div class="cr-chips"></div>' +
+      '<div class="cr-bossb" hidden><b></b><div><i></i></div></div><div class="cr-hits"></div><div class="cr-log" aria-live="polite"></div><div class="cr-tgtbar" hidden></div><div class="cr-tip" hidden></div><div class="cr-toast" hidden></div><div class="cr-info" hidden></div></div>' +
       '<div class="cr-abil"></div><div class="cr-pad">' + pad + '</div>' +
       '<div class="cr-scr" hidden></div><div class="cr-ovl" hidden></div></div>';
     var p = Cade.mkPanel(PANEL_ID, '⚔ Dungeon Crawler', body);
@@ -2123,19 +2388,21 @@
       chipsEl: p.querySelector('.cr-chips'), bossEl: p.querySelector('.cr-bossb'), logEl: p.querySelector('.cr-log'), tgtEl: p.querySelector('.cr-tgtbar'), abilEl: p.querySelector('.cr-abil'), padEl: p.querySelector('.cr-pad'),
       scrEl: p.querySelector('.cr-scr'), ovlEl: p.querySelector('.cr-ovl'),
       hpEl: p.querySelector('.cr-hpb'), hpFill: p.querySelector('.cr-hpb i'), hpLbl: p.querySelector('.cr-hpb span'), resFill: p.querySelector('.cr-resb i'), resLbl: p.querySelector('.cr-resb span'), xpFill: p.querySelector('.cr-xpb i'),
-      whereEl: p.querySelector('.cr-where'), goldEl: p.querySelector('.cr-gold'), bossName: p.querySelector('.cr-bossb b'), bossFill: p.querySelector('.cr-bossb i'),
+      whereEl: p.querySelector('.cr-where'), objEl: p.querySelector('.cr-obj'), hitsEl: p.querySelector('.cr-hits'), tipEl: p.querySelector('.cr-tip'), toastEl: p.querySelector('.cr-toast'), infoEl: p.querySelector('.cr-info'), goldEl: p.querySelector('.cr-gold'), bossName: p.querySelector('.cr-bossb b'), bossFill: p.querySelector('.cr-bossb i'),
       set: set, snd: new Snd(set.sound), client: clientId(), coarse: !!(mm && mm('(pointer: coarse)').matches),
-      R: null, hero: null, G: null, screen: null, ov: null, ovlOpen: false, vis: {}, lunge: {}, flash: {}, fx: newFx(), shake: 0, logLines: [], tgt: null, auto: null, kbd: false,
+      turnHits: [], R: null, hero: null, G: null, screen: null, ov: null, ovlOpen: false, vis: {}, lunge: {}, flash: {}, fx: newFx(), shake: 0, logLines: [], tgt: null, auto: null, kbd: false,
       ts: 32, cw: 360, chh: 400, dpr: 1, ox: 0, oy: 0, layerKey: '', tilesDirty: true, tilesSig: ''
     };
     S.ctx = S.cv.getContext('2d');
     S.mini.hidden = !set.mini;
+    S.mini.addEventListener('click', function () { if (S && S.G && !S.screen) openOvl('map', { wide: true }); });
     p._onClose = teardown;
     readTheme();
     layout();
     syncHead();
     S.onKey = onKey;
     document.addEventListener('keydown', S.onKey, true);
+    S.onKeyUp = onKeyUp; document.addEventListener('keyup', S.onKeyUp, true);
     S.onVis = function () { if (!S) return; if (document.hidden) { if (S.G) saveRunNow(); saveNow(true); } else startLoop(); };
     document.addEventListener('visibilitychange', S.onVis);
     S.onResize = function () {
@@ -2145,7 +2412,7 @@
     window.addEventListener('resize', S.onResize);
     window.addEventListener('orientationchange', S.onResize);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', S.onResize);
-    try { S.ro = new ResizeObserver(function () { if (S && S.panel === p) requestAnimationFrame(relayoutIfMoved); }); S.ro.observe(S.hudEl); S.ro.observe(S.padEl); S.ro.observe(S.abilEl); } catch (e) {}
+    try { S.ro = new ResizeObserver(function () { if (S && S.panel === p) requestAnimationFrame(relayoutIfMoved); }); S.ro.observe(S.hudEl); S.ro.observe(S.padEl); S.ro.observe(S.abilEl); S.ro.observe(S.objEl); } catch (e) {}
     try { S.themeObs = new MutationObserver(function () { if (S) { readTheme(); if (S.screen) renderScreen(); } }); S.themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] }); } catch (e) {}
     p.addEventListener('cade-panel-minimize', function () { if (!S || S.panel !== p) return; stopAuto(); if (S.G) saveRunNow(); saveNow(); });
     p.addEventListener('cade-panel-restore', function () { if (!S || S.panel !== p) return; requestAnimationFrame(function () { if (!S) return; readTheme(); layout(); startLoop(); }); });

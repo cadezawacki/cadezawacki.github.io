@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026.11.25-4",
+  "version": "2026.11.26-1",
   "modules": [
     {
       "id": "crawler",
@@ -4155,6 +4155,16 @@
       "tags": "game,sport,fishing,fish,relax,career,collection,fun",
       "entry": "widgets/fishing/fishing.js",
       "css": "widgets/fishing/fishing.css"
+    },
+    {
+      "id": "streetheat",
+      "type": "widget",
+      "name": "Street Heat",
+      "description": "Top-down street racing — drift a generated city, outrun police pursuits, win races and build your garage",
+      "icon": "🚓",
+      "tags": "game,arcade,racing,driving,car,top down,police,chase,drift,career,endless,fun",
+      "entry": "widgets/streetheat/streetheat.js",
+      "css": "widgets/streetheat/streetheat.css"
     }
   ]
 }
