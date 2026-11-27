@@ -221,6 +221,24 @@ test('meter: steady speed converges, ETA counts down smoothly', function () {
   assert.strictEqual(m3.update(100, 400).pct, 100);
   assert.strictEqual(K.meter(0).update(0, 0).pct, 100, 'an empty beam is complete');
 });
+test('device list: one row per device, aimed at the tab used last', function () {
+  var list = [
+    { inst: 'pc-5uf04', name: 'Windows PC · Chrome app', kind: 'desktop', did: 'pc', since: 100, at: 900, used: 500 },
+    { inst: 'pc-8cf5q', name: 'Windows PC · Chrome app', kind: 'desktop', did: 'pc', since: 300, at: 900, used: 800 },
+    { inst: 'ip-aaaaa', name: 'iPhone', kind: 'phone', did: 'ip', since: 50, at: 900, self: true },
+    { inst: 'ip-bbbbb', name: 'iPhone', kind: 'phone', did: 'ip', since: 60, at: 900, sameDevice: true },
+    { inst: 'old-xxxxx', name: 'Old', kind: 'desktop', did: '', since: 10, at: 900 }
+  ];
+  var g = K.groupDevices(list);
+  assert.deepStrictEqual(g.map(function (d) { return d.key + '>' + d.inst + '×' + d.tabs; }), ['d:pc>pc-8cf5q×2', 'd:ip>ip-bbbbb×1', 'i:old-xxxxx>old-xxxxx×1']);
+  // older clients send no "used": the newest tab wins
+  list[1].used = 0; list[0].used = 0;
+  assert.strictEqual(K.groupDevices(list)[0].inst, 'pc-8cf5q');
+  list[0].used = 1000;
+  assert.strictEqual(K.groupDevices(list)[0].inst, 'pc-5uf04', 'tapping the other tab moves it there');
+  assert.strictEqual(K.tabId('pc-5uf04'), '5uf04');
+  assert.deepStrictEqual(K.groupDevices(null), []);
+});
 test('formatting: bytes, speed, ETA, percent, path', function () {
   assert.strictEqual(K.fmtBytes(512), '512 B');
   assert.strictEqual(K.fmtBytes(1536), '1.5 KB');

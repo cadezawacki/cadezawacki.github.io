@@ -84,6 +84,9 @@
     if (document.visibilityState === 'visible' && Cade.cloud.configured()) goOnline();
     else goOffline(document.visibilityState !== 'visible');
   }
+  // Using this tab marks it as the one this device's beams should land in (see groupDevices).
+  var USE_EVENTS = ['focus', 'pointerdown', 'keydown'];
+  function onUse() { var L = window.__cadeBeamLink; if (L && online) L.used(); }
   function goOnline() {
     clearTimeout(retryT); retryT = 0;
     if (online) return;
@@ -96,6 +99,7 @@
         if (!ok) { online = false; retryT = setTimeout(onVis, 30000); return; } // Firebase not ready yet
         if (!stopSig) stopSig = L.listenSig('r', onSig);
         touchT = setInterval(function () { L.touch(); }, window.__cadeBeamCore.C.TOUCH_EVERY);
+        USE_EVENTS.forEach(function (t) { window.addEventListener(t, onUse, true); });
         if (!pruned) { pruned = true; L.inbox.list().catch(function () {}); }   // drops week-old files
       });
     }).catch(function () { online = false; });
@@ -105,6 +109,7 @@
     if (!online) { if (alive && !hidden && !Cade.cloud.configured()) retryT = setTimeout(onVis, 30000); return; }
     online = false; gen++;
     clearInterval(touchT); touchT = 0;
+    USE_EVENTS.forEach(function (t) { window.removeEventListener(t, onUse, true); });
     var L = window.__cadeBeamLink;
     if (L) L.withdraw();
     // a transfer under way still needs its messages (cancel, switch to relay)

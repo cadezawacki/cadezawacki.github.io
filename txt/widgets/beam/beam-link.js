@@ -74,9 +74,17 @@
       presenceRef = r;
       return seal({ n: d.name, k: d.kind, d: d.id, t: since, v: C.V }).then(function (s) {
         try { r.onDisconnect().remove(); } catch (e) {}
-        return r.set({ s: s, at: Cade.cloud.TIMESTAMP });
+        usedAt = now();
+        return r.set({ s: s, at: Cade.cloud.TIMESTAMP, u: Cade.cloud.TIMESTAMP });   // just came on screen = in use
       }).then(function () { return true; });
     }).catch(function () { return false; });
+  }
+  // This tab was just used (focus, tap, key): senders pick it over this device's other tabs. ≤ 1 write / 15 s.
+  var usedAt = 0;
+  function used() {
+    if (!presenceRef || now() - usedAt < 15000) return;
+    usedAt = now();
+    presenceRef.child('u').set(Cade.cloud.TIMESTAMP).catch(function () {});
   }
   function touch() {
     if (!presenceRef) return Promise.resolve();
@@ -104,7 +112,7 @@
           return unseal(e.s).then(function (o) {
             if (!o) return;
             list.push({ inst: inst, name: String(o.n || 'Device').slice(0, 40), kind: o.k === 'phone' || o.k === 'tablet' ? o.k : 'desktop', did: o.d || '',
-              at: +e.at || 0, since: +o.t || 0, self: inst === my.inst, sameDevice: o.d === my.id });
+              at: +e.at || 0, since: +o.t || 0, used: +e.u || 0, self: inst === my.inst, sameDevice: o.d === my.id });
           });
         })).then(function () {
           if (stop || g !== gen) return;
@@ -845,7 +853,7 @@
   };
 
   window.__cadeBeamLink = {
-    announce: announce, touch: touch, withdraw: withdraw, watchDevices: watchDevices,
+    announce: announce, touch: touch, used: used, withdraw: withdraw, watchDevices: watchDevices,
     sendSig: sendSig, listenSig: listenSig, onSigR: onSigR, rtcOk: rtcOk,
     send: send, receive: receive, endAll: endAll, active: active, onJobs: onJobs, wake: wake, inbox: inbox
   };
