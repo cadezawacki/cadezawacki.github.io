@@ -44,7 +44,7 @@
       .then(function () { if (!window.__cadeBeamLink) throw new Error('Beam failed to start'); return window.__cadeBeamLink; });
   }
 
-  var prefs = { tab: 'send', qr: 'send', lastDid: '' };
+  var prefs = { tab: 'send', qr: 'send', lastDid: '', bg: false };
   function loadPrefs() { try { var p = JSON.parse(Cade.store.get(PREFS_KEY) || 'null'); if (p) for (var k in prefs) if (k in p) prefs[k] = p[k]; } catch (e) {} }
   function savePrefs() { try { Cade.store.set(PREFS_KEY, JSON.stringify(prefs)); } catch (e) {} }
 
@@ -86,6 +86,8 @@
           '</div>' +
           '<input type="file" class="beam-file" multiple tabindex="-1" aria-hidden="true">' +
           '<button type="button" class="beam-go" data-act="send" disabled>Send</button>' +
+          '<label class="beam-bg"><input type="checkbox" class="beam-bg-on"><span><b>Keep sending in the background</b>' +
+            '<small>Plays silent audio so the phone keeps the beam going when it locks or you switch apps. Pauses other music while it runs; shows progress on the lock screen.</small></span></label>' +
           '<div class="beam-jobs"></div>' +
         '</div>' +
       '</div>' +
@@ -264,7 +266,7 @@
   function start(dev, files) {
     var w = { dev: dev, files: files, el: null, J: null };
     jobs.unshift(w);
-    w.J = L.send(dev, files, { onUpdate: function () { paintJob(w); } });
+    w.J = L.send(dev, files, { bg: prefs.bg, onUpdate: function () { paintJob(w); } });
     paintJob(w);
   }
   function paintJob(w) {
@@ -287,7 +289,7 @@
     var p = J.prog || { pct: 0, bps: 0, eta: null }, live = !J.over;
     w.el.className = 'beam-job ' + J.state;
     w.el.querySelector('.beam-job-to').textContent = (J.state === 'done' ? '✓ ' : J.state === 'error' ? '⚠ ' : '') + K.kindIcon(w.dev.kind) + ' ' + w.dev.name;
-    w.el.querySelector('.beam-job-p').textContent = live || J.state === 'done' ? J.label() : '';
+    w.el.querySelector('.beam-job-p').textContent = live || J.state === 'done' ? J.label() + (live && J.bgOn ? ' · 🔈 background on' : '') : '';
     var b = w.el.querySelector('[data-act="job"]');
     b.textContent = live ? 'Cancel' : J.state === 'done' ? 'Done' : 'Retry';
     b.setAttribute('data-do', live ? 'cancel' : J.state === 'done' ? 'dismiss' : 'retry');
@@ -589,13 +591,15 @@
     P._onClose = cleanup;
     el = {
       nosync: q('.beam-nosync'), sync: q('.beam-sync'), devs: q('.beam-devs'), name: q('.beam-name'), meSt: q('.beam-me-st'), drop: q('.beam-drop'), picked: q('.beam-picked'),
-      file: q('.beam-file'), go: q('.beam-go'), jobs: q('.beam-jobs'), qrHost: q('.beam-qr-host'), qrFn: q('.beam-qr-fn'), qrInput: q('.beam-qr-input'),
+      file: q('.beam-file'), go: q('.beam-go'), bg: q('.beam-bg-on'), jobs: q('.beam-jobs'), qrHost: q('.beam-qr-host'), qrFn: q('.beam-qr-fn'), qrInput: q('.beam-qr-input'),
       inSum: q('.beam-in-sum'), inList: q('.beam-in-list'), clear: q('[data-act="clear"]'), inLive: q('.beam-in-live')
     };
     var root = q('.beam');
     root.addEventListener('click', onClick);
     root.addEventListener('change', onName);
     root.addEventListener('paste', paste);
+    el.bg.checked = !!prefs.bg;
+    el.bg.addEventListener('change', function () { prefs.bg = el.bg.checked; savePrefs(); });
     el.file.addEventListener('change', function () { if (el.file.files && el.file.files.length) addFiles(Array.prototype.slice.call(el.file.files)); });
     el.qrInput.addEventListener('change', function () { var f = el.qrInput.files && el.qrInput.files[0]; if (f) setQrFile({ blob: f, name: K.safeName(f.name), mime: f.type || '' }); });
     el.name.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.target.blur(); });

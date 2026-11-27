@@ -15,7 +15,7 @@
 //     Code Runner's Python 'cade-py-<version>'): bypass, so nothing is stored twice
 // ============================================
 
-const CACHE_VERSION = 238;
+const CACHE_VERSION = 239;
 const CACHE_NAME = `cade-v${CACHE_VERSION}`;
 // Cade.project's folder, resolved against this worker's own URL so it is right
 // whether the site is served at a domain root or under a sub-path (e.g. a

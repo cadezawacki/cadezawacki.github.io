@@ -31,6 +31,13 @@
  * with its onDisconnect while it was away. The first node of a re-send says
  * so (r: 1), and the receiver skips to it.
  *
+ * Opt-in "keep sending in the background" (send(…, { bg: true })): iOS freezes
+ * a hidden page unless it is playing audio, so while such a beam runs we loop
+ * a silent clip in an <audio> element and describe it to the lock screen
+ * (Media Session) as the beam's progress. It has to start inside the Send tap,
+ * so it is sender-only. It takes over the audio session (other music pauses);
+ * pausing it from the lock screen just stops the keep-alive, not the beam.
+ *
  * Cloud layout (kind "bm", i.e. rooms/__cade_bm_<keyFp>/…):
  *   dev/<inst>                {s: sealed {n name, k kind, d deviceId, t since}, at}   ready receivers
  *   sig/<box>/<push>          {f: fromInst, s: sealed message, at}                     offer / answer / relay / cancel / done
@@ -206,9 +213,87 @@
     Object.keys(inJobs).forEach(function (x) { sendSig(inJobs[x].rb, { t: t, x: x }).catch(function () {}); });
     // back: run the ticks now rather than in up to 250 ms (they notice the freeze)
     if (t === 'back') {
+      if (bgEl && bgEl.paused) bgPlay();
       Object.keys(outJobs).forEach(function (x) { tickOut(outJobs[x]); });
       Object.keys(inJobs).forEach(function (x) { tickIn(inJobs[x]); });
     }
+  }
+
+  // ---- background keep-alive: silent audio while opted-in beams run ------------------------------------
+  var bgJobs = [], bgEl = null, bgUrl = '', bgMetaT = 0, bgMetaKey = '';
+  // One second of near-silence (±1 LSB dither, so nothing treats it as "no audio"), 8 kHz 16-bit mono WAV.
+  function silentWav() {
+    var n = 8000, b = new ArrayBuffer(44 + n * 2), v = new DataView(b), i;
+    function str(o, t) { for (var k = 0; k < t.length; k++) v.setUint8(o + k, t.charCodeAt(k)); }
+    str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 16000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, 'data'); v.setUint32(40, n * 2, true);
+    for (i = 0; i < n; i++) v.setInt16(44 + i * 2, (i & 1) ? 1 : -1, true);
+    return new Blob([b], { type: 'audio/wav' });
+  }
+  function bgOk() { return typeof Audio === 'function' && typeof URL !== 'undefined' && !!URL.createObjectURL; }
+  function bgAdd(J) {
+    if (!bgOk()) return;
+    bgJobs.push(J); J.bgOn = false;
+    if (!bgEl) {
+      bgUrl = URL.createObjectURL(silentWav());
+      bgEl = new Audio();
+      bgEl.loop = true; bgEl.preload = 'auto'; bgEl.src = bgUrl;
+      try { bgEl.setAttribute('playsinline', ''); } catch (e) {}
+      // something else took the audio (a call, another app) or the lock-screen pause: the beam carries on without it
+      bgEl.addEventListener('pause', function () { if (bgEl && !bgEl.__stopping) bgState(false); });
+      bgEl.addEventListener('playing', function () { bgState(true); });
+      var ms = navigator.mediaSession;
+      if (ms) {
+        try { ms.setActionHandler('play', function () { bgPlay(); }); } catch (e) {}
+        try { ms.setActionHandler('pause', function () { if (bgEl) bgEl.pause(); }); } catch (e) {}
+        try { ms.setActionHandler('stop', function () { if (bgEl) bgEl.pause(); }); } catch (e) {}
+      }
+    }
+    bgPlay();
+    bgMeta(true);
+  }
+  function bgPlay() {
+    if (!bgEl) return;
+    try {
+      var p = bgEl.play();
+      if (p && p.catch) p.catch(function () { bgState(false); });
+    } catch (e) { bgState(false); }
+  }
+  function bgState(on) {
+    bgJobs.forEach(function (J) { if (J.bgOn !== on) { J.bgOn = on; emit(J); } });
+    try { if (navigator.mediaSession) navigator.mediaSession.playbackState = on ? 'playing' : 'paused'; } catch (e) {}
+  }
+  function bgDrop(J) {
+    var i = bgJobs.indexOf(J);
+    if (i < 0) return;
+    bgJobs.splice(i, 1); J.bgOn = false;
+    if (bgJobs.length || !bgEl) { bgMeta(true); return; }
+    var a = bgEl;
+    bgEl = null; a.__stopping = true;
+    try { a.pause(); a.removeAttribute('src'); a.load(); } catch (e) {}
+    try { URL.revokeObjectURL(bgUrl); } catch (e) {}
+    bgUrl = ''; bgMetaKey = '';
+    var ms = navigator.mediaSession;
+    if (ms) {
+      try { ms.metadata = null; ms.playbackState = 'none'; } catch (e) {}
+      ['play', 'pause', 'stop'].forEach(function (a) { try { ms.setActionHandler(a, null); } catch (e) {} });
+    }
+  }
+  // The lock screen's "now playing": what is beaming where, and how far (≤ 1/s).
+  function bgMeta(force) {
+    if (!bgJobs.length || !navigator.mediaSession || typeof MediaMetadata !== 'function') return;
+    var t = now();
+    if (!force && t - bgMetaT < 1000) return;
+    bgMetaT = t;
+    var J = bgJobs[0], p = J.prog || { pct: 0, eta: null };
+    var what = J.man.files.length === 1 ? J.man.files[0].n : J.man.files.length + ' files';
+    var title = 'Beaming ' + what + ' · ' + K.fmtPct(p.pct);
+    var artist = 'to ' + J.peer + (p.eta != null && p.eta > 0 ? ' · ' + K.fmtEta(p.eta) : '') + (bgJobs.length > 1 ? ' · +' + (bgJobs.length - 1) + ' more' : '');
+    if (title + artist === bgMetaKey) return;
+    bgMetaKey = title + artist;
+    try { navigator.mediaSession.metadata = new MediaMetadata({ title: title, artist: artist, album: 'txt · Beam' }); } catch (e) {}
   }
 
   // ---- shared screen wake lock -------------------------------------------------------------------
@@ -259,6 +344,7 @@
     };
     J.meter = K.meter(man.total);
     J.cancel = function () { cancelOut(J, ''); };
+    if (J.hooks.bg) bgAdd(J);   // synchronous: we're still inside the user's tap
     J.label = function () { return label(J); };
     outJobs[x] = J;
     if (!stopSigS) stopSigS = listenSig('s', onSigS);
@@ -461,6 +547,7 @@
     if (J.path === 'direct' && !J.ended && !J.held && t - J.lastProg > C.DIRECT_STALL) { goRelay(J); return; }
     if (J.answered && t - J.lastProg > (J.held ? C.HOLD_STALL : C.STALL)) { fail(J, 'Connection to ' + J.peer + ' lost'); return; }
     progress(J);
+    bgMeta();
     emit(J);
   }
   function cancelOut(J, why) {
@@ -485,6 +572,7 @@
     if (J.rref) { var r = J.rref; try { r.onDisconnect().cancel(); } catch (e) {} r.remove().catch(function () {}); J.rref = null; }
     J.blk = null; J.blobs = null;
     delete outJobs[J.x];
+    bgDrop(J);
     if (!Object.keys(outJobs).length && stopSigS) { stopSigS(); stopSigS = null; }
     wake(-1);
     progress(J);
