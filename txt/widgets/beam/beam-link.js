@@ -22,6 +22,22 @@
  * Nothing is stored in the cloud beyond the in-flight window; nothing is added
  * to a note.
  *
+ * Background (a phone locks or switches apps): the page is frozen, so nothing
+ * moves, but the beam isn't lost. Going hidden, each side tells the other
+ * ('hold'), which then waits up to HOLD_STALL instead of STALL (and doesn't
+ * give up on a direct channel for the size-capped relay). Coming back
+ * ('back'), a side that was frozen notices the late tick; a sender on the
+ * relay re-sends from the last acked byte, because its in-flight nodes went
+ * with its onDisconnect while it was away. The first node of a re-send says
+ * so (r: 1), and the receiver skips to it.
+ *
+ * Opt-in "keep sending in the background" (send(…, { bg: true })): iOS freezes
+ * a hidden page unless it is playing audio, so while such a beam runs we loop
+ * a silent clip in an <audio> element and describe it to the lock screen
+ * (Media Session) as the beam's progress. It has to start inside the Send tap,
+ * so it is sender-only. It takes over the audio session (other music pauses);
+ * pausing it from the lock screen just stops the keep-alive, not the beam.
+ *
  * Cloud layout (kind "bm", i.e. rooms/__cade_bm_<keyFp>/…):
  *   dev/<inst>                {s: sealed {n name, k kind, d deviceId, t since}, at}   ready receivers
  *   sig/<box>/<push>          {f: fromInst, s: sealed message, at}                     offer / answer / relay / cancel / done
@@ -184,6 +200,102 @@
     return null;
   }
 
+  // ---- background: tell the other side of every running beam ('hold' / 'back') ---------------------
+  var lastVis = '';
+  function tellPeers() {
+    var v = document.visibilityState;
+    if (v === lastVis) return;
+    var was = lastVis;
+    lastVis = v;
+    if (!was && v === 'visible') return;   // first look: nothing to report
+    var t = v === 'visible' ? 'back' : 'hold';
+    Object.keys(outJobs).forEach(function (x) { sendSig(outJobs[x].to, { t: t, x: x }).catch(function () {}); });
+    Object.keys(inJobs).forEach(function (x) { sendSig(inJobs[x].rb, { t: t, x: x }).catch(function () {}); });
+    // back: run the ticks now rather than in up to 250 ms (they notice the freeze)
+    if (t === 'back') {
+      if (bgEl && bgEl.paused) bgPlay();
+      Object.keys(outJobs).forEach(function (x) { tickOut(outJobs[x]); });
+      Object.keys(inJobs).forEach(function (x) { tickIn(inJobs[x]); });
+    }
+  }
+
+  // ---- background keep-alive: silent audio while opted-in beams run ------------------------------------
+  var bgJobs = [], bgEl = null, bgUrl = '', bgMetaT = 0, bgMetaKey = '';
+  // One second of near-silence (±1 LSB dither, so nothing treats it as "no audio"), 8 kHz 16-bit mono WAV.
+  function silentWav() {
+    var n = 8000, b = new ArrayBuffer(44 + n * 2), v = new DataView(b), i;
+    function str(o, t) { for (var k = 0; k < t.length; k++) v.setUint8(o + k, t.charCodeAt(k)); }
+    str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 16000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, 'data'); v.setUint32(40, n * 2, true);
+    for (i = 0; i < n; i++) v.setInt16(44 + i * 2, (i & 1) ? 1 : -1, true);
+    return new Blob([b], { type: 'audio/wav' });
+  }
+  function bgOk() { return typeof Audio === 'function' && typeof URL !== 'undefined' && !!URL.createObjectURL; }
+  function bgAdd(J) {
+    if (!bgOk()) return;
+    bgJobs.push(J); J.bgOn = false;
+    if (!bgEl) {
+      bgUrl = URL.createObjectURL(silentWav());
+      bgEl = new Audio();
+      bgEl.loop = true; bgEl.preload = 'auto'; bgEl.src = bgUrl;
+      try { bgEl.setAttribute('playsinline', ''); } catch (e) {}
+      // something else took the audio (a call, another app) or the lock-screen pause: the beam carries on without it
+      bgEl.addEventListener('pause', function () { if (bgEl && !bgEl.__stopping) bgState(false); });
+      bgEl.addEventListener('playing', function () { bgState(true); });
+      var ms = navigator.mediaSession;
+      if (ms) {
+        try { ms.setActionHandler('play', function () { bgPlay(); }); } catch (e) {}
+        try { ms.setActionHandler('pause', function () { if (bgEl) bgEl.pause(); }); } catch (e) {}
+        try { ms.setActionHandler('stop', function () { if (bgEl) bgEl.pause(); }); } catch (e) {}
+      }
+    }
+    bgPlay();
+    bgMeta(true);
+  }
+  function bgPlay() {
+    if (!bgEl) return;
+    try {
+      var p = bgEl.play();
+      if (p && p.catch) p.catch(function () { bgState(false); });
+    } catch (e) { bgState(false); }
+  }
+  function bgState(on) {
+    bgJobs.forEach(function (J) { if (J.bgOn !== on) { J.bgOn = on; emit(J); } });
+    try { if (navigator.mediaSession) navigator.mediaSession.playbackState = on ? 'playing' : 'paused'; } catch (e) {}
+  }
+  function bgDrop(J) {
+    var i = bgJobs.indexOf(J);
+    if (i < 0) return;
+    bgJobs.splice(i, 1); J.bgOn = false;
+    if (bgJobs.length || !bgEl) { bgMeta(true); return; }
+    var a = bgEl;
+    bgEl = null; a.__stopping = true;
+    try { a.pause(); a.removeAttribute('src'); a.load(); } catch (e) {}
+    try { URL.revokeObjectURL(bgUrl); } catch (e) {}
+    bgUrl = ''; bgMetaKey = '';
+    var ms = navigator.mediaSession;
+    if (ms) {
+      try { ms.metadata = null; ms.playbackState = 'none'; } catch (e) {}
+      ['play', 'pause', 'stop'].forEach(function (a) { try { ms.setActionHandler(a, null); } catch (e) {} });
+    }
+  }
+  // The lock screen's "now playing": what is beaming where, and how far (≤ 1/s).
+  function bgMeta(force) {
+    if (!bgJobs.length || !navigator.mediaSession || typeof MediaMetadata !== 'function') return;
+    var t = now();
+    if (!force && t - bgMetaT < 1000) return;
+    bgMetaT = t;
+    var J = bgJobs[0], p = J.prog || { pct: 0, eta: null };
+    var what = J.man.files.length === 1 ? J.man.files[0].n : J.man.files.length + ' files';
+    var title = 'Beaming ' + what + ' · ' + K.fmtPct(p.pct);
+    var artist = 'to ' + J.peer + (p.eta != null && p.eta > 0 ? ' · ' + K.fmtEta(p.eta) : '') + (bgJobs.length > 1 ? ' · +' + (bgJobs.length - 1) + ' more' : '');
+    if (title + artist === bgMetaKey) return;
+    bgMetaKey = title + artist;
+    try { navigator.mediaSession.metadata = new MediaMetadata({ title: title, artist: artist, album: 'txt · Beam' }); } catch (e) {}
+  }
+
   // ---- shared screen wake lock -------------------------------------------------------------------
   var wakeN = 0, wakeL = null, wakeAsk = false, wakeVis = false;
   function wake(d) {
@@ -193,6 +305,7 @@
     wakeSync();
   }
   function wakeSync() {
+    tellPeers();
     if (wakeN && !wakeL && !wakeAsk && navigator.wakeLock && document.visibilityState === 'visible') {
       wakeAsk = true;
       navigator.wakeLock.request('screen').then(function (w) {
@@ -214,7 +327,7 @@
   // fn(job) on every update of any transfer (≤ 4/s each); returns an unsubscribe.
   function onJobs(fn) { jobFns.push(fn); return function () { jobFns = jobFns.filter(function (f) { return f !== fn; }); }; }
   function progress(J) { J.prog = J.meter.update(J.done, now()); return J.prog; }
-  function label(J) { return K.pathLabel(J.path, J.note); }
+  function label(J) { return K.pathLabel(J.path, J.note, J.held && !J.over); }
 
   // ===== sending =====================================================================================
   // files: [{ blob, name, mime }]; dev: { inst, name }; hooks: { onUpdate(job) }.
@@ -227,10 +340,11 @@
       state: 'connecting', path: 'connecting', note: '', err: '', over: false, answered: false,
       done: 0, sentPos: 0, ack: { f: 0, o: 0 }, ackBytes: 0, crc: man.files.map(function () { return { pos: 0, crc: 0 }; }),
       cur: null, pend: null, blk: null, reading: false, ended: false, msg: C.DC_MSG,
-      pc: null, dc: null, rref: null, ackFn: null, rq: 0, inflight: [], t0: now(), lastProg: now(), offerAt: 0, timers: []
+      pc: null, dc: null, rref: null, ackFn: null, rq: 0, inflight: [], t0: now(), lastProg: now(), lastTick: now(), held: false, offerAt: 0, timers: []
     };
     J.meter = K.meter(man.total);
     J.cancel = function () { cancelOut(J, ''); };
+    if (J.hooks.bg) bgAdd(J);   // synchronous: we're still inside the user's tap
     J.label = function () { return label(J); };
     outJobs[x] = J;
     if (!stopSigS) stopSigS = listenSig('s', onSigS);
@@ -310,9 +424,8 @@
       return;
     }
     closePc(J);
-    J.path = 'relay'; J.note = ''; J.state = 'sending'; J.ended = false; J.pend = null; J.lastProg = now();
-    J.cur = K.cursor(J.sizes, J.ack.f, J.ack.o);
-    J.done = J.ackBytes;
+    J.path = 'relay'; J.note = ''; J.state = 'sending';
+    relayFromAck(J);
     sendSig(J.to, { t: 'relay', x: J.x, f: J.ack.f, o: J.ack.o }).catch(function () {});
     ref('relay/' + J.to + '/' + J.x).then(function (r) {
       if (J.over || !r) { if (!r) fail(J, 'Sync is not set up'); return; }
@@ -323,6 +436,23 @@
       J.ackFn = a.on('value', function (snap) { onRelayAck(J, snap.val()); });
       pumpRelay(J);
     }, function () { fail(J, 'Couldn’t reach the cloud (offline?)'); });
+    emit(J);
+  }
+  // Start the relay walk over from the last acknowledged byte; the next node written says so.
+  function relayFromAck(J) {
+    J.ended = false; J.pend = null; J.lastProg = now();
+    J.cur = K.cursor(J.sizes, J.ack.f, J.ack.o);
+    J.inflight = []; J.restart = true;
+    J.done = J.ackBytes;
+    if (J.state === 'verifying') J.state = 'sending';
+  }
+  // Back from a frozen background: the relay nodes we had in flight were most likely removed
+  // by our onDisconnect while the socket was down, so write the rest again (and re-arm it).
+  function resumeRelay(J) {
+    if (J.over || J.path !== 'relay' || !J.rref) return;
+    relayFromAck(J);
+    try { J.rref.onDisconnect().remove(); } catch (e) {}
+    pumpRelay(J);
     emit(J);
   }
   function inflight(J) { var n = 0; for (var i = 0; i < J.inflight.length; i++) n += J.inflight[i].n; return n; }
@@ -339,6 +469,7 @@
       else { fr = { t: 'end' }; J.ended = true; J.state = 'verifying'; }
       J.pend = null;
       fr.q = J.rq++;
+      if (J.restart) { fr.r = 1; J.restart = false; }
       J.inflight.push({ q: fr.q, n: Math.max(n, 1) });
       writeRelay(J, fr);
       if (J.ended) { emit(J); return; }
@@ -353,6 +484,7 @@
   function onRelayAck(J, v) {
     if (J.over || !v || typeof v.q !== 'number') return;
     J.inflight = J.inflight.filter(function (e) { return e.q > v.q; });
+    J.ackT = now();
     if (typeof v.f === 'number' && typeof v.o === 'number') {
       var b = K.offsetOf(J.sizes, v.f, v.o);
       if (b > J.ackBytes) { J.ackBytes = b; J.ack = { f: v.f, o: v.o }; }
@@ -390,19 +522,32 @@
       finishOut(J, ok ? 'done' : 'error', ok ? '' : (m.err || 'Some files arrived damaged — try again'));
     } else if (m.t === 'cancel') {
       finishOut(J, 'cancelled', m.why || ('Cancelled on ' + J.peer));
+    } else if (m.t === 'hold' || m.t === 'back') {
+      J.held = m.t === 'hold'; J.lastProg = now();
+      emit(J);
     }
   }
   function tickOut(J) {
     if (J.over) return;
-    var t = now();
+    var t = now(), late = t - J.lastTick > C.FROZEN;
+    J.lastTick = t;
+    if (late) {
+      // this page was frozen in the background: nobody's fault, start the clocks again
+      J.lastProg = t;
+      if (J.offerAt && !J.answered) J.offerAt = t;
+      // re-send only if the relay really stalled (a throttled background tab still gets its acks)
+      if (J.path === 'relay' && t - (J.ackT || 0) > C.FROZEN) resumeRelay(J);
+    }
     if (J.path === 'direct' && J.dc) J.done = Math.max(J.ackBytes, Math.min(J.sentPos, J.sentPos - (J.dc.bufferedAmount || 0)));
     else if (J.path === 'relay') J.done = J.ackBytes;
-    if (J.done !== J.lastDone) { J.lastDone = J.done; J.lastProg = t; }
+    if (J.done !== J.lastDone) { J.lastDone = J.done; J.lastProg = t; J.held = false; }
     if (!J.answered && J.offerAt && t - J.offerAt > C.ANSWER_WAIT) { fail(J, 'No answer from ' + J.peer + ' — is txt open and on screen there?'); return; }
-    // a direct channel can hang without closing (Wi-Fi switch, sleep): try the cloud for the rest
-    if (J.path === 'direct' && !J.ended && t - J.lastProg > C.DIRECT_STALL) { goRelay(J); return; }
-    if (J.answered && t - J.lastProg > C.STALL) { fail(J, 'Connection to ' + J.peer + ' lost'); return; }
+    // a direct channel can hang without closing (Wi-Fi switch, sleep): try the cloud for the rest —
+    // unless the receiver is just in the background (it'll pick up again, and the relay is size-capped)
+    if (J.path === 'direct' && !J.ended && !J.held && t - J.lastProg > C.DIRECT_STALL) { goRelay(J); return; }
+    if (J.answered && t - J.lastProg > (J.held ? C.HOLD_STALL : C.STALL)) { fail(J, 'Connection to ' + J.peer + ' lost'); return; }
     progress(J);
+    bgMeta();
     emit(J);
   }
   function cancelOut(J, why) {
@@ -427,6 +572,7 @@
     if (J.rref) { var r = J.rref; try { r.onDisconnect().cancel(); } catch (e) {} r.remove().catch(function () {}); J.rref = null; }
     J.blk = null; J.blobs = null;
     delete outJobs[J.x];
+    bgDrop(J);
     if (!Object.keys(outJobs).length && stopSigS) { stopSigS(); stopSigS = null; }
     wake(-1);
     progress(J);
@@ -444,7 +590,7 @@
       sizes: man.files.map(function (f) { return f.s; }), hooks: hooks || {},
       files: man.files.map(function (f) { return { n: f.n, s: f.s, t: f.t, got: 0, crc: 0, parts: [], partBytes: 0, blobs: [], ok: null, blob: null, err: '' }; }),
       state: 'receiving', path: 'connecting', note: '', err: '', over: false, done: 0, lastAckAt: 0,
-      pc: null, dc: null, rref: null, rfn: null, rq: 0, rbuf: {}, rAckT: 0, t0: now(), lastProg: now(), timers: []
+      pc: null, dc: null, rref: null, rfn: null, rq: 0, rbuf: {}, rAckT: 0, t0: now(), lastProg: now(), lastTick: now(), held: false, timers: []
     };
     J.meter = K.meter(man.total);
     J.cancel = function () { cancelIn(J); };
@@ -493,7 +639,7 @@
     if (ov.take < 0) return;
     var b = ov.take ? data.subarray(ov.take) : data;
     F.crc = K.crc32(b, F.crc);
-    F.got += b.length; J.done += b.length; J.lastProg = now();
+    F.got += b.length; J.done += b.length; J.lastProg = now(); J.held = false;
     F.parts.push(b); F.partBytes += b.length;
     // fold parts into a Blob now and then: big Blobs can live on disk, arrays can't
     if (F.partBytes >= 8 * 1024 * 1024) { F.blobs.push(new Blob(F.parts)); F.parts = []; F.partBytes = 0; }
@@ -541,6 +687,11 @@
   }
   function onRelayFrame(J, fr) {
     if (typeof fr.q !== 'number' || fr.q < J.rq) return;
+    if (fr.r && fr.q > J.rq) {
+      // the sender re-sent from our last ack (it was away): what it had in flight before is void
+      Object.keys(J.rbuf).forEach(function (k) { if (+k < fr.q) delete J.rbuf[k]; });
+      J.rq = fr.q;
+    }
     J.rbuf[fr.q] = fr;
     if (!J.dc || J.dc.readyState !== 'open') { if (J.path !== 'relay') { J.path = 'relay'; J.note = ''; emit(J); } }
     while (J.rbuf[J.rq]) {
@@ -569,7 +720,10 @@
   }
   function tickIn(J) {
     if (J.over) return;
-    if (now() - J.lastProg > C.STALL) { failIn(J, 'Connection to ' + J.peer + ' lost'); return; }
+    var t = now(), late = t - J.lastTick > C.FROZEN;
+    J.lastTick = t;
+    if (late) { J.lastProg = t; if (J.path === 'relay') ackRelay(J, true); }   // back from a frozen background
+    if (t - J.lastProg > (J.held ? C.HOLD_STALL : C.STALL)) { failIn(J, 'Connection to ' + J.peer + ' lost'); return; }
     progress(J);
     emit(J);
   }
@@ -578,6 +732,7 @@
     if (!J || from !== J.from) return;
     if (m.t === 'relay') { if (J.pc) closePc(J); J.lastProg = now(); if (J.path !== 'relay') { J.path = 'relay'; J.note = ''; emit(J); } }
     else if (m.t === 'cancel') finishIn(J, 'cancelled', m.why || ('Cancelled on ' + J.peer));
+    else if (m.t === 'hold' || m.t === 'back') { J.held = m.t === 'hold'; J.lastProg = now(); emit(J); }
   }
   function cancelIn(J, why) {
     if (J.over) return;
