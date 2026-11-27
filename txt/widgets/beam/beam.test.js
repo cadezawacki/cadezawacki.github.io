@@ -193,6 +193,28 @@ test('meter: steady speed converges, ETA counts down smoothly', function () {
     prev = s.eta;
   }
   assert.ok(maxJump < 6, 'ETA jumps stay small, max ' + maxJump);
+  // the cloud relay: 2 MB lands at once, then nothing for 12 s while acks round-trip (≈ 170 KB/s).
+  // The old per-tick EWMA decayed to ~0 B/s in each gap and showed billions of hours.
+  var big = 52.7 * 1024 * 1024, m4 = K.meter(big), d4 = 0, s4, worst = 0;
+  for (var v = 0; v <= 120000; v += 250) {
+    if (v % 12000 === 1000) d4 += 2 * 1024 * 1024;
+    s4 = m4.update(d4, v);
+    if (v > 15000 && s4.eta != null) {
+      var truth = (big - d4) / (2 * 1024 * 1024 / 12);
+      worst = Math.max(worst, s4.eta / truth, truth / s4.eta);
+    }
+    if (v > 15000) assert.ok(s4.eta != null, 'ETA stays up between relay bursts (' + v + ')');
+  }
+  assert.ok(worst < 2.5, 'relay ETA stays within 2.5× of the truth, worst ' + worst.toFixed(2));
+  // a real stall: the ETA goes away rather than growing without bound
+  for (var w = 120250; w <= 150000; w += 250) s4 = m4.update(d4, w);
+  assert.strictEqual(s4.eta, null, 'no ETA after a long stall');
+  // a fallback rewinds to the last acked byte: the meter restarts instead of seeing negative speed
+  var m5 = K.meter(total);
+  for (var z = 0; z <= 4000; z += 250) m5.update(z * 1024, z);
+  m5.update(1024 * 1024, 4250);
+  for (z = 4500; z <= 8000; z += 250) s4 = m5.update(1024 * 1024 + (z - 4250) * 1024, z);
+  assert.ok(s4.bps > 900 * 1024 && s4.bps < 1100 * 1024, 'speed right after a rewind, got ' + s4.bps);
   var m3 = K.meter(100);
   assert.strictEqual(m3.update(0, 0).eta, null, 'no ETA before there is a rate');
   assert.strictEqual(m3.update(100, 400).eta, 0);

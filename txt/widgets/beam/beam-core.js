@@ -15,8 +15,8 @@
  *              file's CRC follows its bytes), next file, …, end.
  *   crc32      incremental (crc32(b, crc32(a)) === crc32(a ++ b)); checked per
  *              file together with the size when its fin arrives.
- *   meter      smoothed speed (EWMA) and an ETA that counts down steadily
- *              instead of jumping with every sample.
+ *   meter      speed over a sliding window and an ETA that counts down steadily
+ *              instead of jumping with every sample (or with relay bursts).
  *   inbox      received files are kept 7 days (and within a size budget).
  * UMD: module.exports in node, window.__cadeBeamCore in the browser. */
 (function (root) {
@@ -37,7 +37,9 @@
     DIRECT_WAIT: 8000,          // no direct channel by then → cloud relay
     DIRECT_STALL: 10000,        // a direct channel that stops moving for this long → cloud relay
     ANSWER_WAIT: 20000,         // no answer at all by then → give up
-    STALL: 45000,               // no progress for this long → connection lost
+    STALL: 90000,               // no progress for this long → connection lost
+    HOLD_STALL: 15 * 60 * 1000, // …or this long while the other device said it went to the background
+    FROZEN: 5000,               // a 250 ms tick that comes this late means this page was suspended (iOS background)
     SIG_STALE: 60000,           // signalling older than this is ignored
     ONLINE_FOR: 3 * 60 * 1000,  // presence older than this is a device that went away
     TOUCH_EVERY: 60000,         // presence refresh
@@ -211,23 +213,48 @@
 
   // ---- progress -----------------------------------------------------------------------------
   // meter(total).update(doneBytes, nowMs) → { done, total, pct, bps, eta (s | null) }.
+  // Speed is bytes moved over a sliding window (not a per-tick EWMA): the cloud
+  // relay delivers in bursts with quiet gaps between them, and a per-tick
+  // average decays toward 0 B/s in every gap, which sent the ETA to billions of
+  // hours. Speed and ETA use the window blended with the transfer's average
+  // since the first byte, so a lull barely moves them; the ETA disappears
+  // (null) only once nothing has moved for METER_QUIET.
+  var METER_WIN = 8000, METER_MIN = 1000, METER_QUIET = 20000, METER_SAMPLE = 250, ETA_MAX = 7 * 24 * 3600;
   function meter(total) {
-    var t0 = -1, lastT = 0, lastD = 0, bps = 0, eta = null, n = 0;
+    var hist = [], start = null, bps = 0, eta = null, lastT = -1, moveT = 0;
+    function reset(done, now) { hist = [{ t: now, d: done }]; start = null; bps = 0; eta = null; lastT = now; moveT = now; }
     return {
       update: function (done, now) {
-        if (t0 < 0) { t0 = now; lastT = now; lastD = done; }
+        if (lastT < 0 || done < hist[hist.length - 1].d) reset(done, now);  // first call, or a resume rewound
         var dt = now - lastT;
-        if (dt >= 250) {
-          var inst = Math.max(0, done - lastD) * 1000 / dt;
-          bps = n ? bps + 0.3 * (inst - bps) : inst;
-          n++; lastT = now; lastD = done;
-          var raw = bps > 0 ? Math.max(0, total - done) / bps : null;
-          if (raw == null) eta = null;
-          else if (eta == null || n < 3) eta = raw;
-          else { var pred = Math.max(0, eta - dt / 1000); eta = pred + 0.25 * (raw - pred); }
+        if (dt >= METER_SAMPLE) {
+          lastT = now;
+          if (done > hist[hist.length - 1].d) moveT = now;
+          if (start == null && done > hist[0].d) start = hist[hist.length - 1];  // first bytes: the average starts at the sample before them
+          hist.push({ t: now, d: done });
+          while (hist.length > 2 && hist[1].t <= now - METER_WIN) hist.shift();
+          var base = hist[0], span = now - base.t;
+          if (span >= METER_MIN) {
+            var win = Math.max(0, done - base.d) * 1000 / span;
+            var avgSpan = start ? now - start.t : 0;
+            var avg = avgSpan >= METER_MIN ? (done - start.d) * 1000 / avgSpan : win;
+            // the window keeps it current, the average keeps it calm; a gap between bursts that
+            // empties the window falls back on the average until it has lasted METER_QUIET
+            var rate = win > 0 ? 0.6 * win + 0.4 * avg : (now - moveT < METER_QUIET ? avg : 0);
+            bps = rate;
+            var raw = rate > 0 ? Math.max(0, total - done) / rate : null;
+            if (raw == null || raw > ETA_MAX) eta = null;
+            else if (eta == null) eta = raw;
+            else {
+              var pred = Math.max(0, eta - dt / 1000);
+              // far off (a real change of speed): follow quickly; close: glide so it counts down steadily
+              var k = (raw > pred * 2 || raw < pred / 2) ? 0.5 : 0.2;
+              eta = pred + k * (raw - pred);
+            }
+          }
         }
         if (done >= total) eta = 0;
-        return { done: done, total: total, pct: total > 0 ? Math.min(100, done * 100 / total) : (done >= total ? 100 : 0), bps: bps, eta: n >= 2 || done >= total ? eta : null };
+        return { done: done, total: total, pct: total > 0 ? Math.min(100, done * 100 / total) : (done >= total ? 100 : 0), bps: bps, eta: eta };
       }
     };
   }
@@ -249,7 +276,8 @@
   }
   function fmtPct(p) { return p >= 100 ? '100%' : (p < 10 ? p.toFixed(1) : Math.floor(p)) + '%'; }
   // How a transfer is travelling, for the UI.
-  function pathLabel(path, note) {
+  function pathLabel(path, note, held) {
+    if (held) return 'paused · other device in background';
     if (path === 'direct') return 'direct · ' + (note === 'lan' ? 'Wi-Fi' : note === 'internet' ? 'internet' : 'peer-to-peer');
     if (path === 'relay') return 'via cloud · slower';
     if (path === 'qr') return 'QR stream';
