@@ -283,6 +283,21 @@
     if (path === 'qr') return 'QR stream';
     return 'connecting…';
   }
+  // The send list: one row per device, not per tab. Tabs of one device (same device id) collapse
+  // into a row that sends to the tab used last (u: last focus/tap, else since/at). list: watchDevices'.
+  // → [{ key, inst (the tab it goes to), name, kind, did, tabs, self, sameDevice, used }], order kept.
+  function groupDevices(list) {
+    var by = {}, out = [];
+    (list || []).forEach(function (d) {
+      if (d.self) return;
+      var key = d.did ? 'd:' + d.did : 'i:' + d.inst, g = by[key], u = d.used || d.since || d.at || 0;
+      if (!g) { g = by[key] = { key: key, inst: d.inst, name: d.name, kind: d.kind, did: d.did, tabs: 0, self: false, sameDevice: !!d.sameDevice, used: u }; out.push(g); }
+      g.tabs++;
+      if (u > g.used) { g.used = u; g.inst = d.inst; g.name = d.name; g.kind = d.kind; }
+    });
+    return out;
+  }
+  function tabId(inst) { return String(inst || '').split('-')[1] || ''; }
   // Two host candidates = the same local network.
   function pathNote(localType, remoteType) { return localType === 'host' && (!remoteType || remoteType === 'host') ? 'lan' : 'internet'; }
 
@@ -330,7 +345,7 @@
     openKind: openKind, isImage: isImage, openType: openType, makeManifest: makeManifest, validManifest: validManifest,
     msgSize: msgSize, encodeFrame: encodeFrame, decodeFrame: decodeFrame, offsetOf: offsetOf, posOf: posOf, cursor: cursor,
     overlap: overlap, crcAdvance: crcAdvance, meter: meter, fmtBytes: fmtBytes, fmtRate: fmtRate, fmtEta: fmtEta, fmtPct: fmtPct,
-    pathLabel: pathLabel, pathNote: pathNote, b64enc: b64enc, b64dec: b64dec, expired: expired, prune: prune, ago: ago, kindIcon: kindIcon
+    pathLabel: pathLabel, pathNote: pathNote, groupDevices: groupDevices, tabId: tabId, b64enc: b64enc, b64dec: b64dec, expired: expired, prune: prune, ago: ago, kindIcon: kindIcon
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof window !== 'undefined' && !window.__cadeBeamCore) window.__cadeBeamCore = api;

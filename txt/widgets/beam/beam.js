@@ -132,20 +132,20 @@
     var rs = window.__cadeBeamRecv ? window.__cadeBeamRecv.status() : null;
     el.meSt.textContent = !rs ? 'Can’t receive here — turn on “Receive files from my other devices” in Settings.'
       : !rs.enabled ? 'Can’t receive here — turn on “Receive files from my other devices” in Settings.'
-      : rs.online ? 'Ready to receive from your other devices.' : rs.configured ? 'Going online…' : 'Needs Sync to receive.';
+      : rs.online ? 'Ready to receive from your other devices' + (Cade.cloud.device.tab ? ' · this is tab ' + Cade.cloud.device.tab : '') + '.' : rs.configured ? 'Going online…' : 'Needs Sync to receive.';
   }
   function onDevices(list) {
     devErr = list === null;              // no cloud ref: Sync set up but unreachable
     devices = list || [];
     if (!P) return;
-    var others = (list || []).filter(function (d) { return !d.self; });
+    var others = K.groupDevices(list);
     // keep the selection to devices that are still here; first time: the one used last, or the only one
     var still = {};
-    others.forEach(function (d) { if (selected[d.inst]) still[d.inst] = 1; });
+    others.forEach(function (d) { if (selected[d.key]) still[d.key] = 1; });
     selected = still;
     if (!Object.keys(selected).length && !P.__autoSel && others.length) {
       var last = others.filter(function (d) { return d.did === prefs.lastDid && !d.sameDevice; })[0] || (others.length === 1 ? others[0] : null);
-      if (last) { selected[last.inst] = 1; P.__autoSel = true; }
+      if (last) { selected[last.key] = 1; P.__autoSel = true; }
     }
     renderDevices();
     paintGo();
@@ -153,7 +153,7 @@
   function renderDevices() {
     var box = el.devs;
     if (devices === null) { box.innerHTML = '<p class="beam-note">Looking for your devices…</p>'; return; }
-    var others = devices.filter(function (d) { return !d.self; });
+    var others = K.groupDevices(devices);
     if (devErr) { box.innerHTML = '<p class="beam-note">Couldn’t reach your Sync database — check Sync in Settings, or use the QR stream.</p>'; return; }
     if (!others.length) {
       box.innerHTML = '<p class="beam-note">No other device is ready. Open the app on the device you want to send to (on screen), with “Receive files from my other devices” on in Settings.</p>';
@@ -162,11 +162,14 @@
     var names = {};
     others.forEach(function (d) { names[d.name] = (names[d.name] || 0) + 1; });
     box.innerHTML = others.map(function (d) {
-      var on = !!selected[d.inst];
-      return '<button type="button" class="beam-dev' + (on ? ' on' : '') + '" data-inst="' + esc(d.inst) + '" aria-pressed="' + on + '">' +
+      var on = !!selected[d.key];
+      // several tabs open there: it goes to the one used last — name it, so it can be checked on that screen
+      var sub = d.sameDevice ? (d.tabs > 1 ? 'this device · ' + d.tabs + ' other tabs · goes to tab ' + K.tabId(d.inst) : 'this device, another tab')
+        : d.tabs > 1 ? d.tabs + ' tabs open · goes to the one used last (tab ' + K.tabId(d.inst) + ')'
+        : names[d.name] > 1 ? 'tab ' + K.tabId(d.inst) : '';
+      return '<button type="button" class="beam-dev' + (on ? ' on' : '') + '" data-inst="' + esc(d.key) + '" aria-pressed="' + on + '">' +
         '<span class="beam-dev-ic" aria-hidden="true">' + K.kindIcon(d.kind) + '</span>' +
-        '<span class="beam-dev-n">' + esc(d.name) + (names[d.name] > 1 ? ' <small>tab ' + esc(d.inst.split('-')[1] || '') + '</small>' : '') +
-          (d.sameDevice ? ' <small>this device, another tab</small>' : '') + '</span>' +
+        '<span class="beam-dev-n">' + esc(d.name) + (sub ? ' <small>' + esc(sub) + '</small>' : '') + '</span>' +
         '<span class="beam-check" aria-hidden="true">' + (on ? '✓' : '') + '</span></button>';
     }).join('');
   }
@@ -216,7 +219,8 @@
       : !picked.length ? 'Add files to send'
       : 'Send ' + (picked.length === 1 ? picked[0].name : picked.length + ' files') + ' · ' + K.fmtBytes(total) + ' → ' + (devs.length === 1 ? devs[0].name : devs.length + ' devices');
   }
-  function targets() { return (devices || []).filter(function (d) { return !d.self && selected[d.inst]; }); }
+  // resolved at Send: the tab each selected device was used in last
+  function targets() { return K.groupDevices(devices).filter(function (d) { return selected[d.key]; }); }
   function paste(ev) {
     var dt = ev.clipboardData, files = [];
     if (!dt) return;
@@ -318,7 +322,7 @@
     else if (d === 'dismiss') { jobEl.remove(); jobs = jobs.filter(function (x) { return x !== w; }); }
     else if (d === 'retry') {
       jobEl.remove(); jobs = jobs.filter(function (x) { return x !== w; });
-      var dev = (devices || []).filter(function (x) { return x.did === w.dev.did && !x.self; })[0] || w.dev;
+      var dev = (w.dev.did && K.groupDevices(devices).filter(function (x) { return x.did === w.dev.did; })[0]) || w.dev;
       start(dev, w.files);
     }
   }
